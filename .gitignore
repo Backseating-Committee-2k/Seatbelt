@@ -1,1 +1,3 @@
 *.bs
+.idea/*
+cmake-build-*/*
