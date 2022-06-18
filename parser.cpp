@@ -15,6 +15,8 @@
 
 namespace Parser {
 
+    using Expressions::Expression;
+
     class ParserState {
     public:
         explicit ParserState(const Lexer::TokenList& tokens) : m_tokens{ &tokens } { }
@@ -32,6 +34,47 @@ namespace Parser {
         }
 
     private:
+        [[nodiscard]] std::unique_ptr<Expression> expression() {
+            return addition();
+        }
+
+        [[nodiscard]] std::unique_ptr<Expression> addition() {
+            using Expressions::Addition;
+            auto accumulator = multiplication();
+
+            while (maybe_consume<Plus>()) {
+                auto next_operand = multiplication();
+                accumulator = std::make_unique<Addition>(std::move(accumulator), std::move(next_operand));
+            }
+            return accumulator;
+        }
+
+        [[nodiscard]] std::unique_ptr<Expression> multiplication() {
+            using Expressions::Multiplication;
+            auto accumulator = primary();
+
+            while (maybe_consume<Asterisk>()) {
+                auto next_operand = primary();
+                accumulator = std::make_unique<Multiplication>(std::move(accumulator), std::move(next_operand));
+            }
+            return accumulator;
+        }
+
+        [[nodiscard]] std::unique_ptr<Expression> primary() {
+            using namespace Expressions;
+            if (maybe_consume<LeftParenthesis>()) {
+                auto sub_expression = expression();
+                consume<RightParenthesis>("expected \")\"");
+                return sub_expression;
+            } else if (auto literal_expression = maybe_consume<IntegerLiteral>()) {
+                return std::make_unique<Literal>(literal_expression.value());
+            } else if (auto name_expression = maybe_consume<Identifier>()) {
+                return std::make_unique<Name>(name_expression.value());
+            }
+            error("unexpected token");
+            return nullptr;
+        }
+
         [[nodiscard]] FunctionDefinition function() {
             assert(current_is<Function>());
             advance();
@@ -52,28 +95,26 @@ namespace Parser {
             consume<Colon>("expected \":\"");
             const auto return_type = type();
             auto body = block();
-            return FunctionDefinition{
-                .name{ name },
-                .parameters{ std::move(parameters) },
-                .return_type{ return_type },
-                .body{ std::move(body) }
-            };
+            return FunctionDefinition{ .name{ name },
+                                       .parameters{ std::move(parameters) },
+                                       .return_type{ return_type },
+                                       .body{ std::move(body) } };
         }
 
-        Block block() {
-            StatementList statements;
+        [[nodiscard]] Statements::Block block() {
+            Statements::StatementList statements;
             consume<LeftCurlyBracket>("expected \"{\"");
             while (not end_of_file() and not current_is<RightCurlyBracket>()) {
                 if (current_is<Let>()) {
                     statements.push_back(variable_definition());
                 } else if (current_is<LeftCurlyBracket>()) {
-                    block();
+                    statements.push_back(std::make_unique<Statements::Block>(block()));
                 } else {
                     advance();
                 }
             }
             consume<RightCurlyBracket>("expected \"}\"");
-            return Block{ std::move(statements) };
+            return Statements::Block{ std::move(statements) };
         }
 
         [[nodiscard]] Type type() {
@@ -86,16 +127,18 @@ namespace Parser {
                               std::begin(*m_tokens) + static_cast<ptrdiff_t>(m_index) };
         }
 
-        std::unique_ptr<VariableDefinition> variable_definition() {
+        std::unique_ptr<Statements::VariableDefinition> variable_definition() {
             assert(current_is<Let>());
             advance();
             const auto identifier = consume<Identifier>("expected variable name");
             consume<Colon>("expected \":\"");
             const auto variable_type = type();
             consume<Equals>("expected variable initialization");
-            const auto initial_value = consume<IntegerLiteral>("FNLKJDSFHLKSDFGJNLKFDSGN EXPRESSSSIOOOOON!");
+            auto initial_value = expression();
             consume<Semicolon>("expected \";\"");
-            return std::make_unique<VariableDefinition>(identifier, variable_type, initial_value);
+            return std::make_unique<Statements::VariableDefinition>(
+                    identifier, variable_type, std::move(initial_value)
+            );
         }
 
         template<typename T>

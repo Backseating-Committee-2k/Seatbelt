@@ -32,8 +32,29 @@ struct TokenPrinter {
     }
 };
 
+void print_expression(const Parser::Expressions::Expression& expression) {
+    using namespace Parser::Expressions;
+    if (const auto literal_expression = dynamic_cast<const Literal*>(&expression)) {
+        std::cout << literal_expression->value.location.view();
+    } else if (const auto name_expression = dynamic_cast<const Name*>(&expression)) {
+        std::cout << name_expression->name.location.view();
+    } else if (const auto add_expression = dynamic_cast<const Addition*>(&expression)) {
+        std::cout << "(";
+        print_expression(*add_expression->lhs);
+        std::cout << " + ";
+        print_expression(*add_expression->rhs);
+        std::cout << ")";
+    } else if (const auto mult_expression = dynamic_cast<const Multiplication*>(&expression)) {
+        std::cout << "(";
+        print_expression(*mult_expression->lhs);
+        std::cout << " * ";
+        print_expression(*mult_expression->rhs);
+        std::cout << ")";
+    }
+}
+
 int main(int argc, char** argv) {
-    using namespace Lexer::Token;
+    using namespace Lexer::Tokens;
 
     const auto [filename, source] = read_source_code(argc, argv);
     const auto source_code = SourceCode{ .filename{ filename }, .text{ source } };
@@ -49,11 +70,10 @@ int main(int argc, char** argv) {
                     std::cout << ")\n";
                     for (const auto& statement : function_definition.body.statements) {
                         if (const auto variable_definition =
-                                    dynamic_cast<const Parser::VariableDefinition*>(statement.get())) {
-                            std::cout << std::format(
-                                    "\t{} = {}\n", variable_definition->name.location.view(),
-                                    variable_definition->initial_value.location.view()
-                            );
+                                    dynamic_cast<const Parser::Statements::VariableDefinition*>(statement.get())) {
+                            std::cout << std::format("\t{} = ", variable_definition->name.location.view());
+                            print_expression(*variable_definition->initial_value);
+                            std::cout << "\n";
                         }
                     }
                 },

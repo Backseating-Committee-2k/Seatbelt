@@ -14,7 +14,7 @@ public:
 
     [[nodiscard]] Lexer::TokenList tokenize() {
         using namespace Lexer;
-        using namespace Lexer::Token;
+        using namespace Lexer::Tokens;
 
         TokenList tokens;
 

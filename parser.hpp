@@ -12,32 +12,77 @@
 
 namespace Parser {
 
-    using namespace Lexer::Token;
+    using namespace Lexer::Tokens;
 
     using Type = std::span<const Token>;
 
-    struct Statement {
-        virtual ~Statement() = default;
-    };
+    namespace Expressions {
+        struct Expression;
+    }
 
-    using StatementList = std::vector<std::unique_ptr<Statement>>;
+    namespace Statements {
 
-    struct Block : public Statement {
-        explicit Block(StatementList statements) : statements{ std::move(statements) } { }
+        using Expressions::Expression;
 
-        StatementList statements;
-    };
+        struct Statement {
+            virtual ~Statement() = default;
+        };
 
-    struct VariableDefinition : public Statement {
-        VariableDefinition(Identifier name, Type type, IntegerLiteral initial_value)
-            : name{ name },
-              type{ type },
-              initial_value{ initial_value } { }
+        using StatementList = std::vector<std::unique_ptr<Statement>>;
 
-        Identifier name;
-        Type type;
-        IntegerLiteral initial_value;
-    };
+        struct Block : public Statement {
+            explicit Block(StatementList statements) : statements{ std::move(statements) } { }
+
+            StatementList statements;
+        };
+
+        struct VariableDefinition : public Statement {
+            VariableDefinition(Identifier name, Type type, std::unique_ptr<Expression> initial_value)
+                : name{ name },
+                  type{ type },
+                  initial_value{ std::move(initial_value) } { }
+
+            Identifier name;
+            Type type;
+            std::unique_ptr<Expression> initial_value;
+        };
+
+    }// namespace Statements
+
+    namespace Expressions {
+        struct Expression {
+            virtual ~Expression() = default;
+        };
+
+        struct Literal : public Expression {
+            explicit Literal(IntegerLiteral value) : value{ value } { }
+
+            IntegerLiteral value;
+        };
+
+        struct Name : public Expression {
+            explicit Name(Lexer::Tokens::Identifier name) : name{ name } { }
+
+            Lexer::Tokens::Identifier name;
+        };
+
+        struct BinaryOperator : public Expression {
+            BinaryOperator(std::unique_ptr<Expression> lhs, std::unique_ptr<Expression> rhs)
+                : lhs{ std::move(lhs) },
+                  rhs{ std::move(rhs) } { }
+
+            std::unique_ptr<Expression> lhs;
+            std::unique_ptr<Expression> rhs;
+        };
+
+        struct Addition : public BinaryOperator {
+            using BinaryOperator::BinaryOperator;
+        };
+
+        struct Multiplication : public BinaryOperator {
+            using BinaryOperator::BinaryOperator;
+        };
+    }// namespace Expressions
 
     struct Parameter {
         Identifier name;
@@ -50,7 +95,7 @@ namespace Parser {
         Identifier name;
         ParameterList parameters;
         Type return_type;
-        Block body;
+        Statements::Block body;
     };
 
     using Program = std::vector<std::variant<FunctionDefinition>>;

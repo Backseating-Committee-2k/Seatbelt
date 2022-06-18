@@ -12,7 +12,7 @@
 
 namespace Lexer {
 
-    namespace Token {
+    namespace Tokens {
 
         struct DumpRegisters {
             Location location;
@@ -154,9 +154,9 @@ namespace Lexer {
                 Equals,
                 IntegerLiteral>;
 
-    }// namespace Token
+    }// namespace Tokens
 
-    using TokenList = std::vector<Token::Token>;
+    using TokenList = std::vector<Tokens::Token>;
 
     [[nodiscard]] TokenList tokenize(SourceCode source_code);
 
