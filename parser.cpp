@@ -35,28 +35,48 @@ namespace Parser {
 
     private:
         [[nodiscard]] std::unique_ptr<Expression> expression() {
-            return addition();
+            return addition_or_subtraction();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> addition() {
-            using Expressions::Addition;
-            auto accumulator = multiplication();
+        [[nodiscard]] std::unique_ptr<Expression> addition_or_subtraction() {
+            using Expressions::Addition, Expressions::Subtraction;
+            auto accumulator = multiplication_or_division();
 
-            while (maybe_consume<Plus>()) {
-                auto next_operand = multiplication();
-                accumulator = std::make_unique<Addition>(std::move(accumulator), std::move(next_operand));
-            }
+            bool did_consume;
+            do {
+                did_consume = false;
+                while (maybe_consume<Plus>()) {
+                    auto next_operand = multiplication_or_division();
+                    accumulator = std::make_unique<Addition>(std::move(accumulator), std::move(next_operand));
+                    did_consume = true;
+                }
+                while (maybe_consume<Minus>()) {
+                    auto next_operand = multiplication_or_division();
+                    accumulator = std::make_unique<Subtraction>(std::move(accumulator), std::move(next_operand));
+                    did_consume = true;
+                }
+            } while(did_consume);
             return accumulator;
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> multiplication() {
-            using Expressions::Multiplication;
+        [[nodiscard]] std::unique_ptr<Expression> multiplication_or_division() {
+            using Expressions::Multiplication, Expressions::Division;
             auto accumulator = primary();
 
-            while (maybe_consume<Asterisk>()) {
-                auto next_operand = primary();
-                accumulator = std::make_unique<Multiplication>(std::move(accumulator), std::move(next_operand));
-            }
+            bool did_consume;
+            do {
+                did_consume = false;
+                while (maybe_consume<Asterisk>()) {
+                    auto next_operand = primary();
+                    accumulator = std::make_unique<Multiplication>(std::move(accumulator), std::move(next_operand));
+                    did_consume = true;
+                }
+                while (maybe_consume<ForwardSlash>()) {
+                    auto next_operand = primary();
+                    accumulator = std::make_unique<Division>(std::move(accumulator), std::move(next_operand));
+                    did_consume = true;
+                }
+            } while(did_consume);
             return accumulator;
         }
 

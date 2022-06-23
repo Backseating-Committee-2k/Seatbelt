@@ -44,11 +44,23 @@ void print_expression(const Parser::Expressions::Expression& expression) {
         std::cout << " + ";
         print_expression(*add_expression->rhs);
         std::cout << ")";
+    } else if (const auto subtract_expression = dynamic_cast<const Subtraction*>(&expression)) {
+        std::cout << "(";
+        print_expression(*subtract_expression->lhs);
+        std::cout << " - ";
+        print_expression(*subtract_expression->rhs);
+        std::cout << ")";
     } else if (const auto mult_expression = dynamic_cast<const Multiplication*>(&expression)) {
         std::cout << "(";
         print_expression(*mult_expression->lhs);
         std::cout << " * ";
         print_expression(*mult_expression->rhs);
+        std::cout << ")";
+    } else if (const auto div_expression = dynamic_cast<const Division*>(&expression)) {
+        std::cout << "(";
+        print_expression(*div_expression->lhs);
+        std::cout << " / ";
+        print_expression(*div_expression->rhs);
         std::cout << ")";
     }
 }

@@ -79,9 +79,18 @@ namespace Parser {
             using BinaryOperator::BinaryOperator;
         };
 
+        struct Subtraction : public BinaryOperator {
+            using BinaryOperator::BinaryOperator;
+        };
+
         struct Multiplication : public BinaryOperator {
             using BinaryOperator::BinaryOperator;
         };
+
+        struct Division : public BinaryOperator {
+            using BinaryOperator::BinaryOperator;
+        };
+
     }// namespace Expressions
 
     struct Parameter {
