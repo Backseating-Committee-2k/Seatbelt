@@ -16,7 +16,7 @@ endif ()
 
 set(TARGET_LIST Seatbelt)
 
-add_executable(Seatbelt main.cpp lexer.cpp lexer.hpp types.hpp parser.cpp parser.hpp location.hpp source_code.hpp)
+add_executable(Seatbelt main.cpp lexer.cpp lexer.hpp types.hpp parser.cpp parser.hpp location.hpp source_code.hpp emitter.cpp emitter.hpp error.cpp error.hpp)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     find_package(TBB CONFIG REQUIRED)

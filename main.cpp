@@ -1,5 +1,6 @@
 #include "lexer.hpp"
 #include "parser.hpp"
+#include "emitter.hpp"
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -71,8 +72,17 @@ int main(int argc, char** argv) {
     const auto [filename, source] = read_source_code(argc, argv);
     const auto source_code = SourceCode{ .filename{ filename }, .text{ source } };
     const auto tokens = Lexer::tokenize(source_code);
-    const auto program = Parser::parse(tokens);
-    for (const auto& item : program) {
+    auto program = Parser::parse(tokens);
+
+    std::string assembly = "jump main\n\n";
+
+    for (auto& item : program) {
+        assembly += std::visit(Emitter::Emitter{}, item);
+    }
+
+    std::cout << assembly;
+
+    /*for (const auto& item : program) {
         std::visit(
                 [](const Parser::FunctionDefinition& function_definition) {
                     std::cout << std::format("{}(", function_definition.name.location.view());
@@ -91,6 +101,6 @@ int main(int argc, char** argv) {
                 },
                 item
         );
-    }
+    }*/
     std::exit(EXIT_SUCCESS);
 }

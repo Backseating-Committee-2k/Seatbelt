@@ -11,7 +11,10 @@
 #include <utility>
 #include <cassert>
 #include <memory>
+#include <string_view>
 #include "parser.hpp"
+#include "error.hpp"
+#include "types.hpp"
 
 namespace Parser {
 
@@ -55,7 +58,7 @@ namespace Parser {
                     accumulator = std::make_unique<Subtraction>(std::move(accumulator), std::move(next_operand));
                     did_consume = true;
                 }
-            } while(did_consume);
+            } while (did_consume);
             return accumulator;
         }
 
@@ -76,7 +79,7 @@ namespace Parser {
                     accumulator = std::make_unique<Division>(std::move(accumulator), std::move(next_operand));
                     did_consume = true;
                 }
-            } while(did_consume);
+            } while (did_consume);
             return accumulator;
         }
 
@@ -95,7 +98,7 @@ namespace Parser {
             return nullptr;
         }
 
-        [[nodiscard]] FunctionDefinition function() {
+        [[nodiscard]] std::unique_ptr<FunctionDefinition> function() {
             assert(current_is<Function>());
             advance();
             const auto name = consume<Identifier>("expected function name");
@@ -115,10 +118,13 @@ namespace Parser {
             consume<Colon>("expected \":\"");
             const auto return_type = type();
             auto body = block();
-            return FunctionDefinition{ .name{ name },
-                                       .parameters{ std::move(parameters) },
-                                       .return_type{ return_type },
-                                       .body{ std::move(body) } };
+            auto function_definition =
+                    std::make_unique<FunctionDefinition>(FunctionDefinition{ .name{ name },
+                                                                             .parameters{ std::move(parameters) },
+                                                                             .return_type{ return_type },
+                                                                             .body{ std::move(body) } });
+
+            return function_definition;
         }
 
         [[nodiscard]] Statements::Block block() {
@@ -202,40 +208,8 @@ namespace Parser {
             ++m_index;
         }
 
-        [[nodiscard]] static Location token_location(const auto& token) {
-            return std::visit([](const auto& token) { return token.location; }, token);
-        }
-
         void error(const std::string_view message) const {
-            error(current(), message);
-        }
-
-        static void error(const Token& token, const std::string_view message) {
-            using namespace std::ranges::views;
-            using std::ranges::count, std::ranges::find;
-            const auto npos = std::string_view::npos;
-
-            const auto location = token_location(token);
-            const auto row = count(location.source_code.text | take(location.offset_start_inclusive), '\n') + 1;
-            const auto last_newline_pos = location.source_code.text.find_last_of('\n', location.offset_start_inclusive);
-            const auto column = location.offset_start_inclusive - (last_newline_pos == npos ? -1 : last_newline_pos);
-
-            const auto line_start_pos = last_newline_pos == npos ? 0 : last_newline_pos + 1;
-            const auto next_newline_pos = location.source_code.text.find('\n', line_start_pos);
-            const auto line_end_pos = next_newline_pos == npos ? location.source_code.text.length() : next_newline_pos;
-            const auto line = location.source_code.text.substr(line_start_pos, line_end_pos - line_start_pos);
-
-            std::cerr << std::format("{}:{}:{}: {}\n{}\n", location.source_code.filename, row, column, message, line);
-            for (usize i = 0; i < column - 1; ++i) {
-                std::cerr << ' ';
-            }
-            std::cerr << '^';
-            const auto squiggly_length = std::max(location.view().length(), usize{ 1 }) - 1;
-            for (usize i = 0; i < squiggly_length; ++i) {
-                std::cerr << '~';
-            }
-            std::cerr << " error occurred here\n";
-            std::exit(EXIT_FAILURE);
+            Error::error(current(), message);
         }
 
     private:
