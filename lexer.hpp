@@ -18,9 +18,9 @@
 
 #define TOKEN_LIST                                                                                                   \
     x(DumpRegisters) x(Identifier) x(Function) x(Colon) x(Comma) x(Arrow) x(EndOfFile) x(Semicolon) x(Plus) x(Minus) \
-            x(Asterisk) x(Percent) x(ForwardSlash) x(DoubleForwardSlash) x(ForwardSlashAsterisk)                     \
-                    x(AsteriskForwardSlash) x(LeftParenthesis) x(RightParenthesis) x(LeftCurlyBracket)               \
-                            x(RightCurlyBracket) x(Let) x(Equals) x(IntegerLiteral) x(NewlineAfterDoubleForwardSlash)
+            x(Asterisk) x(Percent) x(ForwardSlash) x(LeftParenthesis) x(RightParenthesis) x(LeftCurlyBracket)        \
+                    x(RightCurlyBracket) x(Let) x(Equals) x(IntegerLiteral)
+
 
 namespace Lexer {
 

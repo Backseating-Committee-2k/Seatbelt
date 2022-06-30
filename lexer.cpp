@@ -33,20 +33,38 @@ public:
                     }
                     break;
                 case '*':
-                    if (peek() == '/') {
-                        token_length = 2;
-                        emit_token<AsteriskForwardSlash>(tokens, token_length);
-                    } else {
-                        emit_single_char_token<Asterisk>(tokens);
-                    }
+                    emit_single_char_token<Asterisk>(tokens);
                     break;
                 case '/':
                     if (peek() == '/') {
-                        token_length = 2;
-                        emit_token<DoubleForwardSlash>(tokens, token_length);
+                        while (not end_of_file() && current() != '\n') {
+                            advance(1);
+                        }
+                        continue;
                     } else if (peek() == '*') {
-                        token_length = 2;
-                        emit_token<ForwardSlashAsterisk>(tokens, token_length);
+                        usize last_opening_block_comment_index = m_index;
+                        i64 nesting_depth = 1;
+                        advance(2);
+                        while (bool two_remaining = m_index < m_source_code.text.length() - 1) {
+                            if (current() == '/' and peek() == '*') {
+                                last_opening_block_comment_index = m_index;
+                                ++nesting_depth;
+                                advance(2);
+                            } else if (current() == '*' and peek() == '/') {
+                                --nesting_depth;
+                                advance(2);
+                            } else {
+                                advance(1);
+                            }
+                            if (nesting_depth == 0) {
+                                break;
+                            }
+                        }
+                        if (nesting_depth != 0) {
+                            std::cerr << "unclosed block comment: "
+                                      << m_source_code.text.substr(last_opening_block_comment_index) << "\n";
+                            std::exit(EXIT_FAILURE);
+                        }
                     } else {
                         emit_single_char_token<ForwardSlash>(tokens);
                     }
