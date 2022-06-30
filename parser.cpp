@@ -136,6 +136,12 @@ namespace Parser {
                 } else if (current_is<LeftCurlyBracket>()) {
                     statements.push_back(std::make_unique<Statements::Block>(block()));
                 } else {
+                    Error::error(
+                            current(), std::format(
+                                               "unexpected token: \"{}\"",
+                                               std::visit([](auto&& token) { return token.debug_name; }, current())
+                                       )
+                    );
                     advance();
                 }
             }
