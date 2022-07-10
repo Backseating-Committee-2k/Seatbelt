@@ -177,7 +177,7 @@ namespace Parser {
             return Statements::Block{ std::move(statements) };
         }
 
-        [[nodiscard]] Type type() {
+        [[nodiscard]] DataType type() {
             const auto type_start_index = m_index;
             while (current_is<Arrow>()) {
                 advance();

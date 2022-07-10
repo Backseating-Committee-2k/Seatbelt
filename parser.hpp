@@ -24,11 +24,11 @@ namespace Parser {
 
     using namespace Lexer::Tokens;
 
-    using Type = std::span<const Token>;
-
     namespace Expressions {
         struct Expression;
     }
+
+    using DataType = std::optional<std::span<const Token>>;
 
     namespace Statements {
 
@@ -67,7 +67,7 @@ namespace Parser {
         };
 
         struct VariableDefinition : public Statement {
-            VariableDefinition(Identifier name, Type type, std::unique_ptr<Expression> initial_value)
+            VariableDefinition(Identifier name, DataType type, std::unique_ptr<Expression> initial_value)
                 : name{ name },
                   type{ type },
                   initial_value{ std::move(initial_value) } { }
@@ -77,7 +77,7 @@ namespace Parser {
             }
 
             Identifier name;
-            Type type;
+            DataType type;
             std::unique_ptr<Expression> initial_value;
         };
 
@@ -105,8 +105,6 @@ namespace Parser {
     }// namespace Statements
 
     namespace Expressions {
-
-        using DataType = std::optional<std::span<Token>>;
 
         struct Literal;
         struct Name;
@@ -193,7 +191,7 @@ namespace Parser {
 
     struct Parameter {
         Identifier name;
-        Type type;
+        DataType type;
     };
 
     using ParameterList = std::vector<Parameter>;
@@ -201,7 +199,7 @@ namespace Parser {
     struct FunctionDefinition {
         Identifier name;
         ParameterList parameters;
-        Type return_type;
+        DataType return_type;
         Statements::Block body;
     };
 
