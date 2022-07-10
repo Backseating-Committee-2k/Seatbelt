@@ -107,7 +107,7 @@ namespace Parser {
             if (maybe_consume<LeftParenthesis>()) {
                 auto sub_expression = expression();
                 consume<RightParenthesis>("expected \")\"");
-                return std::move(sub_expression);
+                return sub_expression;
             } else if (auto literal_token = maybe_consume<IntegerLiteral>()) {
                 return std::make_unique<Literal>(literal_token.value());
             }
