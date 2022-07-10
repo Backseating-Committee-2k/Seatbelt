@@ -45,7 +45,7 @@ public:
                         usize last_opening_block_comment_index = m_index;
                         i64 nesting_depth = 1;
                         advance(2);
-                        while (bool two_remaining = m_index < m_source_code.text.length() - 1) {
+                        while ([[maybe_unused]] bool two_remaining = m_index < m_source_code.text.length() - 1) {
                             if (current() == '/' and peek() == '*') {
                                 last_opening_block_comment_index = m_index;
                                 ++nesting_depth;
