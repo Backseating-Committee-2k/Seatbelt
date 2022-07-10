@@ -21,31 +21,29 @@ namespace Emitter {
     using SymbolTable = std::unordered_map<std::string_view, usize>;
     using ScopeStack = std::vector<SymbolTable>;
 
-    template<typename T>
-    struct EmitterHelper {
+    struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
+        EmitterVisitor(const Parser::Program* program, SymbolTable&& scope)
+            : program{ program },
+              scopes{ { std::move(scope) } } {
+            current_offset = 4 * scopes.back().size();// TODO: different data types
+        }
+
+        std::string assembly;
+        const Parser::Program* program;
+        ScopeStack scopes;
+        usize current_offset;
+
         void emit(const std::string_view instruction) {
             emit(instruction, "");
         }
 
         void emit(const std::string_view instruction, const std::string_view comment) {
-            auto& assembly = static_cast<T&>(*this).assembly;
             assembly += std::format("\t{}", instruction);
             if (not comment.empty()) {
                 assembly += std::format(" // {}", comment);
             }
             assembly += "\n";
         }
-    };
-
-    struct ExpressionEmitterVisitor : public ExpressionVisitor, public EmitterHelper<ExpressionEmitterVisitor> {
-        ExpressionEmitterVisitor(const Parser::Program* program, const ScopeStack* scopes)
-            : program{ program },
-              scopes{ scopes } { }
-
-        std::string assembly;
-        const Parser::Program* program;
-        const ScopeStack* scopes;
-
 
         void visit(Literal& expression) override {
             emit(std::format("copy {}, R1", expression.value.location.view()), "put immediate into register");
@@ -67,7 +65,7 @@ namespace Emitter {
             }
 
             std::optional<usize> offset;
-            for (auto iterator = scopes->crbegin(); iterator != scopes->crend(); ++iterator) {
+            for (auto iterator = scopes.crbegin(); iterator != scopes.crend(); ++iterator) {
                 const auto find_iterator = iterator->find(expression.name.location.view());
                 if (find_iterator != iterator->end()) {
                     offset = find_iterator->second;
@@ -131,21 +129,6 @@ namespace Emitter {
             // after the call the return value is inside R1
             emit("push R1", "push return value onto stack");
         }
-    };
-
-    struct StatementEmitterVisitor : public Parser::Statements::StatementVisitor,
-                                     public EmitterHelper<StatementEmitterVisitor> {
-
-        StatementEmitterVisitor(const Parser::Program* program, SymbolTable&& scope)
-            : program{ program },
-              scopes{ { std::move(scope) } } {
-            current_offset = 4 * scopes.back().size();// TODO: different data types
-        }
-
-        std::string assembly;
-        ScopeStack scopes;
-        usize current_offset;
-        const Parser::Program* program;
 
         void visit(Block& statement) override {
             for (auto& sub_statement : statement.statements) {
@@ -172,9 +155,7 @@ namespace Emitter {
             assembly += std::format(
                     "\t// new variable called \"{}\" with offset {}\n", statement.name.location.view(), current_offset
             );
-            auto expression_visitor = ExpressionEmitterVisitor{ program, &scopes };
-            statement.initial_value->accept(expression_visitor);
-            emit(expression_visitor.assembly);
+            statement.initial_value->accept(*this);
             scopes.back()[statement.name.location.view()] = current_offset;
             current_offset += 4;// TODO: different data types
         }
@@ -188,15 +169,13 @@ namespace Emitter {
         }
 
         void visit(ExpressionStatement& statement) override {
-            auto expression_visitor = ExpressionEmitterVisitor{ program, &scopes };
-            statement.expression->accept(expression_visitor);
-            emit(expression_visitor.assembly);
+            statement.expression->accept(*this);
             emit("pop R1", "discard value of expression statement");
         }
     };
 
     std::string emit_statement(const Parser::Program& program, Statement& statement, SymbolTable&& surrounding_scope) {
-        auto visitor = StatementEmitterVisitor{ &program, std::move(surrounding_scope) };
+        auto visitor = EmitterVisitor{ &program, std::move(surrounding_scope) };
         statement.accept(visitor);
         return visitor.assembly;
     }
