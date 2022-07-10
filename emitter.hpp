@@ -10,7 +10,11 @@
 namespace Emitter {
 
     struct Emitter {
-        std::string operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) const;
+        explicit Emitter(const Parser::Program* program) : program{ program } { }
+
+        std::string operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const;
+
+        const Parser::Program* program;
     };
 
 }// namespace Emitter
