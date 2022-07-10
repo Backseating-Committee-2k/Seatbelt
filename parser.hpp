@@ -136,27 +136,26 @@ namespace Parser {
             DataType data_type{};
         };
 
-        struct Literal : public Expression {
-            explicit Literal(IntegerLiteral value) : value{ value } { }
-
-            void accept(ExpressionVisitor& visitor) override {
-                visitor.visit(*this);
+        template<typename T>
+        struct ExpressionAcceptor : public Expression {
+            void accept(ExpressionVisitor& visitor) final {
+                visitor.visit(static_cast<T&>(*this));
             }
+        };
+
+        struct Literal : public ExpressionAcceptor<Literal> {
+            explicit Literal(IntegerLiteral value) : value{ value } { }
 
             IntegerLiteral value;
         };
 
-        struct Name : public Expression {
+        struct Name : public ExpressionAcceptor<Name> {
             explicit Name(Lexer::Tokens::Identifier name) : name{ name } { }
-
-            void accept(ExpressionVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             Lexer::Tokens::Identifier name;
         };
 
-        struct BinaryOperator : public Expression {
+        struct BinaryOperator {
             BinaryOperator(std::unique_ptr<Expression> lhs, std::unique_ptr<Expression> rhs)
                 : lhs{ std::move(lhs) },
                   rhs{ std::move(rhs) } { }
@@ -165,46 +164,26 @@ namespace Parser {
             std::unique_ptr<Expression> rhs;
         };
 
-        struct Addition : public BinaryOperator {
+        struct Addition : public BinaryOperator, public ExpressionAcceptor<Addition> {
             using BinaryOperator::BinaryOperator;
-
-            void accept(ExpressionVisitor& visitor) override {
-                visitor.visit(*this);
-            }
         };
 
-        struct Subtraction : public BinaryOperator {
+        struct Subtraction : public BinaryOperator, public ExpressionAcceptor<Subtraction> {
             using BinaryOperator::BinaryOperator;
-
-            void accept(ExpressionVisitor& visitor) override {
-                visitor.visit(*this);
-            }
         };
 
-        struct Multiplication : public BinaryOperator {
+        struct Multiplication : public BinaryOperator, public ExpressionAcceptor<Multiplication> {
             using BinaryOperator::BinaryOperator;
-
-            void accept(ExpressionVisitor& visitor) override {
-                visitor.visit(*this);
-            }
         };
 
-        struct Division : public BinaryOperator {
+        struct Division : public BinaryOperator, public ExpressionAcceptor<Division> {
             using BinaryOperator::BinaryOperator;
-
-            void accept(ExpressionVisitor& visitor) override {
-                visitor.visit(*this);
-            }
         };
 
-        struct FunctionCall : public Expression {
+        struct FunctionCall : public ExpressionAcceptor<FunctionCall> {
             FunctionCall(std::unique_ptr<Expression> callee, std::vector<std::unique_ptr<Expression>> arguments)
                 : callee{ std::move(callee) },
                   arguments{ std::move(arguments) } { }
-
-            void accept(ExpressionVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             std::unique_ptr<Expression> callee;
             std::vector<std::unique_ptr<Expression>> arguments;
