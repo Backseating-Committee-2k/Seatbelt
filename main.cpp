@@ -1,6 +1,7 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "emitter.hpp"
+#include "vendor/argh.hpp"
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -11,20 +12,26 @@
     return { std::istreambuf_iterator<char>(stream), {} };
 }
 
-[[nodiscard]] std::tuple<std::string_view, std::string> read_source_code(int argc, char* const* argv) {
-    if (argc < 2) {
+[[nodiscard]] std::tuple<std::string, std::string> read_source_code(argh::parser& command_line_parser) {
+    const usize num_arguments = command_line_parser.size();
+    if (num_arguments < 2) {
         return std::tuple{ "<stdin>", read_whole_stream(std::cin) };
-    } else if (argc == 2) {
-        if (!std::filesystem::exists(argv[1])) {
-            std::cerr << "file does not exist (" << argv[1] << ")\n";
+    } else if (num_arguments == 2) {
+        if (!std::filesystem::exists(command_line_parser[1])) {
+            std::cerr << "file does not exist (" << command_line_parser[1] << ")\n";
             std::exit(EXIT_FAILURE);
         }
-        std::ifstream stream{ argv[1], std::ios::in };
-        return std::tuple{ argv[1], read_whole_stream(stream) };
+        std::ifstream stream{ command_line_parser[1], std::ios::in };
+        return std::tuple{ command_line_parser[1], read_whole_stream(stream) };
     } else {
         std::cerr << "more than one argument is not supported as of yet\n";
         std::exit(EXIT_FAILURE);
     }
+}
+
+void write_to_file(const std::string_view contents, const std::string_view filename) {
+    std::ofstream stream{ filename, std::ios::out };
+    stream << contents;
 }
 
 struct TokenPrinter {
@@ -69,38 +76,31 @@ void print_expression(const Parser::Expressions::Expression& expression) {
 int main(int argc, char** argv) {
     using namespace Lexer::Tokens;
 
-    const auto [filename, source] = read_source_code(argc, argv);
+    auto command_line_parser = argh::parser{};
+    command_line_parser.add_params({ "-o", "--output" });
+    command_line_parser.parse(argc, argv);
+
+    const auto [filename, source] = read_source_code(command_line_parser);
     const auto source_code = SourceCode{ .filename{ filename }, .text{ source } };
     const auto tokens = Lexer::tokenize(source_code);
     auto program = Parser::parse(tokens);
 
     std::string assembly = "jump main\n\n";
 
-    for (auto& item : program) {
-        assembly += std::visit(Emitter::Emitter{}, item);
+    for (const auto& item : program) {
+        assembly += std::visit(Emitter::Emitter{ &program }, item);
     }
 
-    std::cout << assembly;
+    auto out_filename = std::string{};
+    if (command_line_parser({ "-o", "--output" }) >> out_filename) {
+        std::cout << "out filename is " << out_filename << "\n";
+    }
 
-    /*for (const auto& item : program) {
-        std::visit(
-                [](const Parser::FunctionDefinition& function_definition) {
-                    std::cout << std::format("{}(", function_definition.name.location.view());
-                    for (const auto& parameter : function_definition.parameters) {
-                        std::cout << parameter.name.location.view() << ", ";
-                    }
-                    std::cout << ")\n";
-                    for (const auto& statement : function_definition.body.statements) {
-                        if (const auto variable_definition =
-                                    dynamic_cast<const Parser::Statements::VariableDefinition*>(statement.get())) {
-                            std::cout << std::format("\t{} = ", variable_definition->name.location.view());
-                            print_expression(*variable_definition->initial_value);
-                            std::cout << "\n";
-                        }
-                    }
-                },
-                item
-        );
-    }*/
+    if (out_filename.empty()) {
+        std::cout << assembly;
+    } else {
+        write_to_file(assembly, out_filename);
+    }
+
     std::exit(EXIT_SUCCESS);
 }
