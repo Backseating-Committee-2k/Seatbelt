@@ -181,7 +181,8 @@ namespace Emitter {
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const {
-        auto result = std::string{ function_definition->name.location.view() } + ":\n";
+        auto result = std::format("{}:\n", function_definition->name.location.view());
+
         const auto emit = [&result](const std::string_view instruction, const std::string_view comment = "") {
             result += std::format("\t{}", instruction);
             if (not comment.empty()) {
