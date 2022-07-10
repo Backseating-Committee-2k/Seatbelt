@@ -9,6 +9,7 @@
 #include <span>
 #include <memory>
 #include <unordered_map>
+#include <optional>
 #include "lexer.hpp"
 
 namespace Parser {
@@ -105,6 +106,8 @@ namespace Parser {
 
     namespace Expressions {
 
+        using DataType = std::optional<std::span<Token>>;
+
         struct Literal;
         struct Name;
         struct Addition;
@@ -129,6 +132,8 @@ namespace Parser {
             virtual void accept(ExpressionVisitor& visitor) = 0;
 
             virtual ~Expression() = default;
+
+            DataType data_type{};
         };
 
         struct Literal : public Expression {
