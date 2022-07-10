@@ -34,12 +34,6 @@ void write_to_file(const std::string_view contents, const std::string_view filen
     stream << contents;
 }
 
-struct TokenPrinter {
-    void operator()(const auto& token) {
-        std::cout << token.debug_name << " (\"" << token.location.view() << "\")\n";
-    }
-};
-
 void print_expression(const Parser::Expressions::Expression& expression) {
     using namespace Parser::Expressions;
     if (const auto literal_expression = dynamic_cast<const Literal*>(&expression)) {
