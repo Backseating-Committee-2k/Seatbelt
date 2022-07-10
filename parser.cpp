@@ -138,13 +138,10 @@ namespace Parser {
             consume<Colon>("expected \":\"");
             const auto return_type = type();
             auto body = block();
-            auto function_definition =
-                    std::make_unique<FunctionDefinition>(FunctionDefinition{ .name{ name },
-                                                                             .parameters{ std::move(parameters) },
-                                                                             .return_type{ return_type },
-                                                                             .body{ std::move(body) } });
-
-            return function_definition;
+            return std::make_unique<FunctionDefinition>(FunctionDefinition{ .name{ name },
+                                                                            .parameters{ std::move(parameters) },
+                                                                            .return_type{ return_type },
+                                                                            .body{ std::move(body) } });
         }
 
         [[nodiscard]] Statements::Block block() {
