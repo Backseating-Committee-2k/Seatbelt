@@ -52,7 +52,7 @@ public:
                                 advance(2);
                             } else if (current() == '*' and peek() == '/') {
                                 --nesting_depth;
-                                advance(2);
+                                advance(1);
                             } else {
                                 advance(1);
                             }
