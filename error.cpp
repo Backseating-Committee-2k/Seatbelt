@@ -32,7 +32,7 @@ void Error::error(const Lexer::Tokens::Token& token, const std::string_view mess
         std::cerr << ' ';
     }
     std::cerr << '^';
-    const auto squiggly_length = std::max(location.view().length(), usize{ 1 }) - 1;
+    const auto squiggly_length = std::min(std::max(location.view().length(), usize{ 1 }) - 1, line.length() - column);
     for (usize i = 0; i < squiggly_length; ++i) {
         std::cerr << '~';
     }
