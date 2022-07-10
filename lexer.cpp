@@ -111,6 +111,8 @@ public:
                             emit_token<Function>(tokens, token_length);
                         } else if (identifier_result.view() == "let") {
                             emit_token<Let>(tokens, token_length);
+                        } else if (identifier_result.view() == "bsm") {
+                            token_length = inline_assembly(tokens);
                         } else {
                             emit_token<Identifier>(tokens, token_length);
                         }
@@ -164,6 +166,63 @@ private:
         return Location{ .source_code{ m_source_code },
                          .offset_start_inclusive{ m_index },
                          .offset_end_exclusive{ m_index + length } };
+    }
+
+    [[nodiscard]] usize inline_assembly(Lexer::TokenList& tokens) {
+        const usize inline_assembly_start = m_index;
+
+        // discard bsm keyword
+        advance(3);
+
+        // discard any following whitespace after the "bsm" keyword
+        while (not end_of_file() and std::isspace(current())) {
+            advance(1);
+        }
+
+        if (end_of_file()) {
+            std::cerr << "unexpected end of file\n";
+            std::exit(EXIT_FAILURE);
+        }
+
+        if (current() != '{') {
+            std::cerr << "expected \"{\" to open an inline assembly block\n";
+            std::exit(EXIT_FAILURE);
+        }
+
+        advance(1);
+
+        while (not end_of_file() and current() != '}') {
+            if (current() == '/') {
+                advance(1);
+                if (not end_of_file() and current() == '/') {
+                    // we are inside a comment
+                    // loop until end of line
+                    advance(1);
+                    while (not end_of_file() and current() != '\n') {
+                        advance(1);
+                    }
+                }
+            } else {
+                advance(1);
+            }
+        }
+        if (end_of_file()) {
+            std::cerr << "unterminated inline assembly block\n";
+            std::exit(EXIT_FAILURE);
+        }
+
+        assert(current() == '}');
+        advance(1);
+        const usize inline_assembly_end = m_index;
+        tokens.push_back(Lexer::Tokens::InlineAssembly{
+                .location{.source_code{ m_source_code },
+                          .offset_start_inclusive{ inline_assembly_start },
+                          .offset_end_exclusive{ inline_assembly_end }}
+        });
+        const usize token_length = inline_assembly_end - inline_assembly_start;
+        assert(m_index >= token_length);
+        m_index -= token_length;
+        return token_length;
     }
 
     template<typename T, typename... Args>

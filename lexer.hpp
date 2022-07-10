@@ -19,7 +19,7 @@
 #define TOKEN_LIST                                                                                                   \
     x(DumpRegisters) x(Identifier) x(Function) x(Colon) x(Comma) x(Arrow) x(EndOfFile) x(Semicolon) x(Plus) x(Minus) \
             x(Asterisk) x(Percent) x(ForwardSlash) x(LeftParenthesis) x(RightParenthesis) x(LeftCurlyBracket)        \
-                    x(RightCurlyBracket) x(Let) x(Equals) x(IntegerLiteral)
+                    x(RightCurlyBracket) x(Let) x(Equals) x(IntegerLiteral) x(InlineAssembly)
 
 
 namespace Lexer {
