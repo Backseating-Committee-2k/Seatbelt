@@ -4,12 +4,15 @@
 
 #pragma once
 
+#include <cassert>
 #include <vector>
 #include <variant>
 #include <span>
 #include <memory>
 #include <unordered_map>
 #include <optional>
+#include <string_view>
+#include <iostream>
 #include "lexer.hpp"
 
 namespace Parser {
@@ -28,7 +31,63 @@ namespace Parser {
         struct Expression;
     }
 
-    using DataType = std::optional<std::span<const Token>>;
+    struct DataType {
+    protected:
+        explicit DataType(bool is_mutable) : is_mutable{ is_mutable } { }
+
+    public:
+        virtual ~DataType() = default;
+
+        virtual bool operator==(const DataType& other) const {
+            return is_mutable == other.is_mutable;
+        }
+
+        virtual std::string to_string() const {
+            return is_mutable ? "mutable " : "const ";
+        }
+
+        bool is_mutable;
+    };
+
+    struct ConcreteType : public DataType {
+        ConcreteType(std::string_view name, bool is_mutable) : DataType{ is_mutable }, name{ std::move(name) } { }
+
+        bool operator==(const DataType& other) const override {
+            if (const auto other_pointer = dynamic_cast<const ConcreteType*>(&other)) {
+                return DataType::operator==(other) and name == other_pointer->name;
+            }
+            return false;
+        }
+
+        std::string to_string() const override {
+            return DataType::to_string() + std::string{ name };
+        }
+
+        std::string_view name;
+    };
+
+    using DataTypePointer = std::unique_ptr<DataType>;
+
+    struct PointerType : public DataType {
+        PointerType(std::unique_ptr<DataType> contained, bool is_mutable)
+            : DataType{ is_mutable },
+              contained{ std::move(contained) } { }
+
+        bool operator==(const DataType& other) const override {
+            if (const auto other_pointer = dynamic_cast<const PointerType*>(&other)) {
+                return DataType::operator==(other) and contained == other_pointer->contained;
+            }
+            return false;
+        }
+
+        std::string to_string() const override {
+            using namespace std::string_literals;
+            assert(contained);
+            return DataType::to_string() + "->"s + contained->to_string();
+        }
+
+        std::unique_ptr<DataType> contained;
+    };
 
     namespace Statements {
 
@@ -67,9 +126,15 @@ namespace Parser {
         };
 
         struct VariableDefinition : public Statement {
-            VariableDefinition(Identifier name, DataType type, std::unique_ptr<Expression> initial_value)
+            VariableDefinition(
+                    Identifier name,
+                    Equals equals_token,
+                    std::span<const Token> type_tokens,
+                    std::unique_ptr<Expression> initial_value
+            )
                 : name{ name },
-                  type{ type },
+                  equals_token{ equals_token },
+                  type_tokens{ type_tokens },
                   initial_value{ std::move(initial_value) } { }
 
             void accept(StatementVisitor& visitor) override {
@@ -77,7 +142,9 @@ namespace Parser {
             }
 
             Identifier name;
-            DataType type;
+            Equals equals_token;
+            std::span<const Token> type_tokens;
+            DataTypePointer type{};
             std::unique_ptr<Expression> initial_value;
         };
 
@@ -131,7 +198,7 @@ namespace Parser {
 
             virtual ~Expression() = default;
 
-            DataType data_type{};
+            DataTypePointer data_type{};
         };
 
         template<typename T>
@@ -191,7 +258,7 @@ namespace Parser {
 
     struct Parameter {
         Identifier name;
-        DataType type;
+        DataTypePointer type{};
     };
 
     using ParameterList = std::vector<Parameter>;
@@ -199,7 +266,7 @@ namespace Parser {
     struct FunctionDefinition {
         Identifier name;
         ParameterList parameters;
-        DataType return_type;
+        DataTypePointer return_type{};
         Statements::Block body;
     };
 

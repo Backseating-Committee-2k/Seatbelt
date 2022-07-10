@@ -2,6 +2,7 @@
 #include "parser.hpp"
 #include "emitter.hpp"
 #include "vendor/argh.hpp"
+#include "type_checker.hpp"
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -78,6 +79,8 @@ int main(int argc, char** argv) {
     const auto source_code = SourceCode{ .filename{ filename }, .text{ source } };
     const auto tokens = Lexer::tokenize(source_code);
     auto program = Parser::parse(tokens);
+
+    TypeChecker::check(program);
 
     std::string assembly = "jump main\n\n";
 

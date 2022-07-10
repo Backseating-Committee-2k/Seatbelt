@@ -127,20 +127,19 @@ namespace Parser {
             while (not end_of_file() and not current_is<RightParenthesis>()) {
                 const auto parameter_name = consume<Identifier>("expected parameter name");
                 consume<Colon>("expected \":\"");
-                const auto parameter_type = type();
-                const auto parameter = Parameter{ .name{ parameter_name }, .type{ parameter_type } };
-                parameters.push_back(parameter);
+                type();
+                parameters.push_back(Parameter{ .name{ parameter_name }, .type{} });
                 if (not maybe_consume<Comma>()) {
                     break;
                 }
             }
             consume<RightParenthesis>("expected \")\"");
             consume<Colon>("expected \":\"");
-            const auto return_type = type();
+            type();
             auto body = block();
             return std::make_unique<FunctionDefinition>(FunctionDefinition{ .name{ name },
                                                                             .parameters{ std::move(parameters) },
-                                                                            .return_type{ return_type },
+                                                                            .return_type{},
                                                                             .body{ std::move(body) } });
         }
 
@@ -174,7 +173,7 @@ namespace Parser {
             return Statements::Block{ std::move(statements) };
         }
 
-        [[nodiscard]] DataType type() {
+        [[nodiscard]] std::span<const Token> type() {
             const auto type_start_index = m_index;
             while (current_is<Arrow>()) {
                 advance();
@@ -189,12 +188,12 @@ namespace Parser {
             advance();
             const auto identifier = consume<Identifier>("expected variable name");
             consume<Colon>("expected \":\"");
-            const auto variable_type = type();
-            consume<Equals>("expected variable initialization");
+            auto type_tokens = type();
+            auto equals_token = consume<Equals>("expected variable initialization");
             auto initial_value = expression();
             consume<Semicolon>("expected \";\"");
             return std::make_unique<Statements::VariableDefinition>(
-                    identifier, variable_type, std::move(initial_value)
+                    identifier, equals_token, type_tokens, std::move(initial_value)
             );
         }
 
