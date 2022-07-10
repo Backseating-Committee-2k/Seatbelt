@@ -64,18 +64,18 @@ namespace Parser {
 
         [[nodiscard]] std::unique_ptr<Expression> multiplication_or_division() {
             using Expressions::Multiplication, Expressions::Division;
-            auto accumulator = primary();
+            auto accumulator = function_call();
 
             bool did_consume;
             do {
                 did_consume = false;
                 while (maybe_consume<Asterisk>()) {
-                    auto next_operand = primary();
+                    auto next_operand = function_call();
                     accumulator = std::make_unique<Multiplication>(std::move(accumulator), std::move(next_operand));
                     did_consume = true;
                 }
                 while (maybe_consume<ForwardSlash>()) {
-                    auto next_operand = primary();
+                    auto next_operand = function_call();
                     accumulator = std::make_unique<Division>(std::move(accumulator), std::move(next_operand));
                     did_consume = true;
                 }
@@ -83,16 +83,36 @@ namespace Parser {
             return accumulator;
         }
 
+        [[nodiscard]] std::unique_ptr<Expression> function_call() {
+            using Expressions::FunctionCall;
+
+            auto primary = this->primary();
+            if (maybe_consume<LeftParenthesis>()) {
+                std::vector<std::unique_ptr<Expression>> arguments;
+                while (not end_of_file() and not current_is<RightParenthesis>()) {
+                    arguments.push_back(expression());
+                    if (not maybe_consume<Comma>()) {
+                        break;
+                    }
+                }
+                consume<RightParenthesis>("expected \")\" at end of parameter list");
+                return std::make_unique<FunctionCall>(std::move(primary), std::move(arguments));
+            }
+            return primary;
+        }
+
         [[nodiscard]] std::unique_ptr<Expression> primary() {
             using namespace Expressions;
+
             if (maybe_consume<LeftParenthesis>()) {
                 auto sub_expression = expression();
                 consume<RightParenthesis>("expected \")\"");
-                return sub_expression;
-            } else if (auto literal_expression = maybe_consume<IntegerLiteral>()) {
-                return std::make_unique<Literal>(literal_expression.value());
-            } else if (auto name_expression = maybe_consume<Identifier>()) {
-                return std::make_unique<Name>(name_expression.value());
+                return std::move(sub_expression);
+            } else if (auto literal_token = maybe_consume<IntegerLiteral>()) {
+                return std::make_unique<Literal>(literal_token.value());
+            }
+            if (auto identifier_token = maybe_consume<Identifier>()) {
+                return std::make_unique<Name>(identifier_token.value());
             }
             error("unexpected token");
             return nullptr;
@@ -135,14 +155,22 @@ namespace Parser {
                     statements.push_back(variable_definition());
                 } else if (current_is<LeftCurlyBracket>()) {
                     statements.push_back(std::make_unique<Statements::Block>(block()));
+                } else if (current_is<InlineAssembly>()) {
+                    statements.push_back(
+                            std::make_unique<Statements::InlineAssembly>(&std::get<InlineAssembly>(current()))
+                    );
+                    advance();
                 } else {
-                    Error::error(
+                    auto expression = this->expression();
+                    consume<Semicolon>("expected \";\" to complete expression statement");
+                    statements.push_back(std::make_unique<Statements::ExpressionStatement>(std::move(expression)));
+                    /*Error::error(
                             current(), std::format(
                                                "unexpected token: \"{}\"",
                                                std::visit([](auto&& token) { return token.debug_name; }, current())
                                        )
                     );
-                    advance();
+                    advance();*/
                 }
             }
             consume<RightCurlyBracket>("expected \"}\"");
@@ -176,6 +204,11 @@ namespace Parser {
         template<typename T>
         [[nodiscard]] bool current_is() const {
             return std::holds_alternative<T>(current());
+        }
+
+        template<typename T>
+        [[nodiscard]] bool next_is() const {
+            return std::holds_alternative<T>(peek());
         }
 
         template<typename T>

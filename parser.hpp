@@ -35,10 +35,14 @@ namespace Parser {
 
         struct Block;
         struct VariableDefinition;
+        struct InlineAssembly;
+        struct ExpressionStatement;
 
         struct StatementVisitor {
             virtual void visit(Block& statement) = 0;
             virtual void visit(VariableDefinition& statement) = 0;
+            virtual void visit(InlineAssembly& statement) = 0;
+            virtual void visit(ExpressionStatement& statement) = 0;
 
             virtual ~StatementVisitor() = default;
         };
@@ -76,6 +80,27 @@ namespace Parser {
             std::unique_ptr<Expression> initial_value;
         };
 
+        struct InlineAssembly : public Statement {
+            explicit InlineAssembly(const Lexer::Tokens::InlineAssembly* token) : token{ token } { }
+
+            void accept(StatementVisitor& visitor) override {
+                visitor.visit(*this);
+            }
+
+            const Lexer::Tokens::InlineAssembly* token;
+        };
+
+        struct ExpressionStatement : public Statement {
+            explicit ExpressionStatement(std::unique_ptr<Expression> expression)
+                : expression{ std::move(expression) } { }
+
+            void accept(StatementVisitor& visitor) override {
+                visitor.visit(*this);
+            }
+
+            std::unique_ptr<Expression> expression;
+        };
+
     }// namespace Statements
 
     namespace Expressions {
@@ -86,6 +111,7 @@ namespace Parser {
         struct Subtraction;
         struct Multiplication;
         struct Division;
+        struct FunctionCall;
 
         struct ExpressionVisitor {
             virtual void visit(Literal& expression) = 0;
@@ -94,6 +120,7 @@ namespace Parser {
             virtual void visit(Subtraction& expression) = 0;
             virtual void visit(Multiplication& expression) = 0;
             virtual void visit(Division& expression) = 0;
+            virtual void visit(FunctionCall& expression) = 0;
 
             virtual ~ExpressionVisitor() = default;
         };
@@ -163,6 +190,19 @@ namespace Parser {
             void accept(ExpressionVisitor& visitor) override {
                 visitor.visit(*this);
             }
+        };
+
+        struct FunctionCall : public Expression {
+            FunctionCall(std::unique_ptr<Expression> callee, std::vector<std::unique_ptr<Expression>> arguments)
+                : callee{ std::move(callee) },
+                  arguments{ std::move(arguments) } { }
+
+            void accept(ExpressionVisitor& visitor) override {
+                visitor.visit(*this);
+            }
+
+            std::unique_ptr<Expression> callee;
+            std::vector<std::unique_ptr<Expression>> arguments;
         };
 
     }// namespace Expressions
