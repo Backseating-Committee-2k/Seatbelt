@@ -10,5 +10,6 @@
 namespace Error {
 
     void error(const Lexer::Tokens::Token& token, std::string_view message);
+    [[nodiscard]] Location token_location(const auto& token);
 
-}
+}// namespace Error

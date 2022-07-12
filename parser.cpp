@@ -28,7 +28,7 @@ namespace Parser {
             auto program = Program{};
             while (not end_of_file()) {
                 if (current_is<Function>()) {
-                    program.push_back(function());
+                    program.push_back(function_definition());
                 } else {
                     error("\"function\" keyword expected");
                 }
@@ -42,52 +42,34 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<Expression> addition_or_subtraction() {
-            using Expressions::Addition, Expressions::Subtraction;
+            using Expressions::BinaryOperator;
             auto accumulator = multiplication_or_division();
-
-            bool did_consume;
-            do {
-                did_consume = false;
-                while (maybe_consume<Plus>()) {
-                    auto next_operand = multiplication_or_division();
-                    accumulator = std::make_unique<Addition>(std::move(accumulator), std::move(next_operand));
-                    did_consume = true;
-                }
-                while (maybe_consume<Minus>()) {
-                    auto next_operand = multiplication_or_division();
-                    accumulator = std::make_unique<Subtraction>(std::move(accumulator), std::move(next_operand));
-                    did_consume = true;
-                }
-            } while (did_consume);
+            while (auto token = maybe_consume_one_of<Plus, Minus>()) {
+                auto next_operand = multiplication_or_division();
+                accumulator = std::make_unique<BinaryOperator>(
+                        std::move(accumulator), std::move(next_operand), token.value()
+                );
+            }
             return accumulator;
         }
 
         [[nodiscard]] std::unique_ptr<Expression> multiplication_or_division() {
-            using Expressions::Multiplication, Expressions::Division;
+            using Expressions::BinaryOperator;
             auto accumulator = function_call();
-
-            bool did_consume;
-            do {
-                did_consume = false;
-                while (maybe_consume<Asterisk>()) {
-                    auto next_operand = function_call();
-                    accumulator = std::make_unique<Multiplication>(std::move(accumulator), std::move(next_operand));
-                    did_consume = true;
-                }
-                while (maybe_consume<ForwardSlash>()) {
-                    auto next_operand = function_call();
-                    accumulator = std::make_unique<Division>(std::move(accumulator), std::move(next_operand));
-                    did_consume = true;
-                }
-            } while (did_consume);
+            while (auto token = maybe_consume_one_of<Asterisk, ForwardSlash>()) {
+                auto next_operand = function_call();
+                accumulator = std::make_unique<BinaryOperator>(
+                        std::move(accumulator), std::move(next_operand), token.value()
+                );
+            }
             return accumulator;
         }
 
         [[nodiscard]] std::unique_ptr<Expression> function_call() {
             using Expressions::FunctionCall;
 
-            auto primary = this->primary();
-            if (maybe_consume<LeftParenthesis>()) {
+            auto accumulator = this->primary();
+            while (maybe_consume<LeftParenthesis>()) {
                 std::vector<std::unique_ptr<Expression>> arguments;
                 while (not end_of_file() and not current_is<RightParenthesis>()) {
                     arguments.push_back(expression());
@@ -96,9 +78,9 @@ namespace Parser {
                     }
                 }
                 consume<RightParenthesis>("expected \")\" at end of parameter list");
-                return std::make_unique<FunctionCall>(std::move(primary), std::move(arguments));
+                accumulator = std::make_unique<FunctionCall>(std::move(accumulator), std::move(arguments));
             }
-            return primary;
+            return accumulator;
         }
 
         [[nodiscard]] std::unique_ptr<Expression> primary() {
@@ -118,7 +100,7 @@ namespace Parser {
             return nullptr;
         }
 
-        [[nodiscard]] std::unique_ptr<FunctionDefinition> function() {
+        [[nodiscard]] std::unique_ptr<FunctionDefinition> function_definition() {
             assert(current_is<Function>());
             advance();
             const auto name = consume<Identifier>("expected function name");
@@ -127,18 +109,19 @@ namespace Parser {
             while (not end_of_file() and not current_is<RightParenthesis>()) {
                 const auto parameter_name = consume<Identifier>("expected parameter name");
                 consume<Colon>("expected \":\"");
-                type();
-                parameters.push_back(Parameter{ .name{ parameter_name }, .type{} });
+                const auto type_tokens = type();
+                parameters.push_back(Parameter{ .name{ parameter_name }, .type_tokens{ type_tokens }, .type{} });
                 if (not maybe_consume<Comma>()) {
                     break;
                 }
             }
             consume<RightParenthesis>("expected \")\"");
             consume<Colon>("expected \":\"");
-            type();
+            const auto return_type_tokens = type();
             auto body = block();
             return std::make_unique<FunctionDefinition>(FunctionDefinition{ .name{ name },
                                                                             .parameters{ std::move(parameters) },
+                                                                            .return_type_tokens{ return_type_tokens },
                                                                             .return_type{},
                                                                             .body{ std::move(body) } });
         }
@@ -225,6 +208,19 @@ namespace Parser {
                 return result;
             }
             return {};
+        }
+
+        template<typename FirstType, typename... RemainingTypes>
+        std::optional<Token> maybe_consume_one_of() {
+            if constexpr (sizeof...(RemainingTypes) == 0) {
+                return maybe_consume<FirstType>();
+            } else {
+                auto result = maybe_consume<FirstType>();
+                if (result) {
+                    return result;
+                }
+                return maybe_consume_one_of<RemainingTypes...>();
+            }
         }
 
         [[nodiscard]] const Token& current() const {

@@ -18,20 +18,11 @@ namespace Emitter {
     using namespace Parser::Statements;
     using namespace Parser::Expressions;
 
-    using SymbolTable = std::unordered_map<std::string_view, usize>;
-    using ScopeStack = std::vector<SymbolTable>;
-
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
-        EmitterVisitor(const Parser::Program* program, SymbolTable&& scope)
-            : program{ program },
-              scopes{ { std::move(scope) } } {
-            current_offset = 4 * scopes.back().size();// TODO: different data types
-        }
+        EmitterVisitor(const Parser::Program* program) : program{ program } { }
 
         std::string assembly;
         const Parser::Program* program;
-        ScopeStack scopes;
-        usize current_offset;
 
         void emit(const std::string_view instruction) {
             emit(instruction, "");
@@ -63,14 +54,15 @@ namespace Emitter {
                     }
                 }
             }
-
             std::optional<usize> offset;
-            for (auto iterator = scopes.crbegin(); iterator != scopes.crend(); ++iterator) {
-                const auto find_iterator = iterator->find(expression.name.location.view());
-                if (find_iterator != iterator->end()) {
+            const SymbolTable* current_scope = expression.surrounding_scope;
+            while (current_scope != nullptr) {
+                const auto find_iterator = current_scope->find(expression.name.location.view());
+                if (find_iterator != current_scope->end()) {
                     offset = find_iterator->second;
                     break;
                 }
+                current_scope = current_scope->surrounding_scope;
             }
             if (not offset.has_value()) {
                 Error::error(
@@ -85,28 +77,47 @@ namespace Emitter {
                  std::format("push value of variable \"{}\" onto the stack", expression.name.location.view()));
         }
 
-        void visit(Addition& expression) override {
+        void visit(BinaryOperator& expression) override {
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
 
-            emit("pop R2", "store rhs of addition in R2");
-            emit("pop R1", "store lhs of addition in R1");
-            emit("add R1, R2, R3", "add values");
+            emit("pop R2",
+                 std::format(
+                         R"(store rhs for {}-operator in R2)", Error::token_location(expression.operator_token).view()
+                 ));
+            emit("pop R1",
+                 std::format(
+                         R"(store lhs for {}-operator in R1)", Error::token_location(expression.operator_token).view()
+                 ));
+
+            struct BinaryOperatorEmitter {
+                void operator()(const Lexer::Tokens::Plus&) const {
+                    visitor->emit("push R3", "push result onto stack");
+                }
+
+                void operator()(const Lexer::Tokens::Minus&) const {
+                    assert(false && "not implemented");
+                }
+
+                void operator()(const Lexer::Tokens::Asterisk&) const {
+                    visitor->emit("mult R1, R2, R3, R4", "multiply values");
+                }
+
+                void operator()(const Lexer::Tokens::ForwardSlash&) const {
+                    assert(false && "not implemented");
+                }
+
+                void operator()(const auto&) const {
+                    assert(false && "unreachable");
+                }
+
+                EmitterVisitor* visitor;
+            } emitter{ this };
+
+            std::visit(emitter, expression.operator_token);
+
             emit("push R3", "push result onto stack");
         }
-
-        void visit(Subtraction& expression) override { }
-
-        void visit(Multiplication& expression) override {
-            expression.lhs->accept(*this);
-            expression.rhs->accept(*this);
-            emit("pop R2", "store rhs of addition in R2");
-            emit("pop R1", "store lhs of addition in R1");
-            emit("mult R1, R2, R3, R4", "multiply values");
-            emit("push R4", "push result onto stack");
-        }
-
-        void visit(Division& expression) override { }
 
         void visit(FunctionCall& expression) override {
             expression.callee->accept(*this);// evaluate callee
@@ -132,32 +143,18 @@ namespace Emitter {
 
         void visit(Block& statement) override {
             for (auto& sub_statement : statement.statements) {
-                const bool is_block = static_cast<bool>(dynamic_cast<const Block*>(sub_statement.get()));
-                if (is_block) {
-                    scopes.emplace_back();
-                }
                 sub_statement->accept(*this);
-                if (is_block) {
-                    current_offset -= 4 * scopes.back().size();
-                    scopes.pop_back();
-                }
             }
         }
 
         void visit(VariableDefinition& statement) override {
             using std::ranges::max_element;
 
-            if (scopes.back().contains(statement.name.location.view())) {
-                Error::error(
-                        statement.name, std::format("redefinition of identifier \"{}\"", statement.name.location.view())
-                );
-            }
+            const usize offset = (*statement.surrounding_scope).at(statement.name.location.view());
             assembly += std::format(
-                    "\t// new variable called \"{}\" with offset {}\n", statement.name.location.view(), current_offset
+                    "\t// new variable called \"{}\" with offset {}\n", statement.name.location.view(), offset
             );
             statement.initial_value->accept(*this);
-            scopes.back()[statement.name.location.view()] = current_offset;
-            current_offset += 4;// TODO: different data types
         }
 
         void visit(InlineAssembly& statement) override {
@@ -174,8 +171,8 @@ namespace Emitter {
         }
     };
 
-    std::string emit_statement(const Parser::Program& program, Statement& statement, SymbolTable&& surrounding_scope) {
-        auto visitor = EmitterVisitor{ &program, std::move(surrounding_scope) };
+    std::string emit_statement(const Parser::Program& program, Statement& statement) {
+        auto visitor = EmitterVisitor{ &program };
         statement.accept(visitor);
         return visitor.assembly;
     }
@@ -193,18 +190,7 @@ namespace Emitter {
         if (function_definition->name.location.view() == "main") {
             emit("copy sp, R0", "save current stack pointer into R0 (this is the new stack frame base pointer)");
         }
-        auto scope = SymbolTable{};
-        usize offset = 0;
-        for (const auto& parameter : function_definition->parameters) {
-            if (scope.contains(parameter.name.location.view())) {
-                Error::error(
-                        parameter.name, std::format("duplicate parameter name \"{}\"", parameter.name.location.view())
-                );
-            }
-            scope[parameter.name.location.view()] = offset;
-            offset += 4;// TODO: different data types?
-        }
-        emit(emit_statement(*program, function_definition->body, std::move(scope)));
+        emit(emit_statement(*program, function_definition->body));
         if (function_definition->name.location.view() == "main") {
             emit("halt");
         } else {

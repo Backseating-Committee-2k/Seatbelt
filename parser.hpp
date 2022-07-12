@@ -13,19 +13,13 @@
 #include <optional>
 #include <string_view>
 #include <iostream>
+#include "symbol_table.hpp"
 #include "lexer.hpp"
 
 namespace Parser {
-    struct FunctionDefinition;
-}
-
-namespace Statements {
-    struct Statement;
-}
-
-namespace Parser {
-
     using namespace Lexer::Tokens;
+
+    struct FunctionDefinition;
 
     namespace Expressions {
         struct Expression;
@@ -42,7 +36,7 @@ namespace Parser {
             return is_mutable == other.is_mutable;
         }
 
-        virtual std::string to_string() const {
+        [[nodiscard]] virtual std::string to_string() const {
             return is_mutable ? "mutable " : "const ";
         }
 
@@ -59,14 +53,12 @@ namespace Parser {
             return false;
         }
 
-        std::string to_string() const override {
+        [[nodiscard]] std::string to_string() const override {
             return DataType::to_string() + std::string{ name };
         }
 
         std::string_view name;
     };
-
-    using DataTypePointer = std::unique_ptr<DataType>;
 
     struct PointerType : public DataType {
         PointerType(std::unique_ptr<DataType> contained, bool is_mutable)
@@ -80,13 +72,21 @@ namespace Parser {
             return false;
         }
 
-        std::string to_string() const override {
+        [[nodiscard]] std::string to_string() const override {
             using namespace std::string_literals;
             assert(contained);
             return DataType::to_string() + "->"s + contained->to_string();
         }
 
         std::unique_ptr<DataType> contained;
+    };
+
+    struct DataTypePointer : public std::unique_ptr<DataType> {
+        using std::unique_ptr<DataType>::unique_ptr;
+
+        bool operator==(const DataTypePointer& other) const {
+            return static_cast<bool>(*this) and static_cast<bool>(other) and **this == *other;
+        }
     };
 
     namespace Statements {
@@ -108,9 +108,11 @@ namespace Parser {
         };
 
         struct Statement {
+            virtual ~Statement() = default;
+
             virtual void accept(StatementVisitor& visitor) = 0;
 
-            virtual ~Statement() = default;
+            const SymbolTable* surrounding_scope{ nullptr };
         };
 
         using StatementList = std::vector<std::unique_ptr<Statement>>;
@@ -123,10 +125,11 @@ namespace Parser {
             }
 
             StatementList statements;
+            std::unique_ptr<SymbolTable> scope;
         };
 
         struct VariableDefinition : public Statement {
-            VariableDefinition(
+            explicit VariableDefinition(
                     Identifier name,
                     Equals equals_token,
                     std::span<const Token> type_tokens,
@@ -175,34 +178,30 @@ namespace Parser {
 
         struct Literal;
         struct Name;
-        struct Addition;
-        struct Subtraction;
-        struct Multiplication;
-        struct Division;
+        struct BinaryOperator;
         struct FunctionCall;
 
         struct ExpressionVisitor {
             virtual void visit(Literal& expression) = 0;
             virtual void visit(Name& expression) = 0;
-            virtual void visit(Addition& expression) = 0;
-            virtual void visit(Subtraction& expression) = 0;
-            virtual void visit(Multiplication& expression) = 0;
-            virtual void visit(Division& expression) = 0;
+            virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
 
             virtual ~ExpressionVisitor() = default;
         };
 
         struct Expression {
+            virtual ~Expression() = default;
             virtual void accept(ExpressionVisitor& visitor) = 0;
 
-            virtual ~Expression() = default;
-
             DataTypePointer data_type{};
+            const SymbolTable* surrounding_scope{ nullptr };
         };
 
         template<typename T>
         struct ExpressionAcceptor : public Expression {
+            using Expression::Expression;
+
             void accept(ExpressionVisitor& visitor) final {
                 visitor.visit(static_cast<T&>(*this));
             }
@@ -220,29 +219,15 @@ namespace Parser {
             Lexer::Tokens::Identifier name;
         };
 
-        struct BinaryOperator {
-            BinaryOperator(std::unique_ptr<Expression> lhs, std::unique_ptr<Expression> rhs)
+        struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {
+            BinaryOperator(std::unique_ptr<Expression> lhs, std::unique_ptr<Expression> rhs, Token operator_token)
                 : lhs{ std::move(lhs) },
-                  rhs{ std::move(rhs) } { }
+                  rhs{ std::move(rhs) },
+                  operator_token{ operator_token } { }
 
             std::unique_ptr<Expression> lhs;
             std::unique_ptr<Expression> rhs;
-        };
-
-        struct Addition : public BinaryOperator, public ExpressionAcceptor<Addition> {
-            using BinaryOperator::BinaryOperator;
-        };
-
-        struct Subtraction : public BinaryOperator, public ExpressionAcceptor<Subtraction> {
-            using BinaryOperator::BinaryOperator;
-        };
-
-        struct Multiplication : public BinaryOperator, public ExpressionAcceptor<Multiplication> {
-            using BinaryOperator::BinaryOperator;
-        };
-
-        struct Division : public BinaryOperator, public ExpressionAcceptor<Division> {
-            using BinaryOperator::BinaryOperator;
+            Token operator_token;
         };
 
         struct FunctionCall : public ExpressionAcceptor<FunctionCall> {
@@ -258,6 +243,7 @@ namespace Parser {
 
     struct Parameter {
         Identifier name;
+        std::span<const Token> type_tokens;
         DataTypePointer type{};
     };
 
@@ -266,6 +252,7 @@ namespace Parser {
     struct FunctionDefinition {
         Identifier name;
         ParameterList parameters;
+        std::span<const Token> return_type_tokens;
         DataTypePointer return_type{};
         Statements::Block body;
     };

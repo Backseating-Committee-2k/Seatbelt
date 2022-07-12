@@ -35,39 +35,6 @@ void write_to_file(const std::string_view contents, const std::string_view filen
     stream << contents;
 }
 
-void print_expression(const Parser::Expressions::Expression& expression) {
-    using namespace Parser::Expressions;
-    if (const auto literal_expression = dynamic_cast<const Literal*>(&expression)) {
-        std::cout << literal_expression->value.location.view();
-    } else if (const auto name_expression = dynamic_cast<const Name*>(&expression)) {
-        std::cout << name_expression->name.location.view();
-    } else if (const auto add_expression = dynamic_cast<const Addition*>(&expression)) {
-        std::cout << "(";
-        print_expression(*add_expression->lhs);
-        std::cout << " + ";
-        print_expression(*add_expression->rhs);
-        std::cout << ")";
-    } else if (const auto subtract_expression = dynamic_cast<const Subtraction*>(&expression)) {
-        std::cout << "(";
-        print_expression(*subtract_expression->lhs);
-        std::cout << " - ";
-        print_expression(*subtract_expression->rhs);
-        std::cout << ")";
-    } else if (const auto mult_expression = dynamic_cast<const Multiplication*>(&expression)) {
-        std::cout << "(";
-        print_expression(*mult_expression->lhs);
-        std::cout << " * ";
-        print_expression(*mult_expression->rhs);
-        std::cout << ")";
-    } else if (const auto div_expression = dynamic_cast<const Division*>(&expression)) {
-        std::cout << "(";
-        print_expression(*div_expression->lhs);
-        std::cout << " / ";
-        print_expression(*div_expression->rhs);
-        std::cout << ")";
-    }
-}
-
 int main(int argc, char** argv) {
     using namespace Lexer::Tokens;
 

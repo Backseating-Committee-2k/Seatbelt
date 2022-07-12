@@ -31,7 +31,7 @@ add_executable(Seatbelt
         error.hpp
         vendor/argh.hpp
         type_checker.cpp
-        type_checker.hpp)
+        type_checker.hpp scope_generator.hpp symbol_table.hpp scope_generator.cpp)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     find_package(TBB CONFIG REQUIRED)

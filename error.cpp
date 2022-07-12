@@ -8,7 +8,7 @@
 #include <format>
 #include <iostream>
 
-[[nodiscard]] static Location token_location(const auto& token) {
+[[nodiscard]] Location Error::token_location(const auto& token) {
     return std::visit([](const auto& token) { return token.location; }, token);
 }
 
