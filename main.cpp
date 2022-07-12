@@ -3,6 +3,7 @@
 #include "emitter.hpp"
 #include "vendor/argh.hpp"
 #include "type_checker.hpp"
+#include "scope_generator.hpp"
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -47,6 +48,7 @@ int main(int argc, char** argv) {
     const auto tokens = Lexer::tokenize(source_code);
     auto program = Parser::parse(tokens);
 
+    ScopeGenerator::generate(program);
     TypeChecker::check(program);
 
     std::string assembly = "jump main\n\n";

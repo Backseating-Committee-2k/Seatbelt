@@ -59,7 +59,7 @@ namespace Emitter {
             while (current_scope != nullptr) {
                 const auto find_iterator = current_scope->find(expression.name.location.view());
                 if (find_iterator != current_scope->end()) {
-                    offset = find_iterator->second;
+                    offset = find_iterator->second.offset;
                     break;
                 }
                 current_scope = current_scope->surrounding_scope;
@@ -150,7 +150,7 @@ namespace Emitter {
         void visit(VariableDefinition& statement) override {
             using std::ranges::max_element;
 
-            const usize offset = (*statement.surrounding_scope).at(statement.name.location.view());
+            const usize offset = (*statement.surrounding_scope).at(statement.name.location.view()).offset;
             assembly += std::format(
                     "\t// new variable called \"{}\" with offset {}\n", statement.name.location.view(), offset
             );

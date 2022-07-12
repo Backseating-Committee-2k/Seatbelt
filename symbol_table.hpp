@@ -5,23 +5,18 @@
 #pragma once
 
 #include "types.hpp"
+#include "data_type.hpp"
 #include <unordered_map>
 #include <string_view>
 
-/*
 struct SymbolDescription {
-    usize offset;
-    std::unique_ptr<DataType> data_type;
+    usize offset{ 0 };
+    DataTypePointer data_type{ nullptr };
 };
 
-TODO: next time
-TODO: also: RUN THE SCOPE GENERATOR!
-
-*/
-
-struct SymbolTable : public std::unordered_map<std::string_view, usize> {
+struct SymbolTable : public std::unordered_map<std::string_view, SymbolDescription> {
     explicit SymbolTable(const SymbolTable* surrounding_scope)
-        : std::unordered_map<std::string_view, usize>::unordered_map{},
+        : std::unordered_map<std::string_view, SymbolDescription>::unordered_map{},
           surrounding_scope{ surrounding_scope } { }
 
     const SymbolTable* surrounding_scope;

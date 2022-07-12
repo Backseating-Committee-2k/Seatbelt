@@ -5,6 +5,7 @@
 #include "parser.hpp"
 #include "types.hpp"
 #include "error.hpp"
+#include "type_checker.hpp"
 #include <format>
 
 namespace ScopeGenerator {
@@ -29,7 +30,11 @@ namespace ScopeGenerator {
                 );
             }
             statement.initial_value->accept(*this);
-            (*scope)[statement.name.location.view()] = offset;
+            auto data_type = TypeChecker::tokens_to_type(statement.type_tokens);
+            (*scope)[statement.name.location.view()] = SymbolDescription{
+                .offset{ offset },
+                .data_type{ std::move(data_type) }
+            };
             offset += 4;// TODO: different data types
             statement.surrounding_scope = scope;
         }
@@ -83,7 +88,11 @@ namespace ScopeGenerator {
                                         std::format("duplicate parameter name \"{}\"", parameter.name.location.view())
                                 );
                             }
-                            function_scope[parameter.name.location.view()] = offset;
+                            auto parameter_type = TypeChecker::tokens_to_type(parameter.type_tokens);
+                            function_scope[parameter.name.location.view()] = SymbolDescription{
+                                .offset{ offset },
+                                .data_type{ std::move(parameter_type) }
+                            };
                             offset += 4;// TODO: different data types
                         }
                         auto visitor = ScopeGenerator{ &function_scope, offset };

@@ -13,24 +13,33 @@
 namespace TypeChecker {
     static constexpr std::string_view U32Identifier{ "U32" };
 
-    [[nodiscard]] Parser::DataTypePointer token_to_type(const Lexer::Tokens::Token token) {
-        return std::make_unique<Parser::ConcreteType>(Error::token_location(token).view(), false);
+    template<typename... Types>
+    [[nodiscard]] static bool holds_any_of(const Lexer::Tokens::Token& token) {
+        return (std::holds_alternative<Types>(token) or ...);
     }
 
-    [[nodiscard]] Parser::DataTypePointer tokens_to_type(const std::span<const Lexer::Tokens::Token> tokens) {
+    [[nodiscard]] DataTypePointer token_to_type(const Lexer::Tokens::Token token) {
+        return std::make_unique<ConcreteType>(Error::token_location(token).view(), false);
+    }
+
+    [[nodiscard]] DataTypePointer tokens_to_type(const std::span<const Lexer::Tokens::Token> tokens) {
         auto result = token_to_type(tokens.back());
         for (auto iterator = std::crbegin(tokens) + 1; iterator != std::crend(tokens); ++iterator) {
             if (not std::holds_alternative<Lexer::Tokens::Arrow>(*iterator)) {
                 Error::error(*iterator, "invalid type specifier");
             }
-            result = std::make_unique<Parser::PointerType>(std::move(result), false);
+            result = std::make_unique<PointerType>(std::move(result), false);
         }
         return result;
     }
 
     struct TypeCheckerVisitor : public Parser::Statements::StatementVisitor,
                                 public Parser::Expressions::ExpressionVisitor {
-        void visit(Parser::Statements::Block& statement) override { }
+        void visit(Parser::Statements::Block& statement) override {
+            for (auto& sub_statement : statement.statements) {
+                statement.accept(*this);
+            }
+        }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
             statement.type = tokens_to_type(statement.type_tokens);
@@ -50,35 +59,36 @@ namespace TypeChecker {
 
         void visit(Parser::Statements::InlineAssembly& statement) override { }
 
-        void visit(Parser::Statements::ExpressionStatement& statement) override { }
+        void visit(Parser::Statements::ExpressionStatement& statement) override {
+            statement.expression->accept(*this);
+        }
 
         void visit(Parser::Expressions::Literal& expression) override {
-            expression.data_type = std::make_unique<Parser::ConcreteType>(U32Identifier, false);
+            expression.data_type = std::make_unique<ConcreteType>(U32Identifier, false);
         }
 
         void visit(Parser::Expressions::Name& expression) override {
-
+            expression.data_type = expression.surrounding_scope->at(expression.name.location.view()).data_type->clone();
         }
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {
+            using namespace Lexer::Tokens;
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
-            if (const auto concrete_type = dynamic_cast<const Parser::ConcreteType*>(expression.lhs->data_type.get())) {
-                if ((std::holds_alternative<Lexer::Tokens::Plus>(expression.operator_token) or
-                     std::holds_alternative<Lexer::Tokens::Minus>(expression.operator_token) or
-                     std::holds_alternative<Lexer::Tokens::Asterisk>(expression.operator_token) or
-                     std::holds_alternative<Lexer::Tokens::ForwardSlash>(expression.operator_token)) and
+            if (const auto concrete_type = dynamic_cast<const ConcreteType*>(expression.lhs->data_type.get())) {
+                if (holds_any_of<Plus, Minus, Asterisk, ForwardSlash>(expression.operator_token) and
                     concrete_type->name == U32Identifier) {
-                    expression.data_type = std::make_unique<Parser::ConcreteType>(*concrete_type);
+                    expression.data_type = concrete_type->clone();
                     return;
                 }
             }
             Error::error(
-                    expression.operator_token, std::format(
-                                                       R"(operator "{}" can not be applied to operands of type "{}")",
-                                                       Error::token_location(expression.operator_token).view(),
-                                                       expression.lhs->data_type->to_string()
-                                               )
+                    expression.operator_token,
+                    std::format(
+                            R"(operator "{}" can not be applied to operands of type "{}" and "{}")",
+                            Error::token_location(expression.operator_token).view(),
+                            expression.lhs->data_type->to_string(), expression.rhs->data_type->to_string()
+                    )
             );
         }
 
