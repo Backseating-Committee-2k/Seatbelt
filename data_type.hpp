@@ -74,11 +74,3 @@ struct PointerType : public DataType {
 
     std::unique_ptr<DataType> contained;
 };
-
-struct DataTypePointer : public std::unique_ptr<DataType> {
-    using std::unique_ptr<DataType>::unique_ptr;
-
-    bool operator==(const DataTypePointer& other) const {
-        return static_cast<bool>(*this) and static_cast<bool>(other) and **this == *other;
-    }
-};

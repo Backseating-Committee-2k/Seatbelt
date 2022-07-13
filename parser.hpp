@@ -84,7 +84,7 @@ namespace Parser {
             Identifier name;
             Equals equals_token;
             std::span<const Token> type_tokens;
-            DataTypePointer type{};
+            const DataType* type{ nullptr };
             std::unique_ptr<Expression> initial_value;
         };
 
@@ -131,7 +131,7 @@ namespace Parser {
             virtual ~Expression() = default;
             virtual void accept(ExpressionVisitor& visitor) = 0;
 
-            DataTypePointer data_type{};
+            const DataType* data_type{ nullptr };
             const SymbolTable* surrounding_scope{ nullptr };
         };
 
@@ -181,7 +181,7 @@ namespace Parser {
     struct Parameter {
         Identifier name;
         std::span<const Token> type_tokens;
-        DataTypePointer type{};
+        const DataType* type{ nullptr };
     };
 
     using ParameterList = std::vector<Parameter>;
@@ -190,7 +190,7 @@ namespace Parser {
         Identifier name;
         ParameterList parameters;
         std::span<const Token> return_type_tokens;
-        DataTypePointer return_type{};
+        const DataType* return_type{ nullptr };
         Statements::Block body;
     };
 

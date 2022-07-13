@@ -5,9 +5,10 @@
 #pragma once
 
 #include "parser.hpp"
+#include "type_container.hpp"
 
 namespace ScopeGenerator {
 
-    void generate(Parser::Program& program);
+    void generate(Parser::Program& program, TypeContainer& type_container);
 
 }// namespace ScopeGenerator

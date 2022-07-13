@@ -42,7 +42,9 @@ add_executable(Seatbelt
         scope_generator.hpp
         symbol_table.hpp
         scope_generator.cpp
-        data_type.hpp)
+        data_type.hpp
+        type_container.cpp
+        type_container.hpp)
 
 FetchContent_MakeAvailable(fmt)
 

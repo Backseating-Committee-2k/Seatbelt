@@ -5,10 +5,9 @@
 #pragma once
 
 #include "parser.hpp"
+#include "type_container.hpp"
 #include <memory>
 
 namespace TypeChecker {
-    [[nodiscard]] DataTypePointer tokens_to_type(std::span<const Lexer::Tokens::Token> tokens);
-
-    void check(const Parser::Program& program);
+    void check(const Parser::Program& program, TypeContainer& type_container);
 }// namespace TypeChecker

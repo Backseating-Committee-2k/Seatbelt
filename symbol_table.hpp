@@ -11,7 +11,7 @@
 
 struct SymbolDescription {
     usize offset{ 0 };
-    DataTypePointer data_type{ nullptr };
+    const DataType* data_type{ nullptr };
 };
 
 struct SymbolTable : public std::unordered_map<std::string_view, SymbolDescription> {
