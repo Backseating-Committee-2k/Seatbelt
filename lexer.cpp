@@ -3,7 +3,7 @@
 //
 
 #include "lexer.hpp"
-#include "vendor/ctre.hpp"
+#include <ctre.hpp>
 #include <cassert>
 #include <array>
 #include <iostream>

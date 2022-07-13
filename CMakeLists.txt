@@ -10,6 +10,18 @@ FetchContent_Declare(
         GIT_TAG c4ee726532178e556d923372f29163bd206d7732
 )
 
+FetchContent_Declare(
+        ctre
+        GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
+        GIT_TAG 331aebc79d715d1d0036d2d32021584eefecbcc9
+)
+
+FetchContent_Declare(
+        argh
+        GIT_REPOSITORY https://github.com/adishavit/argh.git
+        GIT_TAG d17062c870b5919f6d1eae7fe12879869a893b32
+)
+
 if (MSVC)
     # enable code analysis
     set_property(GLOBAL PROPERTY VS_GLOBAL_EnableCppCoreCheck true)
@@ -36,7 +48,6 @@ add_executable(Seatbelt
         emitter.hpp
         error.cpp
         error.hpp
-        vendor/argh.hpp
         type_checker.cpp
         type_checker.hpp
         scope_generator.hpp
@@ -46,9 +57,9 @@ add_executable(Seatbelt
         type_container.cpp
         type_container.hpp)
 
-FetchContent_MakeAvailable(fmt)
+FetchContent_MakeAvailable(fmt ctre argh)
 
-target_link_libraries(Seatbelt fmt)
+target_link_libraries(Seatbelt fmt ctre argh)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     find_package(TBB CONFIG REQUIRED)

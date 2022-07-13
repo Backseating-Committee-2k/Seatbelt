@@ -1,10 +1,10 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "emitter.hpp"
-#include "vendor/argh.hpp"
 #include "type_checker.hpp"
 #include "scope_generator.hpp"
 #include "type_container.hpp"
+#include <argh.h>
 #include <iostream>
 #include <string>
 #include <fstream>
