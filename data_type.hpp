@@ -24,8 +24,6 @@ public:
         return is_mutable ? "mutable " : "const ";
     }
 
-    [[nodiscard]] virtual std::unique_ptr<DataType> clone() const = 0;
-
     bool is_mutable;
 };
 
@@ -41,10 +39,6 @@ struct ConcreteType : public DataType {
 
     [[nodiscard]] std::string to_string() const override {
         return DataType::to_string() + std::string{ name };
-    }
-
-    [[nodiscard]] std::unique_ptr<DataType> clone() const override {
-        return std::make_unique<ConcreteType>(*this);
     }
 
     std::string_view name;
@@ -66,10 +60,6 @@ struct PointerType : public DataType {
         using namespace std::string_literals;
         assert(contained);
         return DataType::to_string() + "->"s + contained->to_string();
-    }
-
-    [[nodiscard]] std::unique_ptr<DataType> clone() const override {
-        return std::make_unique<PointerType>(contained->clone(), is_mutable);
     }
 
     std::unique_ptr<DataType> contained;
