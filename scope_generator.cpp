@@ -6,7 +6,7 @@
 #include "types.hpp"
 #include "error.hpp"
 #include "type_checker.hpp"
-#include <format>
+#include <fmt/core.h>
 
 namespace ScopeGenerator {
 
@@ -26,7 +26,7 @@ namespace ScopeGenerator {
         void visit(Parser::Statements::VariableDefinition& statement) override {
             if (scope->contains(statement.name.location.view())) {
                 Error::error(
-                        statement.name, std::format("redefinition of identifier \"{}\"", statement.name.location.view())
+                        statement.name, fmt::format("redefinition of identifier \"{}\"", statement.name.location.view())
                 );
             }
             statement.initial_value->accept(*this);
@@ -85,7 +85,7 @@ namespace ScopeGenerator {
                             if (function_scope.contains(parameter.name.location.view())) {
                                 Error::error(
                                         parameter.name,
-                                        std::format("duplicate parameter name \"{}\"", parameter.name.location.view())
+                                        fmt::format("duplicate parameter name \"{}\"", parameter.name.location.view())
                                 );
                             }
                             auto parameter_type = TypeChecker::tokens_to_type(parameter.type_tokens);

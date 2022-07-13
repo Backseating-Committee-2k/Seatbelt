@@ -3,9 +3,9 @@
 //
 
 #include "error.hpp"
+#include <fmt/core.h>
 #include <ranges>
 #include <algorithm>
-#include <format>
 #include <iostream>
 
 [[nodiscard]] Location Error::token_location(const auto& token) {
@@ -27,7 +27,7 @@ void Error::error(const Lexer::Tokens::Token& token, const std::string_view mess
     const auto line_end_pos = next_newline_pos == npos ? location.source_code.text.length() : next_newline_pos;
     const auto line = location.source_code.text.substr(line_start_pos, line_end_pos - line_start_pos);
 
-    std::cerr << std::format("{}:{}:{}: {}\n{}\n", location.source_code.filename, row, column, message, line);
+    std::cerr << fmt::format("{}:{}:{}: {}\n{}\n", location.source_code.filename, row, column, message, line);
     for (usize i = 0; i < column - 1; ++i) {
         std::cerr << ' ';
     }

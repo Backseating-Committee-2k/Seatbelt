@@ -8,7 +8,6 @@
 #include <string>
 #include <fstream>
 #include <filesystem>
-#include <format>
 
 [[nodiscard]] std::string read_whole_stream(std::istream& stream) {
     return { std::istreambuf_iterator<char>(stream), {} };

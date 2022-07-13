@@ -6,12 +6,11 @@
 #include <optional>
 #include <algorithm>
 #include <ranges>
-#include <iostream>
-#include <format>
 #include <utility>
 #include <cassert>
 #include <memory>
 #include <string_view>
+#include <fmt/core.h>
 #include "parser.hpp"
 #include "error.hpp"
 #include "types.hpp"
@@ -144,7 +143,7 @@ namespace Parser {
                     consume<Semicolon>("expected \";\" to complete expression statement");
                     statements.push_back(std::make_unique<Statements::ExpressionStatement>(std::move(expression)));
                     /*Error::error(
-                            current(), std::format(
+                            current(), fmt::format(
                                                "unexpected token: \"{}\"",
                                                std::visit([](auto&& token) { return token.debug_name; }, current())
                                        )

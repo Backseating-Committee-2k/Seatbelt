@@ -6,9 +6,9 @@
 #include "parser.hpp"
 #include "types.hpp"
 #include "error.hpp"
+#include <fmt/core.h>
 #include <unordered_map>
 #include <string_view>
-#include <format>
 #include <vector>
 #include <algorithm>
 #include <optional>
@@ -29,15 +29,15 @@ namespace Emitter {
         }
 
         void emit(const std::string_view instruction, const std::string_view comment) {
-            assembly += std::format("\t{}", instruction);
+            assembly += fmt::format("\t{}", instruction);
             if (not comment.empty()) {
-                assembly += std::format(" // {}", comment);
+                assembly += fmt::format(" // {}", comment);
             }
             assembly += "\n";
         }
 
         void visit(Literal& expression) override {
-            emit(std::format("copy {}, R1", expression.value.location.view()), "put immediate into register");
+            emit(fmt::format("copy {}, R1", expression.value.location.view()), "put immediate into register");
             emit("push R1", "push immediate onto stack");
         }
 
@@ -47,7 +47,7 @@ namespace Emitter {
                     const auto function_definition =
                             std::get<std::unique_ptr<Parser::FunctionDefinition>>(top_level_statement).get();
                     if (function_definition->name.location.view() == expression.name.location.view()) {
-                        emit(std::format("copy {}, R1", function_definition->name.location.view()),
+                        emit(fmt::format("copy {}, R1", function_definition->name.location.view()),
                              "get address of label");
                         emit("push R1", "push address of label onto stack");
                         return;
@@ -67,14 +67,14 @@ namespace Emitter {
             if (not offset.has_value()) {
                 Error::error(
                         expression.name,
-                        std::format("use of undeclared identifier \"{}\"", expression.name.location.view())
+                        fmt::format("use of undeclared identifier \"{}\"", expression.name.location.view())
                 );
             }
-            emit(std::format("add R0, {}, R1", offset.value()),
-                 std::format("calculate address of variable \"{}\"", expression.name.location.view()));
-            emit("copy *R1, R2", std::format("load value of variable \"{}\" into R2", expression.name.location.view()));
+            emit(fmt::format("add R0, {}, R1", offset.value()),
+                 fmt::format("calculate address of variable \"{}\"", expression.name.location.view()));
+            emit("copy *R1, R2", fmt::format("load value of variable \"{}\" into R2", expression.name.location.view()));
             emit("push R2",
-                 std::format("push value of variable \"{}\" onto the stack", expression.name.location.view()));
+                 fmt::format("push value of variable \"{}\" onto the stack", expression.name.location.view()));
         }
 
         void visit(BinaryOperator& expression) override {
@@ -82,11 +82,11 @@ namespace Emitter {
             expression.rhs->accept(*this);
 
             emit("pop R2",
-                 std::format(
+                 fmt::format(
                          R"(store rhs for {}-operator in R2)", Error::token_location(expression.operator_token).view()
                  ));
             emit("pop R1",
-                 std::format(
+                 fmt::format(
                          R"(store lhs for {}-operator in R1)", Error::token_location(expression.operator_token).view()
                  ));
 
@@ -151,7 +151,7 @@ namespace Emitter {
             using std::ranges::max_element;
 
             const usize offset = (*statement.surrounding_scope).at(statement.name.location.view()).offset;
-            assembly += std::format(
+            assembly += fmt::format(
                     "\t// new variable called \"{}\" with offset {}\n", statement.name.location.view(), offset
             );
             statement.initial_value->accept(*this);
@@ -178,12 +178,12 @@ namespace Emitter {
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const {
-        auto result = std::format("{}:\n", function_definition->name.location.view());
+        auto result = fmt::format("{}:\n", function_definition->name.location.view());
 
         const auto emit = [&result](const std::string_view instruction, const std::string_view comment = "") {
-            result += std::format("\t{}", instruction);
+            result += fmt::format("\t{}", instruction);
             if (not comment.empty()) {
-                result += std::format(" // {}", comment);
+                result += fmt::format(" // {}", comment);
             }
             result += "\n";
         };

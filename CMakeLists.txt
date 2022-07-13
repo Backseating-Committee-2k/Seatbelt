@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.21)
 project(Seatbelt)
+include(FetchContent)
 
 set(CMAKE_CXX_STANDARD 23)
+
+FetchContent_Declare(
+        fmt
+        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+        GIT_TAG c4ee726532178e556d923372f29163bd206d7732
+)
 
 if (MSVC)
     # enable code analysis
@@ -14,7 +21,7 @@ if (MSVC)
     string(REGEX REPLACE "-W3" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 endif ()
 
-set(TARGET_LIST Seatbelt)
+set(TARGET_LIST Seatbelt fmt)
 
 add_executable(Seatbelt
         main.cpp
@@ -36,6 +43,10 @@ add_executable(Seatbelt
         symbol_table.hpp
         scope_generator.cpp
         data_type.hpp)
+
+FetchContent_MakeAvailable(fmt)
+
+target_link_libraries(Seatbelt fmt)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     find_package(TBB CONFIG REQUIRED)

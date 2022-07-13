@@ -4,10 +4,10 @@
 
 #include "type_checker.hpp"
 #include "error.hpp"
+#include <fmt/core.h>
 #include <cassert>
 #include <variant>
 #include <string_view>
-#include <format>
 #include <sstream>
 
 namespace TypeChecker {
@@ -49,7 +49,7 @@ namespace TypeChecker {
             if (statement.type != statement.initial_value->data_type) {
                 Error::error(
                         statement.equals_token,
-                        std::format(
+                        fmt::format(
                                 R"(incompatible types "{}" and "{}")", statement.type->to_string(),
                                 statement.initial_value->data_type->to_string()
                         )
@@ -84,7 +84,7 @@ namespace TypeChecker {
             }
             Error::error(
                     expression.operator_token,
-                    std::format(
+                    fmt::format(
                             R"(operator "{}" can not be applied to operands of type "{}" and "{}")",
                             Error::token_location(expression.operator_token).view(),
                             expression.lhs->data_type->to_string(), expression.rhs->data_type->to_string()

@@ -7,6 +7,7 @@
 #include <cassert>
 #include <array>
 #include <iostream>
+#include <fmt/core.h>
 
 class LexerState {
 public:
@@ -61,8 +62,10 @@ public:
                             }
                         }
                         if (nesting_depth != 0) {
-                            std::cerr << "unclosed block comment: "
-                                      << m_source_code.text.substr(last_opening_block_comment_index) << "\n";
+                            fmt::print(
+                                    stderr, "unclosed block comment: {}\n",
+                                    m_source_code.text.substr(last_opening_block_comment_index)
+                            );
                             std::exit(EXIT_FAILURE);
                         }
                     } else {
