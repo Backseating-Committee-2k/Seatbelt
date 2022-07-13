@@ -79,7 +79,7 @@ namespace Emitter {
                 }
             }
             std::optional<usize> offset;
-            const SymbolTable* current_scope = expression.surrounding_scope;
+            const Scope* current_scope = expression.surrounding_scope;
             while (current_scope != nullptr) {
                 const auto find_iterator = current_scope->find(expression.name.location.view());
                 if (find_iterator != current_scope->end()) {

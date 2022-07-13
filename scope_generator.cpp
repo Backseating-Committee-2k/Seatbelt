@@ -12,14 +12,14 @@
 namespace ScopeGenerator {
 
     struct ScopeGenerator : public Parser::Statements::StatementVisitor, public Parser::Expressions::ExpressionVisitor {
-        ScopeGenerator(SymbolTable* scope, usize offset, TypeContainer* type_container)
+        ScopeGenerator(Scope* scope, usize offset, TypeContainer* type_container)
             : scope{ scope },
               offset{ offset },
               type_container{ type_container } { }
 
         void visit(Parser::Statements::Block& statement) override {
             statement.surrounding_scope = scope;
-            statement.scope = std::make_unique<SymbolTable>(scope);
+            statement.scope = std::make_unique<Scope>(scope);
             auto visitor = ScopeGenerator{ statement.scope.get(), offset, type_container };
             for (auto& sub_statement : statement.statements) {
                 sub_statement->accept(visitor);
@@ -56,7 +56,7 @@ namespace ScopeGenerator {
 
         void visit(Parser::Expressions::Name& expression) override {
             expression.surrounding_scope = scope;
-            const SymbolTable* current_scope = expression.surrounding_scope;
+            const Scope* current_scope = expression.surrounding_scope;
             const auto identifier = expression.name.location.view();
             while (current_scope != nullptr) {
                 const auto find_iterator = std::find_if(
@@ -86,17 +86,17 @@ namespace ScopeGenerator {
             expression.surrounding_scope = scope;
         }
 
-        SymbolTable* scope;
+        Scope* scope;
         usize offset;
         TypeContainer* type_container;
     };
 
     void generate(Parser::Program& program, TypeContainer& type_container) {
-        auto global_scope = SymbolTable{ nullptr };
+        auto global_scope = Scope{ nullptr };
         for (auto& top_level_statement : program) {
             std::visit(
                     [&](std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
-                        auto function_scope = SymbolTable{ &global_scope };
+                        auto function_scope = Scope{ &global_scope };
                         usize offset = 0;
                         for (auto& parameter : function_definition->parameters) {
                             if (function_scope.contains(parameter.name.location.view())) {

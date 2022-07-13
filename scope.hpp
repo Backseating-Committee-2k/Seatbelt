@@ -14,10 +14,10 @@ struct SymbolDescription {
     const DataType* data_type{ nullptr };
 };
 
-struct SymbolTable : public std::unordered_map<std::string_view, SymbolDescription> {
-    explicit SymbolTable(const SymbolTable* surrounding_scope)
+struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
+    explicit Scope(const Scope* surrounding_scope)
         : std::unordered_map<std::string_view, SymbolDescription>::unordered_map{},
           surrounding_scope{ surrounding_scope } { }
 
-    const SymbolTable* surrounding_scope;
+    const Scope* surrounding_scope;
 };

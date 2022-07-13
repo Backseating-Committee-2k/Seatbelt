@@ -55,7 +55,7 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Name& expression) override {
-            const SymbolTable* current_scope = expression.surrounding_scope;
+            const Scope* current_scope = expression.surrounding_scope;
             const auto identifier = expression.name.location.view();
             while (current_scope != nullptr) {
                 const auto find_iterator = std::find_if(

@@ -40,7 +40,7 @@ add_executable(Seatbelt
         type_checker.cpp
         type_checker.hpp
         scope_generator.hpp
-        symbol_table.hpp
+        scope.hpp
         scope_generator.cpp
         data_type.hpp
         type_container.cpp

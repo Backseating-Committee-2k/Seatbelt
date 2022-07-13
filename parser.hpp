@@ -13,7 +13,7 @@
 #include <optional>
 #include <string_view>
 #include <iostream>
-#include "symbol_table.hpp"
+#include "scope.hpp"
 #include "lexer.hpp"
 #include "data_type.hpp"
 
@@ -49,7 +49,7 @@ namespace Parser {
 
             virtual void accept(StatementVisitor& visitor) = 0;
 
-            const SymbolTable* surrounding_scope{ nullptr };
+            const Scope* surrounding_scope{ nullptr };
         };
 
         using StatementList = std::vector<std::unique_ptr<Statement>>;
@@ -62,7 +62,7 @@ namespace Parser {
             }
 
             StatementList statements;
-            std::unique_ptr<SymbolTable> scope;
+            std::unique_ptr<Scope> scope;
         };
 
         struct VariableDefinition : public Statement {
@@ -132,7 +132,7 @@ namespace Parser {
             virtual void accept(ExpressionVisitor& visitor) = 0;
 
             const DataType* data_type{ nullptr };
-            const SymbolTable* surrounding_scope{ nullptr };
+            const Scope* surrounding_scope{ nullptr };
         };
 
         template<typename T>
