@@ -4,10 +4,10 @@
 
 #pragma once
 
+#include <cassert>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <cassert>
 
 struct DataType {
 protected:

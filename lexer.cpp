@@ -3,11 +3,11 @@
 //
 
 #include "lexer.hpp"
-#include <ctre.hpp>
-#include <cassert>
 #include <array>
-#include <iostream>
+#include <cassert>
+#include <ctre.hpp>
 #include <fmt/core.h>
+#include <iostream>
 
 class LexerState {
 public:

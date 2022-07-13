@@ -4,10 +4,10 @@
 
 #pragma once
 
-#include "types.hpp"
 #include "data_type.hpp"
-#include <unordered_map>
+#include "types.hpp"
 #include <string_view>
+#include <unordered_map>
 #include <variant>
 
 struct VariableSymbol {

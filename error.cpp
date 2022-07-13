@@ -3,10 +3,10 @@
 //
 
 #include "error.hpp"
-#include <fmt/core.h>
-#include <ranges>
 #include <algorithm>
+#include <fmt/core.h>
 #include <iostream>
+#include <ranges>
 
 [[nodiscard]] Location Error::token_location(const auto& token) {
     return std::visit([](const auto& token) { return token.location; }, token);

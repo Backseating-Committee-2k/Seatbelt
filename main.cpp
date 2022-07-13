@@ -1,14 +1,14 @@
+#include "emitter.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
-#include "emitter.hpp"
-#include "type_checker.hpp"
 #include "scope_generator.hpp"
+#include "type_checker.hpp"
 #include "type_container.hpp"
 #include <argh.h>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
-#include <fstream>
-#include <filesystem>
 
 [[nodiscard]] std::string read_whole_stream(std::istream& stream) {
     return { std::istreambuf_iterator<char>(stream), {} };

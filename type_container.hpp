@@ -4,10 +4,10 @@
 
 #pragma once
 
-#include <vector>
-#include <span>
 #include "data_type.hpp"
 #include "lexer.hpp"
+#include <span>
+#include <vector>
 
 class TypeContainer {
 public:

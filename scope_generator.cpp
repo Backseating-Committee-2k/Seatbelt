@@ -3,10 +3,10 @@
 //
 
 #include "scope_generator.hpp"
-#include "parser.hpp"
-#include "types.hpp"
 #include "error.hpp"
+#include "parser.hpp"
 #include "type_checker.hpp"
+#include "types.hpp"
 #include <fmt/core.h>
 
 namespace ScopeGenerator {

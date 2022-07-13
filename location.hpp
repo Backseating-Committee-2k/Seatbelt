@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include <string_view>
-#include "types.hpp"
 #include "source_code.hpp"
+#include "types.hpp"
+#include <string_view>
 
 struct Location {
     SourceCode source_code;

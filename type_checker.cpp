@@ -4,11 +4,10 @@
 
 #include "type_checker.hpp"
 #include "error.hpp"
-#include <fmt/core.h>
 #include <cassert>
-#include <variant>
+#include <fmt/core.h>
 #include <string_view>
-#include <array>
+#include <variant>
 
 namespace TypeChecker {
     static constexpr std::string_view U32Identifier{ "U32" };

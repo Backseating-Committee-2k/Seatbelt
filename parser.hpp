@@ -4,18 +4,18 @@
 
 #pragma once
 
-#include <cassert>
-#include <vector>
-#include <variant>
-#include <span>
-#include <memory>
-#include <unordered_map>
-#include <optional>
-#include <string_view>
-#include <iostream>
-#include "scope.hpp"
-#include "lexer.hpp"
 #include "data_type.hpp"
+#include "lexer.hpp"
+#include "scope.hpp"
+#include <cassert>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <unordered_map>
+#include <variant>
+#include <vector>
 
 namespace Parser {
     using namespace Lexer::Tokens;

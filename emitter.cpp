@@ -3,16 +3,14 @@
 //
 
 #include "emitter.hpp"
+#include "error.hpp"
 #include "parser.hpp"
 #include "types.hpp"
-#include "error.hpp"
-#include <fmt/core.h>
-#include <unordered_map>
-#include <string_view>
-#include <vector>
 #include <algorithm>
-#include <optional>
 #include <cassert>
+#include <fmt/core.h>
+#include <optional>
+#include <string_view>
 
 namespace Emitter {
     using namespace Parser::Statements;

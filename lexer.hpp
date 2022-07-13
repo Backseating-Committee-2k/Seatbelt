@@ -4,11 +4,11 @@
 
 #pragma once
 
+#include "location.hpp"
+#include "types.hpp"
 #include <string_view>
 #include <variant>
 #include <vector>
-#include "types.hpp"
-#include "location.hpp"
 
 #define DEFINE_TOKEN(name)                               \
     struct name {                                        \

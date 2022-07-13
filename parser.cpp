@@ -2,18 +2,18 @@
 // Created by coder2k on 17.06.2022.
 //
 
-#include <variant>
-#include <optional>
-#include <algorithm>
-#include <ranges>
-#include <utility>
-#include <cassert>
-#include <memory>
-#include <string_view>
-#include <fmt/core.h>
 #include "parser.hpp"
 #include "error.hpp"
 #include "types.hpp"
+#include <algorithm>
+#include <cassert>
+#include <fmt/core.h>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <string_view>
+#include <utility>
+#include <variant>
 
 namespace Parser {
 
