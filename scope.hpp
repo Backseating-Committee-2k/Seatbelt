@@ -8,11 +8,19 @@
 #include "data_type.hpp"
 #include <unordered_map>
 #include <string_view>
+#include <variant>
 
-struct SymbolDescription {
+struct VariableSymbol {
     usize offset{ 0 };
     const DataType* data_type{ nullptr };
 };
+
+struct FunctionSymbol {
+    std::string_view label;
+    const DataType* data_type{ nullptr };
+};
+
+using SymbolDescription = std::variant<VariableSymbol, FunctionSymbol>;
 
 struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
     explicit Scope(const Scope* surrounding_scope)

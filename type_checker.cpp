@@ -55,22 +55,10 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Name& expression) override {
-            const Scope* current_scope = expression.surrounding_scope;
-            const auto identifier = expression.name.location.view();
-            while (current_scope != nullptr) {
-                const auto find_iterator = std::find_if(
-                        std::cbegin(*current_scope), std::cend(*current_scope),
-                        [identifier](const auto& pair) { return pair.first == identifier; }
-                );
-                if (find_iterator != std::cend(*current_scope)) {
-                    expression.data_type = find_iterator->second.data_type;
-                    return;
-                }
-                current_scope = current_scope->surrounding_scope;
-            }
+            // the scope generator should fill this value beforehand
+            assert(expression.definition_data_type != nullptr && "unreachable (use of undeclared identifier)");
 
-            // the scope generator should prevent this from happening
-            assert(false && "unreachable (use of undeclared identifier)");
+            expression.data_type = expression.definition_data_type;
         }
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {

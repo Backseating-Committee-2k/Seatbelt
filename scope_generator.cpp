@@ -35,8 +35,7 @@ namespace ScopeGenerator {
             }
             statement.initial_value->accept(*this);
             const auto data_type = type_container->from_tokens(statement.type_tokens);
-            (*scope)[statement.name.location.view()] =
-                    SymbolDescription{ .offset{ offset }, .data_type{ data_type } };
+            (*scope)[statement.name.location.view()] = VariableSymbol{ .offset{ offset }, .data_type{ data_type } };
             offset += 4;// TODO: different data types
             statement.surrounding_scope = scope;
         }
@@ -65,6 +64,18 @@ namespace ScopeGenerator {
                 );
                 if (find_iterator != std::cend(*current_scope)) {
                     // identifier found => can be used here
+
+                    struct {
+                        const DataType* operator()(const VariableSymbol& variable) {
+                            return variable.data_type;
+                        }
+
+                        const DataType* operator()(const FunctionSymbol& function) {
+                            return function.data_type;
+                        }
+                    } symbol_visitor;
+
+                    expression.definition_data_type = std::visit(symbol_visitor, find_iterator->second);
                     return;
                 }
                 current_scope = current_scope->surrounding_scope;
@@ -92,12 +103,14 @@ namespace ScopeGenerator {
     };
 
     void generate(Parser::Program& program, TypeContainer& type_container) {
+        using namespace std::string_literals;
         auto global_scope = Scope{ nullptr };
         for (auto& top_level_statement : program) {
             std::visit(
                     [&](std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
                         auto function_scope = Scope{ &global_scope };
                         usize offset = 0;
+                        auto label = "$" + std::string{ function_definition->name.location.view() };
                         for (auto& parameter : function_definition->parameters) {
                             if (function_scope.contains(parameter.name.location.view())) {
                                 Error::error(
@@ -107,9 +120,16 @@ namespace ScopeGenerator {
                             }
                             const auto parameter_type = type_container.from_tokens(parameter.type_tokens);
                             function_scope[parameter.name.location.view()] =
-                                    SymbolDescription{ .offset{ offset }, .data_type{ parameter_type } };
+                                    VariableSymbol{ .offset{ offset }, .data_type{ parameter_type } };
+                            label += "$" + parameter_type->to_string();
                             offset += 4;// TODO: different data types
                         }
+
+                        global_scope[function_definition->name.location.view()] = FunctionSymbol{
+                            .label{ label },
+                            .data_type{ type_container.from_tokens(function_definition->return_type_tokens) }
+                        };
+
                         auto visitor = ScopeGenerator{ &function_scope, offset, &type_container };
                         function_definition->body.accept(visitor);
                     },

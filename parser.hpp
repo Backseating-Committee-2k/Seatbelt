@@ -154,6 +154,7 @@ namespace Parser {
             explicit Name(Lexer::Tokens::Identifier name) : name{ name } { }
 
             Lexer::Tokens::Identifier name;
+            const DataType* definition_data_type{ nullptr };
         };
 
         struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {
