@@ -19,6 +19,30 @@ namespace Emitter {
     using namespace Parser::Expressions;
 
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
+        struct BinaryOperatorEmitter {
+            void operator()(const Lexer::Tokens::Plus&) const {
+                visitor->emit("push R3", "push result onto stack");
+            }
+
+            void operator()(const Lexer::Tokens::Minus&) const {
+                assert(false && "not implemented");
+            }
+
+            void operator()(const Lexer::Tokens::Asterisk&) const {
+                visitor->emit("mult R1, R2, R3, R4", "multiply values");
+            }
+
+            void operator()(const Lexer::Tokens::ForwardSlash&) const {
+                assert(false && "not implemented");
+            }
+
+            void operator()(const auto&) const {
+                assert(false && "unreachable");
+            }
+
+            EmitterVisitor* visitor;
+        };
+
         EmitterVisitor(const Parser::Program* program) : program{ program } { }
 
         std::string assembly;
@@ -90,31 +114,7 @@ namespace Emitter {
                          R"(store lhs for {}-operator in R1)", Error::token_location(expression.operator_token).view()
                  ));
 
-            struct BinaryOperatorEmitter {
-                void operator()(const Lexer::Tokens::Plus&) const {
-                    visitor->emit("push R3", "push result onto stack");
-                }
-
-                void operator()(const Lexer::Tokens::Minus&) const {
-                    assert(false && "not implemented");
-                }
-
-                void operator()(const Lexer::Tokens::Asterisk&) const {
-                    visitor->emit("mult R1, R2, R3, R4", "multiply values");
-                }
-
-                void operator()(const Lexer::Tokens::ForwardSlash&) const {
-                    assert(false && "not implemented");
-                }
-
-                void operator()(const auto&) const {
-                    assert(false && "unreachable");
-                }
-
-                EmitterVisitor* visitor;
-            } emitter{ this };
-
-            std::visit(emitter, expression.operator_token);
+            std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
 
             emit("push R3", "push result onto stack");
         }
