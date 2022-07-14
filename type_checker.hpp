@@ -9,5 +9,5 @@
 #include <memory>
 
 namespace TypeChecker {
-    void check(const Parser::Program& program, TypeContainer& type_container);
+    void check(Parser::Program& program, TypeContainer& type_container);
 }// namespace TypeChecker

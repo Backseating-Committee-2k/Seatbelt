@@ -64,18 +64,13 @@ namespace Emitter {
         }
 
         void visit(Name& expression) override {
-            for (const auto& top_level_statement : *program) {
-                if (std::holds_alternative<std::unique_ptr<Parser::FunctionDefinition>>(top_level_statement)) {
-                    const auto function_definition =
-                            std::get<std::unique_ptr<Parser::FunctionDefinition>>(top_level_statement).get();
-                    if (function_definition->name.location.view() == expression.name.location.view()) {
-                        emit(fmt::format("copy {}, R1", function_definition->name.location.view()),
-                             "get address of label");
-                        emit("push R1", "push address of label onto stack");
-                        return;
-                    }
-                }
+            assert(expression.data_type && "data type must be known at this point");
+            if (const auto function_pointer_type = dynamic_cast<const FunctionPointerType*>(expression.data_type)) {
+                emit(fmt::format("copy {}, R1", function_pointer_type->signature), "get address of label");
+                emit("push R1", "push address of label onto stack");
+                return;
             }
+
             std::optional<usize> offset;
             const Scope* current_scope = expression.surrounding_scope;
             while (current_scope != nullptr) {
@@ -177,7 +172,7 @@ namespace Emitter {
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const {
-        auto result = fmt::format("{}:\n", function_definition->name.location.view());
+        auto result = fmt::format("{}:\n", function_definition->corresponding_symbol->signature);
 
         const auto emit = [&result](const std::string_view instruction, const std::string_view comment = "") {
             result += fmt::format("\t{}", instruction);

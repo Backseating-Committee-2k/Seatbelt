@@ -55,7 +55,7 @@ add_executable(Seatbelt
         scope_generator.cpp
         data_type.hpp
         type_container.cpp
-        type_container.hpp)
+        type_container.hpp parameter_list.hpp)
 
 FetchContent_MakeAvailable(fmt ctre argh)
 
@@ -69,7 +69,7 @@ foreach (target ${TARGET_LIST})
     # set warning levels
     if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         message("MSVC build")
-        target_compile_options(${target} PUBLIC /W4 /permissive-)
+        target_compile_options(${target} PUBLIC /W4 /permissive- /fsanitize=address)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message("GCC build")
         target_compile_options(${target} PUBLIC -Wall -Wextra -pedantic -Wconversion -pthread)

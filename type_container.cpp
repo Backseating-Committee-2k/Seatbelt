@@ -3,6 +3,7 @@
 //
 
 #include "type_container.hpp"
+#include "data_type.hpp"
 #include "error.hpp"
 #include <algorithm>
 #include <ranges>

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cassert>
+#include <fmt/core.h>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -24,6 +25,8 @@ public:
         return is_mutable ? "mutable " : "const ";
     }
 
+    [[nodiscard]] virtual std::string mangled_name() const = 0;
+
     bool is_mutable;
 };
 
@@ -39,6 +42,10 @@ struct ConcreteType : public DataType {
 
     [[nodiscard]] std::string to_string() const override {
         return DataType::to_string() + std::string{ name };
+    }
+
+    [[nodiscard]] std::string mangled_name() const override {
+        return fmt::format("${}", name);
     }
 
     std::string_view name;
@@ -62,5 +69,33 @@ struct PointerType : public DataType {
         return DataType::to_string() + "->"s + contained->to_string();
     }
 
+    [[nodiscard]] std::string mangled_name() const override {
+        assert(contained);
+        return fmt::format("$pointer${}", contained->mangled_name());
+    }
+
     std::unique_ptr<DataType> contained;
+};
+
+struct FunctionPointerType : public DataType {
+    explicit FunctionPointerType(std::string signature, bool is_mutable)
+        : DataType{ is_mutable },
+          signature{ std::move(signature) } { }
+
+    bool operator==(const DataType& other) const override {
+        if (const auto other_pointer = dynamic_cast<const FunctionPointerType*>(&other)) {
+            return DataType::operator==(other) and signature == other_pointer->signature;
+        }
+        return false;
+    }
+
+    [[nodiscard]] std::string to_string() const override {
+        return fmt::format("{} function pointer with signature \"{}\"", DataType::to_string(), signature);
+    }
+
+    [[nodiscard]] std::string mangled_name() const override {
+        return fmt::format("$function_pointer${}", signature);
+    }
+
+    std::string signature;
 };

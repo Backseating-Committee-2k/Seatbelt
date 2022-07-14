@@ -6,6 +6,7 @@
 
 #include "data_type.hpp"
 #include "lexer.hpp"
+#include "parameter_list.hpp"
 #include "scope.hpp"
 #include <cassert>
 #include <iostream>
@@ -179,20 +180,13 @@ namespace Parser {
 
     }// namespace Expressions
 
-    struct Parameter {
-        Identifier name;
-        std::span<const Token> type_tokens;
-        const DataType* type{ nullptr };
-    };
-
-    using ParameterList = std::vector<Parameter>;
-
     struct FunctionDefinition {
         Identifier name;
         ParameterList parameters;
         std::span<const Token> return_type_tokens;
         const DataType* return_type{ nullptr };
         Statements::Block body;
+        FunctionOverload* corresponding_symbol{ nullptr };
     };
 
     template<typename... T>

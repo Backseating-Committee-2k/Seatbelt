@@ -7,7 +7,9 @@
 #include "parser.hpp"
 #include "type_checker.hpp"
 #include "types.hpp"
+#include <algorithm>
 #include <fmt/core.h>
+#include <ranges>
 
 namespace ScopeGenerator {
 
@@ -18,13 +20,16 @@ namespace ScopeGenerator {
               type_container{ type_container } { }
 
         void visit(Parser::Statements::Block& statement) override {
-            statement.surrounding_scope = scope;
-            statement.scope = std::make_unique<Scope>(scope);
-            auto visitor = ScopeGenerator{ statement.scope.get(), offset, type_container };
             for (auto& sub_statement : statement.statements) {
-                sub_statement->accept(visitor);
+                if (const auto sub_block = dynamic_cast<Parser::Statements::Block*>(sub_statement.get())) {
+                    sub_block->scope = std::make_unique<Scope>(scope);
+                    auto sub_visitor = ScopeGenerator{ sub_block->scope.get(), offset, type_container };
+                    sub_block->accept(sub_visitor);
+                    offset = sub_visitor.offset;
+                } else {
+                    sub_statement->accept(*this);
+                }
             }
-            offset = visitor.offset;
         }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
@@ -71,7 +76,9 @@ namespace ScopeGenerator {
                         }
 
                         const DataType* operator()(const FunctionSymbol& function) {
-                            return function.data_type;
+                            // we cannot determine the return type of the function here because
+                            // we cannot do overload resolution as of now
+                            return nullptr;
                         }
                     } symbol_visitor;
 
@@ -102,35 +109,45 @@ namespace ScopeGenerator {
         TypeContainer* type_container;
     };
 
-    void generate(Parser::Program& program, TypeContainer& type_container) {
+    void generate(Parser::Program& program, TypeContainer& type_container, Scope& global_scope) {
         using namespace std::string_literals;
-        auto global_scope = Scope{ nullptr };
+        using std::ranges::find_if;
         for (auto& top_level_statement : program) {
             std::visit(
                     [&](std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
-                        auto function_scope = Scope{ &global_scope };
+                        auto function_scope = std::make_unique<Scope>(&global_scope);
                         usize offset = 0;
-                        auto label = "$" + std::string{ function_definition->name.location.view() };
                         for (auto& parameter : function_definition->parameters) {
-                            if (function_scope.contains(parameter.name.location.view())) {
+                            if (function_scope->contains(parameter.name.location.view())) {
                                 Error::error(
                                         parameter.name,
                                         fmt::format("duplicate parameter name \"{}\"", parameter.name.location.view())
                                 );
                             }
                             const auto parameter_type = type_container.from_tokens(parameter.type_tokens);
-                            function_scope[parameter.name.location.view()] =
+                            (*function_scope)[parameter.name.location.view()] =
                                     VariableSymbol{ .offset{ offset }, .data_type{ parameter_type } };
-                            label += "$" + parameter_type->to_string();
                             offset += 4;// TODO: different data types
                         }
+                        auto identifier = function_definition->name.location.view();
+                        auto find_iterator =
+                                find_if(global_scope, [&](const auto& pair) { return pair.first == identifier; });
+                        const auto found = find_iterator != std::end(global_scope);
+                        auto function_overload = FunctionOverload{};
+                        if (found) {
+                            assert(std::holds_alternative<FunctionSymbol>(find_iterator->second) &&
+                                   "other cases not implemented yet");
+                            auto& function_symbol = std::get<FunctionSymbol>(find_iterator->second);
+                            auto& new_overload = function_symbol.overloads.emplace_back(std::move(function_overload));
+                            function_definition->corresponding_symbol = &new_overload;
+                        } else {
+                            auto new_symbol = FunctionSymbol{ .overloads{ { std::move(function_overload) } } };
+                            function_definition->corresponding_symbol = &new_symbol.overloads.back();
+                            global_scope[identifier] = std::move(new_symbol);
+                        }
 
-                        global_scope[function_definition->name.location.view()] = FunctionSymbol{
-                            .label{ label },
-                            .data_type{ type_container.from_tokens(function_definition->return_type_tokens) }
-                        };
-
-                        auto visitor = ScopeGenerator{ &function_scope, offset, &type_container };
+                        auto visitor = ScopeGenerator{ function_scope.get(), offset, &type_container };
+                        function_definition->body.scope = std::move(function_scope);
                         function_definition->body.accept(visitor);
                     },
                     top_level_statement

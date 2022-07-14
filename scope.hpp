@@ -5,7 +5,10 @@
 #pragma once
 
 #include "data_type.hpp"
+#include "parameter_list.hpp"
+#include "parser.hpp"
 #include "types.hpp"
+#include <list>
 #include <string_view>
 #include <unordered_map>
 #include <variant>
@@ -15,9 +18,14 @@ struct VariableSymbol {
     const DataType* data_type{ nullptr };
 };
 
+struct FunctionOverload {
+    std::string signature{};
+    const ParameterList* parameters{ nullptr };
+    const DataType* return_type{ nullptr };
+};
+
 struct FunctionSymbol {
-    std::string_view label;
-    const DataType* data_type{ nullptr };
+    std::list<FunctionOverload> overloads;
 };
 
 using SymbolDescription = std::variant<VariableSymbol, FunctionSymbol>;

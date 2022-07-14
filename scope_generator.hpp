@@ -9,6 +9,6 @@
 
 namespace ScopeGenerator {
 
-    void generate(Parser::Program& program, TypeContainer& type_container);
+    void generate(Parser::Program& program, TypeContainer& type_container, Scope& global_scope);
 
 }// namespace ScopeGenerator
