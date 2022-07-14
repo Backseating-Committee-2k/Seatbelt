@@ -55,7 +55,7 @@ add_executable(Seatbelt
         scope_generator.cpp
         data_type.hpp
         type_container.cpp
-        type_container.hpp parameter_list.hpp)
+        type_container.hpp parameter_list.hpp scope.cpp)
 
 FetchContent_MakeAvailable(fmt ctre argh)
 

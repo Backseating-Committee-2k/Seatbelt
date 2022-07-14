@@ -55,21 +55,52 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Name& expression) override {
-            // the scope generator should fill this value beforehand
-            assert(expression.definition_data_type != nullptr && "unreachable (use of undeclared identifier)");
-            auto current_scope = expression.surrounding_scope;
-            const auto identifier = expression.name.location.view();
-            while (current_scope != nullptr) {
-                const auto find_iterator = current_scope->find(identifier);
-                const auto found = find_iterator != std::cend(*current_scope);
-                if (not found) {
-                    goto end_of_loop;
+            /*  The scope generator fills in the data types of variable definitions beforehand.
+             *  But for function pointers we do not have any type information available and
+             *  have to fetch the data here. */
+            const auto is_variable = expression.definition_data_type != nullptr;
+            if (is_variable) {
+                expression.data_type = expression.definition_data_type;
+            } else {
+                const auto identifier = expression.name.location.view();
+                const auto symbol = scope_lookup(expression.surrounding_scope, identifier);
+                if (symbol == nullptr) {
+                    Error::error(expression.name, fmt::format("use of undeclared identifier \"{}\"", identifier));
                 }
-                if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) { }
-            end_of_loop:
-                current_scope = current_scope->surrounding_scope;
+                if (const auto function_symbol = std::get_if<FunctionSymbol>(symbol)) {
+                    const auto& overloads = function_symbol->overloads;
+                    assert(not overloads.empty() && "there shall never be a function with zero overloads");
+                    if (overloads.size() > 1) {
+                        Error::error(expression.name, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
+                    }
+                    assert(overloads.size() == 1);
+                    expression.data_type = type_container->from_data_type(
+                            std::make_unique<FunctionPointerType>(overloads.front().signature, false)
+                    );
+                } else {
+                    assert(false && "unreachable");
+                }
             }
-            expression.data_type = expression.definition_data_type;
+
+
+            /*
+            if (is_variable) {
+                assert(expression.definition_data_type != nullptr && "unreachable (use of undeclared identifier)");
+                auto current_scope = expression.surrounding_scope;
+                const auto identifier = expression.name.location.view();
+                while (current_scope != nullptr) {
+                    const auto find_iterator = current_scope->find(identifier);
+                    const auto found = find_iterator != std::cend(*current_scope);
+                    if (not found) {
+                        goto end_of_loop;
+                    }
+                    if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) { }
+                end_of_loop:
+                    current_scope = current_scope->surrounding_scope;
+                }
+                expression.data_type = expression.definition_data_type;
+            } else {
+            }*/
         }
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {
@@ -108,18 +139,12 @@ namespace TypeChecker {
                 }
                 auto current_scope = expression.surrounding_scope;
                 while (current_scope != nullptr) {
-                    fmt::print(stderr, "contents of current scope:\n");
-                    for (const auto& [key, _] : *current_scope) {
-                        fmt::print(stderr, "\t{}\n", key);
-                    }
                     const auto find_iterator = current_scope->find(identifier);
                     const auto found = find_iterator != std::cend(*current_scope);
                     if (found) {
                         if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) {
-                            fmt::print(stderr, "trying to find function overload for {}\n", identifier);
                             const auto& overloads = function_symbol->overloads;
                             const auto overload_iterator = find_if(overloads, [&](const auto& overload) {
-                                fmt::print(stderr, "\tcomparing {} with {}\n", overload.signature, signature);
                                 return overload.signature == signature;
                             });
                             const auto overload_found = overload_iterator != std::cend(overloads);
@@ -129,7 +154,6 @@ namespace TypeChecker {
                                 name->data_type = type_container->from_data_type(
                                         std::make_unique<FunctionPointerType>(signature, false)
                                 );
-                                fmt::print(stderr, "found function overload!\n");
                             } else {
                                 Error::error(name->name, "no matching function overload found");
                             }

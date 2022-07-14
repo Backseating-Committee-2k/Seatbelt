@@ -90,7 +90,7 @@ struct FunctionPointerType : public DataType {
     }
 
     [[nodiscard]] std::string to_string() const override {
-        return fmt::format("{} function pointer with signature \"{}\"", DataType::to_string(), signature);
+        return fmt::format("{}function pointer with signature \"{}\"", DataType::to_string(), signature);
     }
 
     [[nodiscard]] std::string mangled_name() const override {

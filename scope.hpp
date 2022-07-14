@@ -6,9 +6,9 @@
 
 #include "data_type.hpp"
 #include "parameter_list.hpp"
-#include "parser.hpp"
 #include "types.hpp"
 #include <list>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <variant>
@@ -37,3 +37,5 @@ struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
 
     const Scope* surrounding_scope;
 };
+
+[[nodiscard]] const SymbolDescription* scope_lookup(const Scope* scope, std::string_view identifier);
