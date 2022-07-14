@@ -81,26 +81,6 @@ namespace TypeChecker {
                     assert(false && "unreachable");
                 }
             }
-
-
-            /*
-            if (is_variable) {
-                assert(expression.definition_data_type != nullptr && "unreachable (use of undeclared identifier)");
-                auto current_scope = expression.surrounding_scope;
-                const auto identifier = expression.name.location.view();
-                while (current_scope != nullptr) {
-                    const auto find_iterator = current_scope->find(identifier);
-                    const auto found = find_iterator != std::cend(*current_scope);
-                    if (not found) {
-                        goto end_of_loop;
-                    }
-                    if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) { }
-                end_of_loop:
-                    current_scope = current_scope->surrounding_scope;
-                }
-                expression.data_type = expression.definition_data_type;
-            } else {
-            }*/
         }
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {
@@ -171,15 +151,43 @@ namespace TypeChecker {
     };
 
     struct TypeCheckerTopLevelVisitor {
-        TypeCheckerTopLevelVisitor(const Parser::Program* program, TypeContainer* type_container)
+        TypeCheckerTopLevelVisitor(
+                const Parser::Program* program,
+                TypeContainer* type_container,
+                const Scope* global_scope
+        )
             : program{ program },
-              type_container{ type_container } { }
+              type_container{ type_container },
+              global_scope{ global_scope } { }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
+            using std::ranges::find_if;
+
             auto signature = fmt::format("${}", function_definition->name.location.view());
             for (auto& parameter : function_definition->parameters) {
                 parameter.type = type_container->from_tokens(parameter.type_tokens);
                 signature += parameter.type->mangled_name();
+            }
+
+            const auto identifier = function_definition->name.location.view();
+
+            const auto find_iterator = global_scope->find(identifier);
+            const auto found = find_iterator != std::cend(*global_scope);
+            if (found) {
+                if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) {
+                    const auto& overloads = function_symbol->overloads;
+                    const auto duplicate_signature = find_if(overloads, [&](const auto& overload) {
+                                                         return overload.signature == signature;
+                                                     }) != std::cend(overloads);
+                    if (duplicate_signature) {
+                        Error::error(
+                                function_definition->name,
+                                fmt::format("function overload for \"{}\" with ambiguous signature", identifier)
+                        );
+                    }
+                } else {
+                    Error::error(function_definition->name, fmt::format("redefinition of \"{}\"", identifier));
+                }
             }
 
             function_definition->corresponding_symbol->signature = std::move(signature);
@@ -195,10 +203,11 @@ namespace TypeChecker {
 
         const Parser::Program* program;
         TypeContainer* type_container;
+        const Scope* global_scope;
     };
 
-    void check(Parser::Program& program, TypeContainer& type_container) {
-        auto visitor = TypeCheckerTopLevelVisitor{ &program, &type_container };
+    void check(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
+        auto visitor = TypeCheckerTopLevelVisitor{ &program, &type_container, &global_scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);
         }

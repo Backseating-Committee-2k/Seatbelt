@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     auto global_scope = Scope{ nullptr };
     auto type_container = TypeContainer{};
     ScopeGenerator::generate(program, type_container, global_scope);
-    TypeChecker::check(program, type_container);
+    TypeChecker::check(program, type_container, global_scope);
 
     std::string assembly = "jump $main\n\n";
 
