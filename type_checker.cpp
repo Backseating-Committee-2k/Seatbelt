@@ -6,6 +6,7 @@
 #include "error.hpp"
 #include <cassert>
 #include <fmt/core.h>
+#include <ranges>
 #include <string_view>
 #include <variant>
 
