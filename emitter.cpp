@@ -156,7 +156,9 @@ namespace Emitter {
             const auto start_iterator = std::find(assembly_block.cbegin(), assembly_block.cend(), '{');
             assert(start_iterator != assembly_block.cend());
             const auto inner = std::string_view{ start_iterator + 1, assembly_block.cend() - 1 };
+            emit("", "-- block of inline bssembly --");
             emit(inner);
+            emit("", "-- end of inline bssembly --");
         }
 
         void visit(ExpressionStatement& statement) override {
@@ -172,7 +174,7 @@ namespace Emitter {
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const {
-        auto result = fmt::format("{}:\n", function_definition->corresponding_symbol->signature);
+        auto result = fmt::format("\n{}:\n", function_definition->corresponding_symbol->signature);
 
         const auto emit = [&result](const std::string_view instruction, const std::string_view comment = "") {
             result += fmt::format("\t{}", instruction);
@@ -184,7 +186,7 @@ namespace Emitter {
         if (function_definition->name.location.view() == "main") {
             emit("copy sp, R0", "save current stack pointer into R0 (this is the new stack frame base pointer)");
         }
-        emit(emit_statement(*program, function_definition->body));
+        result += emit_statement(*program, function_definition->body);
         if (function_definition->name.location.view() == "main") {
             emit("halt");
         } else {

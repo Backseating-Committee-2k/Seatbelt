@@ -51,9 +51,9 @@ int main(int argc, char** argv) {
     auto global_scope = Scope{ nullptr };
     auto type_container = TypeContainer{};
     ScopeGenerator::generate(program, type_container, global_scope);
-    TypeChecker::check(program, type_container, global_scope);
+    TypeChecker::check(tokens, program, type_container, global_scope);
 
-    std::string assembly = "jump $main\n\n";
+    std::string assembly = "jump $main\n";
 
     for (const auto& item : program) {
         assembly += std::visit(Emitter::Emitter{ &program }, item);

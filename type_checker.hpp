@@ -9,5 +9,10 @@
 #include <memory>
 
 namespace TypeChecker {
-    void check(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope);
+    void check(
+            const Lexer::TokenList& tokens,
+            Parser::Program& program,
+            TypeContainer& type_container,
+            const Scope& global_scope
+    );
 }// namespace TypeChecker
