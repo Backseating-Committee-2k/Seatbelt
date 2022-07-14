@@ -53,7 +53,10 @@ namespace Emitter {
         void emit(const std::string_view instruction, const std::string_view comment) {
             assembly += fmt::format("\t{}", instruction);
             if (not comment.empty()) {
-                assembly += fmt::format(" // {}", comment);
+                if (not instruction.empty()) {
+                    assembly += " ";
+                }
+                assembly += fmt::format("// {}", comment);
             }
             assembly += "\n";
         }
