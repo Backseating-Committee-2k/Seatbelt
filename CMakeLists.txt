@@ -22,6 +22,14 @@ FetchContent_Declare(
         GIT_TAG d17062c870b5919f6d1eae7fe12879869a893b32
 )
 
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG 58d77fa8070e8cec2dc1ed015d66b454c8d78850
+)
+
+FetchContent_MakeAvailable(fmt ctre argh googletest)
+
 if (MSVC)
     # enable code analysis
     set_property(GLOBAL PROPERTY VS_GLOBAL_EnableCppCoreCheck true)
@@ -33,7 +41,7 @@ if (MSVC)
     string(REGEX REPLACE "-W3" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 endif ()
 
-set(TARGET_LIST Seatbelt fmt)
+set(TARGET_LIST Seatbelt fmt gmock gmock_main gtest gtest_main)
 
 add_executable(Seatbelt
         main.cpp
@@ -55,9 +63,10 @@ add_executable(Seatbelt
         scope_generator.cpp
         data_type.hpp
         type_container.cpp
-        type_container.hpp parameter_list.hpp scope.cpp)
-
-FetchContent_MakeAvailable(fmt ctre argh)
+        type_container.hpp
+        parameter_list.hpp
+        scope.cpp
+        )
 
 target_link_libraries(Seatbelt fmt ctre argh)
 
@@ -96,3 +105,6 @@ foreach (target ${TARGET_LIST})
         message("Not enabling LTO for target ${target} (not a release build)")
     endif ()
 endforeach ()
+
+enable_testing()
+add_subdirectory(test)
