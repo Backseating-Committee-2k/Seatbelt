@@ -14,6 +14,8 @@ namespace Emitter {
 
         std::string operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const;
 
+        std::string operator()(const std::unique_ptr<Parser::ImportStatement>& function_definition) const;
+
         const Parser::Program* program;
     };
 

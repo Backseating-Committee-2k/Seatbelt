@@ -28,6 +28,8 @@ namespace Parser {
             while (not end_of_file()) {
                 if (current_is<Function>()) {
                     program.push_back(function_definition());
+                } else if (current_is<Import>()) {
+                    program.push_back(import_statement());
                 } else {
                     error("\"function\" keyword expected");
                 }
@@ -123,6 +125,21 @@ namespace Parser {
                                                                             .return_type_tokens{ return_type_tokens },
                                                                             .return_type{},
                                                                             .body{ std::move(body) } });
+        }
+
+        [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {
+            assert(current_is<Import>());
+            advance();
+            const usize path_start = m_index;
+            consume<Identifier>("expected identifier");
+            while (maybe_consume<Dot>()) {
+                consume<Identifier>("expected identifier");
+            }
+            consume<Semicolon>("expected \";\"");
+            const usize path_end = m_index;
+            return std::make_unique<ImportStatement>(ImportStatement{ .import_path_tokens{
+                    std::span{ std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_start),
+                               std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_end) } } });
         }
 
         [[nodiscard]] Statements::Block block() {

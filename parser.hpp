@@ -189,10 +189,14 @@ namespace Parser {
         FunctionOverload* corresponding_symbol{ nullptr };
     };
 
+    struct ImportStatement {
+        std::span<const Token> import_path_tokens;
+    };
+
     template<typename... T>
     using PointerVariant = std::variant<std::unique_ptr<T>...>;
 
-    using Program = std::vector<PointerVariant<FunctionDefinition>>;
+    using Program = std::vector<PointerVariant<FunctionDefinition, ImportStatement>>;
 
     [[nodiscard]] Program parse(const Lexer::TokenList& tokens);
 

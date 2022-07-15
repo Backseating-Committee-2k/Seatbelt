@@ -22,6 +22,9 @@ public:
         while (not end_of_file()) {
             usize token_length = 1;
             switch (current()) {
+                case '.':
+                    emit_single_char_token<Dot>(tokens);
+                    break;
                 case '+':
                     emit_single_char_token<Plus>(tokens);
                     break;
@@ -105,13 +108,19 @@ public:
                         break;
                     }
                     std::string_view remaining_source = m_source_code.text.substr(m_index);
-                    if (const auto identifier_result =
-                                ctre::starts_with<"([a-zA-Z_][a-zA-Z0-9_]*)">(remaining_source)) {
+
+                    static constexpr const char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
+                    static constexpr const char integer_pattern[] =
+                            "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
+
+                    if (const auto identifier_result = ctre::starts_with<identifier_pattern>(remaining_source)) {
                         token_length = identifier_result.view().length();
                         if (identifier_result.view() == "dump_registers") {
                             emit_token<DumpRegisters>(tokens, token_length);
                         } else if (identifier_result.view() == "function") {
                             emit_token<Function>(tokens, token_length);
+                        } else if (identifier_result.view() == "import") {
+                            emit_token<Import>(tokens, token_length);
                         } else if (identifier_result.view() == "let") {
                             emit_token<Let>(tokens, token_length);
                         } else if (identifier_result.view() == "bsm") {
@@ -119,7 +128,7 @@ public:
                         } else {
                             emit_token<Identifier>(tokens, token_length);
                         }
-                    } else if (const auto integer_literal_result = ctre::starts_with<"(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+">(remaining_source)) {
+                    } else if (const auto integer_literal_result = ctre::starts_with<integer_pattern>(remaining_source)) {
                         token_length = integer_literal_result.view().length();
                         emit_token<IntegerLiteral>(tokens, token_length);
                     } else {
