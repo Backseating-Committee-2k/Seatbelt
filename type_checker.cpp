@@ -206,30 +206,10 @@ namespace TypeChecker {
         const Scope* global_scope;
     };
 
-    void check(
-            const Lexer::TokenList& tokens,
-            Parser::Program& program,
-            TypeContainer& type_container,
-            const Scope& global_scope
-    ) {
+    void check(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
         auto visitor = TypeCheckerTopLevelVisitor{ &program, &type_container, &global_scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);
-        }
-        const auto find_iterator = global_scope.find("main");
-        if (find_iterator == std::cend(global_scope)) {
-            Error::error(tokens.back(), "no main function provided");
-        } else if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) {
-            assert(not function_symbol->overloads.empty());
-            if (function_symbol->overloads.size() > 1) {
-                Error::error(tokens.back(), "main function must not be overloaded");
-            } else if (function_symbol->overloads.front().signature != "$main") {
-                Error::error(tokens.back(), "no main function with correct signature provided");
-            } else if (function_symbol->overloads.front().return_type != type_container.from_data_type(std::make_unique<ConcreteType>("Void", false))) {
-                Error::error(tokens.back(), "main function must return Void");
-            }
-        } else {
-            Error::error(tokens.back(), "no main function provided");
         }
     }
 }// namespace TypeChecker

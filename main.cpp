@@ -6,6 +6,7 @@
 #include "type_container.hpp"
 #include <argh.h>
 #include <filesystem>
+#include <fmt/core.h>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -36,6 +37,34 @@ void write_to_file(const std::string_view contents, const std::string_view filen
     stream << contents;
 }
 
+void check_main_function(const SourceCode& source_code, Scope& global_scope, TypeContainer& type_container) {
+    const auto error = [source_code](const std::string_view message) {
+        fmt::print(stderr, "{}:1:1: {}\n", source_code.filename, message);
+        exit(EXIT_FAILURE);
+    };
+    const auto find_main_iterator = global_scope.find("main");
+    const auto main_symbol_found = (find_main_iterator != std::cend(global_scope));
+    if (not main_symbol_found) {
+        error("no main function provided");
+    }
+    const auto main_symbol = std::get_if<FunctionSymbol>(&find_main_iterator->second);
+    const auto main_function_found = (main_symbol != nullptr);
+    if (not main_function_found) {
+        error("no main function provided");
+    }
+    const auto exactly_one_main_function = (main_symbol->overloads.size() == 1);
+    if (not exactly_one_main_function) {
+        error("main function must not be overloaded");
+    }
+    const auto expected_main_function_return_type =
+            type_container.from_data_type(std::make_unique<ConcreteType>("Void", false));
+    const auto main_function_has_correct_signature =
+            (main_symbol->overloads.front().signature == "$main" and
+             main_symbol->overloads.front().return_type == expected_main_function_return_type);
+    if (not main_function_has_correct_signature) {
+        error("main function must not take any parameters and must return Void");
+    }
+}
 int main(int argc, char** argv) {
     using namespace Lexer::Tokens;
 
@@ -45,13 +74,16 @@ int main(int argc, char** argv) {
 
     const auto [filename, source] = read_source_code(command_line_parser);
     const auto source_code = SourceCode{ .filename{ filename }, .text{ source } };
+    auto program = Parser::Program{};
     const auto tokens = Lexer::tokenize(source_code);
-    auto program = Parser::parse(tokens);
+    program = Parser::parse(tokens);
 
     auto global_scope = Scope{ nullptr };
     auto type_container = TypeContainer{};
     ScopeGenerator::generate(program, type_container, global_scope);
-    TypeChecker::check(tokens, program, type_container, global_scope);
+    TypeChecker::check(program, type_container, global_scope);
+
+    check_main_function(source_code, global_scope, type_container);
 
     std::string assembly = "jump $main\n";
 
