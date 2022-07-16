@@ -135,10 +135,6 @@ namespace TypeChecker {
                     if (not overload_found) {
                         Error::error(name_token, fmt::format("no matching function overload found", identifier));
                     }
-                    fmt::print(
-                            stderr, "erasing overloads with wrong signature (total number of overloads: {})\n",
-                            possible_overloads.size()
-                    );
                     // erase all possible overloads with the wrong signature
                     possible_overloads.erase(
                             std::remove_if(
@@ -146,10 +142,6 @@ namespace TypeChecker {
                                     [&](const auto& overload) { return overload->signature != signature; }
                             ),
                             std::end(possible_overloads)
-                    );
-                    fmt::print(
-                            stderr, "erasing all other overloads except for the last one (total number is {})\n",
-                            possible_overloads.size()
                     );
                     // erase all overloads except for the last one (which is the "inner" one)
                     possible_overloads.erase(std::begin(possible_overloads), std::end(possible_overloads) - 1);

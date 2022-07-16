@@ -76,14 +76,10 @@ namespace ScopeGenerator {
             const auto& identifier_token = expression.name_tokens.back();
             const auto identifier = Error::token_location(identifier_token).view();
 
-            fmt::print(stderr, "searching for identifier {}\n", identifier);
             while (current_scope != nullptr) {
                 const auto find_iterator =
                         find_if(*current_scope, [identifier](const auto& pair) { return pair.first == identifier; });
                 const auto identifier_found = find_iterator != std::cend(*current_scope);
-                if (not identifier_found) {
-                    fmt::print(stderr, "identifier {} not found\n", identifier);
-                }
                 if (identifier_found) {
                     expression.definition_data_type = std::visit(
                             overloaded{
@@ -104,7 +100,6 @@ namespace ScopeGenerator {
                                             // that we must be at the top of the scope stack right now.
                                             for (const auto& overload : function.overloads) {
                                                 if (overload.namespace_name == remaining) {
-                                                    fmt::print(stderr, "found overload for function {}\n", identifier);
                                                     // we cannot determine the return type of the function here because
                                                     // we cannot do overload resolution as of now
                                                     possible_overloads.push_back(&overload);
@@ -212,7 +207,6 @@ namespace ScopeGenerator {
             const auto found = find_iterator != std::end(*global_scope);
             auto function_overload = FunctionOverload{ .namespace_name{ function_definition->namespace_name } };
             if (found) {
-                fmt::print(stderr, "adding new overload to existing function symbol \"{}\"\n", identifier);
                 assert(std::holds_alternative<FunctionSymbol>(find_iterator->second) &&
                        "other cases not implemented yet");
                 auto& function_symbol = std::get<FunctionSymbol>(find_iterator->second);
@@ -220,15 +214,10 @@ namespace ScopeGenerator {
                 function_definition->corresponding_symbol = &new_overload;
                 assert(std::get<FunctionSymbol>((*global_scope)[identifier]).overloads.size() > 1);
             } else {
-                fmt::print(stderr, "adding new function symbol \"{}\"\n", identifier);
                 auto new_symbol = FunctionSymbol{ .overloads{ { std::move(function_overload) } } };
                 function_definition->corresponding_symbol = &new_symbol.overloads.back();
                 (*global_scope)[identifier] = std::move(new_symbol);
             }
-            fmt::print(
-                    stderr, "there are {} functions with the name {}\n",
-                    std::get<FunctionSymbol>((*global_scope)[identifier]).overloads.size(), identifier
-            );
         }
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
