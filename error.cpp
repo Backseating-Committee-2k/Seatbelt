@@ -7,6 +7,7 @@
 #include <fmt/core.h>
 #include <iostream>
 #include <ranges>
+#include <stdexcept>
 
 [[nodiscard]] Location Error::token_location(const auto& token) {
     return std::visit([](const auto& token) { return token.location; }, token);
@@ -41,6 +42,7 @@ void print_message(const Lexer::Tokens::Token& token, const std::string_view mes
 void Error::error(const Lexer::Tokens::Token& token, const std::string_view message) {
     print_message(token, message);
     std::cerr << " error occurred here\n";
+    // throw std::runtime_error{ std::string{ message } };
     std::exit(EXIT_FAILURE);
 }
 
