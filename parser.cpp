@@ -176,7 +176,6 @@ namespace Parser {
             const auto return_type_tokens = type();
             auto body = block();
             auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
-            fmt::print(stderr, "function \"{}\" is inside namespace \"{}\"\n", name.location.view(), namespace_name);
             return std::make_unique<FunctionDefinition>(FunctionDefinition{
                     .name{ name },
                     .parameters{ std::move(parameters) },

@@ -114,39 +114,41 @@ namespace TypeChecker {
             }
 
             if (const auto name = dynamic_cast<Parser::Expressions::Name*>(expression.callee.get())) {
-                // only the last token of the qualified name is relevant for name lookup
-                const auto& name_token = name->name_tokens.back();
-                const auto identifier = Error::token_location(name_token).view();
-                auto signature = fmt::format("${}", identifier);
-                for (const auto& argument : expression.arguments) {
-                    signature += argument->data_type->mangled_name();
-                }
-                auto current_scope = expression.surrounding_scope;
-                while (current_scope != nullptr) {
-                    const auto find_iterator = current_scope->find(identifier);
-                    const auto found = find_iterator != std::cend(*current_scope);
-                    if (found) {
-                        if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) {
-                            const auto& overloads = function_symbol->overloads;
-                            const auto overload_iterator = find_if(overloads, [&](const auto& overload) {
-                                return overload.signature == signature;
-                            });
-                            const auto overload_found = overload_iterator != std::cend(overloads);
-                            if (overload_found) {
-                                const auto& overload = *overload_iterator;
-                                assert(overload.return_type != nullptr && "return type has to be set before");
-                                name->data_type = type_container->from_data_type(
-                                        std::make_unique<FunctionPointerType>(signature, false)
-                                );
-                            } else {
-                                Error::error(name_token, "no matching function overload found");
-                            }
-                        } else {
-                            // TODO: delete this error and check (later) if this is a function pointer
-                            Error::error(name_token, fmt::format("the value of \"{}\" is not callable", identifier));
+                if (name->possible_overloads.has_value()) {
+                    auto& possible_overloads = name->possible_overloads.value();
+                    const auto& name_token = name->name_tokens.back();
+                    const auto identifier = Error::token_location(name_token).view();
+                    auto signature = fmt::format("${}", identifier);
+                    for (const auto& argument : expression.arguments) {
+                        signature += argument->data_type->mangled_name();
+                    }
+                    bool overload_found = false;
+                    for (const auto& overload : possible_overloads) {
+                        if (overload->signature == signature) {
+                            assert(overload->return_type != nullptr && "return type has to be set before");
+                            name->data_type = type_container->from_data_type(
+                                    std::make_unique<FunctionPointerType>(signature, false)
+                            );
+                            overload_found = true;
                         }
                     }
-                    current_scope = current_scope->surrounding_scope;
+                    if (not overload_found) {
+                        Error::error(name_token, fmt::format("no matching function overload found", identifier));
+                    }
+                    // erase all possible overloads with the wrong signature
+                    possible_overloads.erase(
+                            std::remove_if(
+                                    std::begin(possible_overloads), std::end(possible_overloads),
+                                    [&](const auto& overload) { return overload->signature != signature; }
+                            ),
+                            std::end(possible_overloads)
+                    );
+                    // erase all overloads except for the last one (which is the "inner" one)
+                    possible_overloads.erase(std::begin(possible_overloads), std::end(possible_overloads) - 1);
+                    assert(possible_overloads.size() == 1);
+                } else {
+                    // this is a function pointer
+                    assert(false && "not implemented");
                 }
             }
         }
@@ -197,23 +199,32 @@ namespace TypeChecker {
             const auto identifier = function_definition->name.location.view();
 
             const auto find_iterator = global_scope->find(identifier);
-            const auto found = find_iterator != std::cend(*global_scope);
-            if (found) {
-                if (const auto function_symbol = std::get_if<FunctionSymbol>(&find_iterator->second)) {
-                    const auto& overloads = function_symbol->overloads;
-                    const auto duplicate_signature = find_if(overloads, [&](const auto& overload) {
-                                                         return overload.signature == signature;
-                                                     }) != std::cend(overloads);
-                    if (duplicate_signature) {
+            const auto found = (find_iterator != std::cend(*global_scope));
+            assert(found && "scope generator should have put the needed symbol into scope or throw an error");
+            const auto& found_symbol = find_iterator->second;
+            assert(std::holds_alternative<FunctionSymbol>(found_symbol));
+            const auto& function_symbol = std::get<FunctionSymbol>(found_symbol);
+            const auto& overloads = function_symbol.overloads;
+
+            for (const auto& overload : overloads) {
+                const auto duplicate_signature = (overload.signature == signature);
+                if (duplicate_signature) {
+                    const auto same_namespace = (overload.namespace_name == function_definition->namespace_name);
+                    if (same_namespace) {
                         Error::error(
                                 function_definition->name,
                                 fmt::format("function overload for \"{}\" with ambiguous signature", identifier)
                         );
                     }
-                } else {
-                    Error::error(function_definition->name, fmt::format("redefinition of \"{}\"", identifier));
                 }
             }
+
+            /*const auto find_signature_iterator =
+                    find_if(overloads, [&](const auto& overload) { return overload.signature == signature; });
+            const auto duplicate_signature = (find_signature_iterator != std::cend(overloads));
+            fmt::print(stderr, "duplicate signature found for {}? {}\n", identifier, duplicate_signature);
+            fmt::print(stderr, "there are {} functions called {}\n", overloads.size(), identifier);*/
+
 
             function_definition->corresponding_symbol->signature = std::move(signature);
 

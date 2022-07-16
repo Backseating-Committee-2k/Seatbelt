@@ -156,6 +156,7 @@ namespace Parser {
 
             std::span<const Lexer::Tokens::Token> name_tokens;
             const DataType* definition_data_type{ nullptr };
+            std::optional<std::vector<const FunctionOverload*>> possible_overloads{};
         };
 
         struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {

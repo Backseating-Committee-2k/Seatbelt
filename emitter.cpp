@@ -70,11 +70,11 @@ namespace Emitter {
 
         void visit(Name& expression) override {
             assert(expression.data_type && "data type must be known at this point");
-            if (const auto function_pointer_type = dynamic_cast<const FunctionPointerType*>(expression.data_type)) {
-                const auto mangled_name = get_namespace_qualifier(expression) + function_pointer_type->signature;
-
-                fmt::print(stderr, "function {} has mangled name {}\n", function_pointer_type->signature, mangled_name);
-
+            const auto is_function = expression.possible_overloads.has_value();
+            if (is_function) {
+                assert(expression.possible_overloads.value().size() == 1);
+                const auto& overload = expression.possible_overloads.value().front();
+                const auto mangled_name = fmt::format("{}{}", overload->namespace_name, overload->signature);
                 emit(fmt::format("copy {}, R1", mangled_name), "get address of label");
                 emit("push R1", "push address of label onto stack");
                 return;
