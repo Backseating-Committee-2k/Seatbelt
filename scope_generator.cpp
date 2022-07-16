@@ -97,6 +97,7 @@ namespace ScopeGenerator {
                                         // do not know the function signature), but the function can only be a valid choice
                                         // if it is within the correct namespace
                                         auto remaining_namespaces = remaining.empty() ? 0 : count(remaining, '%') + 1;
+                                        const auto was_qualified_name = (remaining_namespaces > 0);
                                         auto possible_overloads = std::vector<const FunctionOverload*>{};
                                         while (true) {
                                             // Function definitions are only allowed in the global scope. That means
@@ -108,6 +109,12 @@ namespace ScopeGenerator {
                                                     // we cannot do overload resolution as of now
                                                     possible_overloads.push_back(&overload);
                                                 }
+                                            }
+
+                                            // if the name is a qualified name (i.e. with specified namespace) it is
+                                            // not valid to make a lookup in the outer namespaces
+                                            if (was_qualified_name) {
+                                                break;
                                             }
 
                                             if (remaining_namespaces == 0) {
