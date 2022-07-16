@@ -4,6 +4,7 @@
 
 #include "parser.hpp"
 #include "error.hpp"
+#include "namespace.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <cassert>
@@ -174,7 +175,7 @@ namespace Parser {
             consume<Colon>("expected \":\"");
             const auto return_type_tokens = type();
             auto body = block();
-            auto namespace_name = fmt::format("{}", fmt::join(m_namespaces_stack, "%"));
+            auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
             fmt::print(stderr, "function \"{}\" is inside namespace \"{}\"\n", name.location.view(), namespace_name);
             return std::make_unique<FunctionDefinition>(FunctionDefinition{
                     .name{ name },
@@ -320,7 +321,7 @@ namespace Parser {
     private:
         usize m_index{ 0 };
         const Lexer::TokenList* m_tokens;
-        std::vector<std::string> m_namespaces_stack{};
+        NamespacesStack m_namespaces_stack{};
     };
 
     [[nodiscard]] Program parse(const Lexer::TokenList& tokens) {

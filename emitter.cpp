@@ -4,6 +4,7 @@
 
 #include "emitter.hpp"
 #include "error.hpp"
+#include "namespace.hpp"
 #include "parser.hpp"
 #include "types.hpp"
 #include <algorithm>
@@ -16,18 +17,6 @@ namespace Emitter {
     using namespace Parser::Statements;
     using namespace Parser::Expressions;
 
-    [[nodiscard]] static std::string get_qualified_name(const Name& expression) {
-        auto qualified_name = std::string{ expression.surrounding_scope->surrounding_namespace };
-        assert(not expression.name_tokens.empty());
-        for (usize i = 0; i < expression.name_tokens.size() - 1; i += 2) {
-            const auto& name = std::get<Lexer::Tokens::Identifier>(expression.name_tokens[i]);
-            if (i > 0) {
-                qualified_name += "%";
-            }
-            qualified_name += name.location.view();
-        }
-        return qualified_name;
-    }
 
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
         struct BinaryOperatorEmitter {
@@ -82,7 +71,7 @@ namespace Emitter {
         void visit(Name& expression) override {
             assert(expression.data_type && "data type must be known at this point");
             if (const auto function_pointer_type = dynamic_cast<const FunctionPointerType*>(expression.data_type)) {
-                const auto mangled_name = get_qualified_name(expression) + function_pointer_type->signature;
+                const auto mangled_name = get_namespace_qualifier(expression) + function_pointer_type->signature;
 
                 fmt::print(stderr, "function {} has mangled name {}\n", function_pointer_type->signature, mangled_name);
 

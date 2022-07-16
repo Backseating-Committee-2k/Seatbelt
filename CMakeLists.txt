@@ -66,6 +66,8 @@ add_executable(Seatbelt
         type_container.hpp
         parameter_list.hpp
         scope.cpp
+        namespace.hpp
+        namespace.cpp
         )
 
 target_link_libraries(Seatbelt fmt ctre argh)

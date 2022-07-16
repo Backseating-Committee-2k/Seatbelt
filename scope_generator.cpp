@@ -4,11 +4,13 @@
 
 #include "scope_generator.hpp"
 #include "error.hpp"
+#include "namespace.hpp"
 #include "parser.hpp"
 #include "type_checker.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <fmt/core.h>
+#include <fmt/format.h>
 #include <ranges>
 
 namespace ScopeGenerator {
@@ -60,18 +62,18 @@ namespace ScopeGenerator {
         }
 
         void visit(Parser::Expressions::Name& expression) override {
+            using std::ranges::find_if, Lexer::Tokens::Identifier;
             expression.surrounding_scope = scope;
             const Scope* current_scope = expression.surrounding_scope;
+            const auto namespace_qualifier = get_namespace_qualifier(expression);
 
             // only the last token of the qualified name is relevant for lookup
             const auto& identifier_token = expression.name_tokens.back();
             const auto identifier = Error::token_location(identifier_token).view();
 
             while (current_scope != nullptr) {
-                const auto find_iterator = std::find_if(
-                        std::cbegin(*current_scope), std::cend(*current_scope),
-                        [identifier](const auto& pair) { return pair.first == identifier; }
-                );
+                const auto find_iterator =
+                        find_if(*current_scope, [identifier](const auto& pair) { return pair.first == identifier; });
                 const auto identifier_found = find_iterator != std::cend(*current_scope);
                 if (identifier_found) {
                     struct {
@@ -80,11 +82,31 @@ namespace ScopeGenerator {
                         }
 
                         const DataType* operator()(const FunctionSymbol& function) {
+                            // Function definitions are only allowed in the global scope. That means
+                            // that we must be at the top of the scope stack right now.
+                            const auto overload_result = find_if(function.overloads, [&](const auto& overload) {
+                                return overload.namespace_name == namespace_qualifier;
+                            });
+                            const auto overload_found = (overload_result != std::cend(function.overloads));
+                            if (not overload_found) {
+                                // We *did* find a function symbol with the correct function name (even though we
+                                // do not know the function signature), but the function can only be a valid choice
+                                // if it is in the correct namespace.
+                                Error::error(
+                                        identifier_token,
+                                        fmt::format("no function named \"{}\" in the current namespace", identifier)
+                                );
+                            }
+
                             // we cannot determine the return type of the function here because
                             // we cannot do overload resolution as of now
                             return nullptr;
                         }
-                    } symbol_visitor;
+
+                        const std::string& namespace_qualifier;
+                        const Lexer::Tokens::Token& identifier_token;
+                        const std::string_view& identifier;
+                    } symbol_visitor{ namespace_qualifier, identifier_token, identifier };
 
                     expression.definition_data_type = std::visit(symbol_visitor, find_iterator->second);
                     return;
@@ -141,7 +163,7 @@ namespace ScopeGenerator {
             auto identifier = function_definition->name.location.view();
             auto find_iterator = find_if(*global_scope, [&](const auto& pair) { return pair.first == identifier; });
             const auto found = find_iterator != std::end(*global_scope);
-            auto function_overload = FunctionOverload{};
+            auto function_overload = FunctionOverload{ .namespace_name{ function_definition->namespace_name } };
             if (found) {
                 assert(std::holds_alternative<FunctionSymbol>(find_iterator->second) &&
                        "other cases not implemented yet");

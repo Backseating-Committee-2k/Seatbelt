@@ -22,6 +22,7 @@ struct FunctionOverload {
     std::string signature{};
     const ParameterList* parameters{ nullptr };
     const DataType* return_type{ nullptr };
+    std::string_view namespace_name{};
 };
 
 struct FunctionSymbol {
