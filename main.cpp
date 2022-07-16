@@ -1,31 +1,37 @@
 #include "emitter.hpp"
+#include "error.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "scope_generator.hpp"
 #include "type_checker.hpp"
 #include "type_container.hpp"
+#include <algorithm>
 #include <argh.h>
 #include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
 #include <iostream>
+#include <ranges>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 [[nodiscard]] std::string read_whole_stream(std::istream& stream) {
     return { std::istreambuf_iterator<char>(stream), {} };
 }
 
-[[nodiscard]] std::tuple<std::string, std::string> read_source_code(argh::parser& command_line_parser) {
+[[nodiscard]] std::pair<std::string, std::string> read_source_code(argh::parser& command_line_parser) {
     const usize num_arguments = command_line_parser.size();
     if (num_arguments < 2) {
-        return std::tuple{ "<stdin>", read_whole_stream(std::cin) };
+        return { "<stdin>", read_whole_stream(std::cin) };
     } else if (num_arguments == 2) {
         if (!std::filesystem::exists(command_line_parser[1])) {
             std::cerr << "file does not exist (" << command_line_parser[1] << ")\n";
             std::exit(EXIT_FAILURE);
         }
         std::ifstream stream{ command_line_parser[1], std::ios::in };
-        return std::tuple{ command_line_parser[1], read_whole_stream(stream) };
+        const auto absolute_path = std::filesystem::current_path() / command_line_parser[1];
+        return { absolute_path.string(), read_whole_stream(stream) };
     } else {
         std::cerr << "more than one argument is not supported as of yet\n";
         std::exit(EXIT_FAILURE);
@@ -65,6 +71,47 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
         error("main function must not take any parameters and must return Void");
     }
 }
+
+enum class ImportStatus {
+    Imported,
+    NotImported,
+};
+
+struct ImportTask {
+    ImportStatus status;
+    std::optional<Lexer::Tokens::Token> token;
+};
+
+using ImportsMap = std::unordered_map<std::string, ImportTask>;
+
+std::unordered_map<std::string, Lexer::Tokens::Token>
+collect_imports(const Parser::Program& program, const std::filesystem::path& base_directory) {
+    using std::ranges::for_each;
+    auto imports = std::unordered_map<std::string, Lexer::Tokens::Token>{};
+    for_each(program, [&base_directory, &imports](const auto& top_level_statement) {
+        if (const auto import_statement = std::get_if<std::unique_ptr<Parser::ImportStatement>>(&top_level_statement)) {
+            auto path = base_directory;
+            for (const auto& token : (*import_statement)->import_path_tokens) {
+                if (const auto& identifier = std::get_if<Lexer::Tokens::Identifier>(&token)) {
+                    path = path / identifier->location.view();
+                } else if (not std::holds_alternative<Lexer::Tokens::Dot>(token)) {
+                    assert(false and "unreachable");
+                }
+            }
+            path += ".bs";
+
+            const auto path_string = path.string();
+            const auto last_token = (*import_statement)->import_path_tokens.back();
+            if (imports.contains(path_string)) {
+                Error::warning(last_token, "duplicate import");
+            } else {
+                imports[path_string] = last_token;
+            }
+        }
+    });
+    return imports;
+}
+
 int main(int argc, char** argv) {
     using namespace Lexer::Tokens;
 
@@ -72,18 +119,133 @@ int main(int argc, char** argv) {
     command_line_parser.add_params({ "-o", "--output" });
     command_line_parser.parse(argc, argv);
 
-    const auto [filename, source] = read_source_code(command_line_parser);
-    const auto source_code = SourceCode{ .filename{ filename }, .text{ source } };
+    auto source_files = std::vector<std::pair<std::string, std::string>>{};
+    auto token_lists = std::vector<Lexer::TokenList>{};
+    /*source_files.push_back(read_source_code(command_line_parser));
+    token_lists.push_back(Lexer::tokenize(SourceCode{
+            .filename{ source_files.front().first },
+            .text{ source_files.front().second },
+    }));
+    auto program = Parser::parse(token_lists.back());*/
+
+    auto imports = ImportsMap{};
+    imports[""] = ImportTask{
+        .status{ ImportStatus::NotImported },
+        .token{},
+    };
+
     auto program = Parser::Program{};
-    const auto tokens = Lexer::tokenize(source_code);
-    program = Parser::parse(tokens);
+
+    using std::ranges::find_if;
+    while (true) {
+        const auto find_iterator =
+                find_if(imports, [](const auto& pair) { return pair.second.status == ImportStatus::NotImported; });
+        const auto found = (find_iterator != std::cend(imports));
+        if (not found) {
+            break;
+        }
+
+        const auto& path_string = find_iterator->first;
+        auto& import_task = find_iterator->second;
+
+        const auto is_main_file = path_string.empty();
+        if (is_main_file) {
+            source_files.push_back(read_source_code(command_line_parser));
+        } else {
+            const auto path = std::filesystem::path{ path_string };
+            if (not exists(path)) {
+                Error::error(import_task.token.value(), fmt::format("imported file not found: \"{}\"", path_string));
+            }
+            auto input_stream = std::ifstream{ path };
+            if (not input_stream) {
+                fmt::print(stderr, "unable to open file \"{}\"\n", path_string);
+                std::exit(EXIT_FAILURE);
+            }
+            source_files.emplace_back(path_string, read_whole_stream(input_stream));
+        }
+
+        const auto& current_source_file = source_files.back();
+
+        auto base_directory =
+                is_main_file ? std::filesystem::current_path() : std::filesystem::path{ path_string }.remove_filename();
+
+        const auto& current_token_list = token_lists.emplace_back(Lexer::tokenize(SourceCode{
+                .filename{ current_source_file.first },
+                .text{ current_source_file.second },
+        }));
+        auto current_program = Parser::parse(current_token_list);
+
+        if (is_main_file) {
+            imports.erase("");
+            imports[current_source_file.first] = ImportTask{ .status = ImportStatus::Imported, .token{} };
+        }
+
+        const auto current_imports = collect_imports(current_program, base_directory);
+        for (const auto& current_import : current_imports) {
+            if (imports.contains(current_import.first)) {
+                if (current_import.first == current_source_file.first) {
+                    Error::warning(current_import.second, "self-import has no effect");
+                }
+                continue;
+            }
+            imports[current_import.first] = ImportTask{
+                .status{ ImportStatus::NotImported },
+                .token{ current_import.second },
+            };
+        }
+
+        program.reserve(program.size() + current_program.size());
+        for (auto& top_level_statement : current_program) {
+            program.push_back(std::move(top_level_statement));
+        }
+
+        if (not is_main_file) {
+            import_task.status = ImportStatus::Imported;
+        }
+    }
+
+    /*auto current_path = std::filesystem::current_path();
+    auto current_imports = collect_imports(program, current_path);
+    for (auto& [path_string, token] : current_imports) {
+        if (not imports.contains(path_string)) {
+            imports[path_string] = ImportTask{
+                .status{ ImportStatus::NotImported },
+                .token{ token },
+            };
+        }
+    }
+
+    for (auto& [path_string, import_task] : imports) {
+        if (import_task.status == ImportStatus::NotImported) {
+            const auto path = std::filesystem::path{ path_string };
+            if (not exists(path)) {
+                Error::error(import_task.token, fmt::format("imported file not found: \"{}\"", path_string));
+            }
+            auto input_stream = std::ifstream{ path };
+            auto file_contents = read_whole_stream(input_stream);
+            source_files.emplace_back(path_string, std::move(file_contents));
+            const auto source_code = SourceCode{
+                .filename{ source_files.back().first },
+                .text{ source_files.back().second },
+            };
+            token_lists.push_back(Lexer::tokenize(source_code));
+            auto current_program = Parser::parse(token_lists.back());
+            fmt::print(stderr, "parsed file \"{}\"\n", path_string);
+        }
+    }*/
 
     auto global_scope = Scope{ nullptr };
     auto type_container = TypeContainer{};
     ScopeGenerator::generate(program, type_container, global_scope);
     TypeChecker::check(program, type_container, global_scope);
 
-    check_main_function(source_code, global_scope, type_container);
+    check_main_function(
+            SourceCode{
+                    .filename{ source_files.front().first },
+                    .text{ source_files.front().second },
+            },
+            global_scope, type_container
+    );
 
     std::string assembly = "jump $main\n";
 

@@ -67,9 +67,8 @@ namespace ScopeGenerator {
                         std::cbegin(*current_scope), std::cend(*current_scope),
                         [identifier](const auto& pair) { return pair.first == identifier; }
                 );
-                if (find_iterator != std::cend(*current_scope)) {
-                    // identifier found => can be used here
-
+                const auto identifier_found = find_iterator != std::cend(*current_scope);
+                if (identifier_found) {
                     struct {
                         const DataType* operator()(const VariableSymbol& variable) {
                             return variable.data_type;
@@ -87,7 +86,8 @@ namespace ScopeGenerator {
                 }
                 current_scope = current_scope->surrounding_scope;
             }
-            Error::error(expression.name, fmt::format(R"(use of undeclared identifier "{}")", identifier));
+            // at this point it is still possible that the identifier refers to a function
+            // which we haven't seen yet, so this must not be an error
         }
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {

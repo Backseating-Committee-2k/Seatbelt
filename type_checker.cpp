@@ -161,6 +161,27 @@ namespace TypeChecker {
               global_scope{ global_scope } { }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
+            // the actual signature of the function must have been visited before, we now
+            // only visit the body
+            auto visitor = TypeCheckerVisitor{ type_container };
+            for (const auto& statement : function_definition->body.statements) {
+                statement->accept(visitor);
+            }
+        }
+
+        void operator()(std::unique_ptr<Parser::ImportStatement>& import_statement) { }
+
+        const Parser::Program* program;
+        TypeContainer* type_container;
+        const Scope* global_scope;
+    };
+
+    struct FunctionDefinitionVisitor {
+        FunctionDefinitionVisitor(TypeContainer* type_container, const Scope* global_scope)
+            : type_container{ type_container },
+              global_scope{ global_scope } { }
+
+        void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using std::ranges::find_if;
 
             auto signature = fmt::format("${}", function_definition->name.location.view());
@@ -195,20 +216,27 @@ namespace TypeChecker {
             function_definition->return_type = type_container->from_tokens(function_definition->return_type_tokens);
             function_definition->corresponding_symbol->return_type = function_definition->return_type;
 
-            auto visitor = TypeCheckerVisitor{ type_container };
-            for (const auto& statement : function_definition->body.statements) {
-                statement->accept(visitor);
-            }
+            // the body of the function is not recursively visited here since we have to first visit
+            // all function signatures before visiting the bodies
         }
 
-        void operator()(std::unique_ptr<Parser::ImportStatement>& import_statement) { }
+        void operator()(auto&) { }
 
-        const Parser::Program* program;
         TypeContainer* type_container;
         const Scope* global_scope;
     };
 
+    void
+    visit_function_definitions(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
+        auto visitor = FunctionDefinitionVisitor{ &type_container, &global_scope };
+        for (auto& top_level_statement : program) {
+            std::visit(visitor, top_level_statement);
+        }
+    }
+
     void check(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
+        visit_function_definitions(program, type_container, global_scope);
+
         auto visitor = TypeCheckerTopLevelVisitor{ &program, &type_container, &global_scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);

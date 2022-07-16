@@ -135,8 +135,8 @@ namespace Parser {
             while (maybe_consume<Dot>()) {
                 consume<Identifier>("expected identifier");
             }
-            consume<Semicolon>("expected \";\"");
             const usize path_end = m_index;
+            consume<Semicolon>("expected \";\"");
             return std::make_unique<ImportStatement>(ImportStatement{ .import_path_tokens{
                     std::span{ std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_start),
                                std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_end) } } });
