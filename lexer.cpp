@@ -94,7 +94,12 @@ public:
                     emit_single_char_token<RightCurlyBracket>(tokens);
                     break;
                 case ':':
-                    emit_single_char_token<Colon>(tokens);
+                    if (peek() == ':') {
+                        token_length = 2;
+                        emit_token<DoubleColon>(tokens, token_length);
+                    } else {
+                        emit_single_char_token<Colon>(tokens);
+                    }
                     break;
                 case ',':
                     emit_single_char_token<Comma>(tokens);
@@ -109,8 +114,8 @@ public:
                     }
                     std::string_view remaining_source = m_source_code.text.substr(m_index);
 
-                    static constexpr const char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
-                    static constexpr const char integer_pattern[] =
+                    static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
+                    static constexpr char integer_pattern[] =
                             "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
 
                     if (const auto identifier_result = ctre::starts_with<identifier_pattern>(remaining_source)) {
@@ -125,6 +130,8 @@ public:
                             emit_token<Let>(tokens, token_length);
                         } else if (identifier_result.view() == "bsm") {
                             token_length = inline_assembly(tokens);
+                        } else if (identifier_result.view() == "namespace") {
+                            emit_token<Namespace>(tokens, token_length);
                         } else {
                             emit_token<Identifier>(tokens, token_length);
                         }

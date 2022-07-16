@@ -31,11 +31,13 @@ struct FunctionSymbol {
 using SymbolDescription = std::variant<VariableSymbol, FunctionSymbol>;
 
 struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
-    explicit Scope(const Scope* surrounding_scope)
+    explicit Scope(const Scope* surrounding_scope, std::string_view surrounding_namespace)
         : std::unordered_map<std::string_view, SymbolDescription>::unordered_map{},
-          surrounding_scope{ surrounding_scope } { }
+          surrounding_scope{ surrounding_scope },
+          surrounding_namespace{ surrounding_namespace } { }
 
     const Scope* surrounding_scope;
+    std::string_view surrounding_namespace;
 };
 
 [[nodiscard]] const SymbolDescription* scope_lookup(const Scope* scope, std::string_view identifier);

@@ -152,9 +152,9 @@ namespace Parser {
         };
 
         struct Name : public ExpressionAcceptor<Name> {
-            explicit Name(Lexer::Tokens::Identifier name) : name{ name } { }
+            explicit Name(std::span<const Lexer::Tokens::Token> name_tokens) : name_tokens{ name_tokens } { }
 
-            Lexer::Tokens::Identifier name;
+            std::span<const Lexer::Tokens::Token> name_tokens;
             const DataType* definition_data_type{ nullptr };
         };
 
@@ -187,6 +187,7 @@ namespace Parser {
         const DataType* return_type{ nullptr };
         Statements::Block body;
         FunctionOverload* corresponding_symbol{ nullptr };
+        std::string namespace_name{};
     };
 
     struct ImportStatement {

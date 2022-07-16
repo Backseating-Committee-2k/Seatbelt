@@ -44,7 +44,7 @@ namespace TypeChecker {
             }
         }
 
-        void visit(Parser::Statements::InlineAssembly& statement) override { }
+        void visit(Parser::Statements::InlineAssembly&) override { }
 
         void visit(Parser::Statements::ExpressionStatement& statement) override {
             statement.expression->accept(*this);
@@ -62,16 +62,18 @@ namespace TypeChecker {
             if (is_variable) {
                 expression.data_type = expression.definition_data_type;
             } else {
-                const auto identifier = expression.name.location.view();
+                // only the last token of a qualified name is relevant for lookup
+                const auto& name_token = expression.name_tokens.back();
+                const auto identifier = Error::token_location(name_token).view();
                 const auto symbol = scope_lookup(expression.surrounding_scope, identifier);
                 if (symbol == nullptr) {
-                    Error::error(expression.name, fmt::format("use of undeclared identifier \"{}\"", identifier));
+                    Error::error(name_token, fmt::format("use of undeclared identifier \"{}\"", identifier));
                 }
                 if (const auto function_symbol = std::get_if<FunctionSymbol>(symbol)) {
                     const auto& overloads = function_symbol->overloads;
                     assert(not overloads.empty() && "there shall never be a function with zero overloads");
                     if (overloads.size() > 1) {
-                        Error::error(expression.name, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
+                        Error::error(name_token, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
                     }
                     assert(overloads.size() == 1);
                     expression.data_type = type_container->from_data_type(
@@ -112,7 +114,9 @@ namespace TypeChecker {
             }
 
             if (const auto name = dynamic_cast<Parser::Expressions::Name*>(expression.callee.get())) {
-                const auto identifier = name->name.location.view();
+                // only the last token of the qualified name is relevant for name lookup
+                const auto& name_token = name->name_tokens.back();
+                const auto identifier = Error::token_location(name_token).view();
                 auto signature = fmt::format("${}", identifier);
                 for (const auto& argument : expression.arguments) {
                     signature += argument->data_type->mangled_name();
@@ -135,11 +139,11 @@ namespace TypeChecker {
                                         std::make_unique<FunctionPointerType>(signature, false)
                                 );
                             } else {
-                                Error::error(name->name, "no matching function overload found");
+                                Error::error(name_token, "no matching function overload found");
                             }
                         } else {
                             // TODO: delete this error and check (later) if this is a function pointer
-                            Error::error(name->name, fmt::format("the value of \"{}\" is not callable", identifier));
+                            Error::error(name_token, fmt::format("the value of \"{}\" is not callable", identifier));
                         }
                     }
                     current_scope = current_scope->surrounding_scope;

@@ -16,6 +16,19 @@ namespace Emitter {
     using namespace Parser::Statements;
     using namespace Parser::Expressions;
 
+    [[nodiscard]] static std::string get_qualified_name(const Name& expression) {
+        auto qualified_name = std::string{ expression.surrounding_scope->surrounding_namespace };
+        assert(not expression.name_tokens.empty());
+        for (usize i = 0; i < expression.name_tokens.size() - 1; i += 2) {
+            const auto& name = std::get<Lexer::Tokens::Identifier>(expression.name_tokens[i]);
+            if (i > 0) {
+                qualified_name += "%";
+            }
+            qualified_name += name.location.view();
+        }
+        return qualified_name;
+    }
+
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
         struct BinaryOperatorEmitter {
             void operator()(const Lexer::Tokens::Plus&) const {
@@ -69,15 +82,25 @@ namespace Emitter {
         void visit(Name& expression) override {
             assert(expression.data_type && "data type must be known at this point");
             if (const auto function_pointer_type = dynamic_cast<const FunctionPointerType*>(expression.data_type)) {
-                emit(fmt::format("copy {}, R1", function_pointer_type->signature), "get address of label");
+                const auto mangled_name = get_qualified_name(expression) + function_pointer_type->signature;
+
+                fmt::print(stderr, "function {} has mangled name {}\n", function_pointer_type->signature, mangled_name);
+
+                emit(fmt::format("copy {}, R1", mangled_name), "get address of label");
                 emit("push R1", "push address of label onto stack");
                 return;
             }
 
+            const auto& variable_token = expression.name_tokens.back();
+            const auto variable_name = Error::token_location(variable_token).view();
+
+            if (expression.name_tokens.size() != 1) {
+                Error::error(expression.name_tokens.back(), "qualified name not allowed here");
+            }
             std::optional<usize> offset;
             const Scope* current_scope = expression.surrounding_scope;
             while (current_scope != nullptr) {
-                const auto find_iterator = current_scope->find(expression.name.location.view());
+                const auto find_iterator = current_scope->find(variable_name);
                 if (find_iterator != current_scope->end()) {
                     offset = std::get<VariableSymbol>(find_iterator->second).offset;
                     break;
@@ -85,16 +108,12 @@ namespace Emitter {
                 current_scope = current_scope->surrounding_scope;
             }
             if (not offset.has_value()) {
-                Error::error(
-                        expression.name,
-                        fmt::format("use of undeclared identifier \"{}\"", expression.name.location.view())
-                );
+                Error::error(variable_token, fmt::format("use of undeclared identifier \"{}\"", variable_name));
             }
             emit(fmt::format("add R0, {}, R1", offset.value()),
-                 fmt::format("calculate address of variable \"{}\"", expression.name.location.view()));
-            emit("copy *R1, R2", fmt::format("load value of variable \"{}\" into R2", expression.name.location.view()));
-            emit("push R2",
-                 fmt::format("push value of variable \"{}\" onto the stack", expression.name.location.view()));
+                 fmt::format("calculate address of variable \"{}\"", variable_name));
+            emit("copy *R1, R2", fmt::format("load value of variable \"{}\" into R2", variable_name));
+            emit("push R2", fmt::format("push value of variable \"{}\" onto the stack", variable_name));
         }
 
         void visit(BinaryOperator& expression) override {
@@ -117,6 +136,7 @@ namespace Emitter {
 
         void visit(FunctionCall& expression) override {
             expression.callee->accept(*this);// evaluate callee
+
             emit("pop R5", "get jump address");
 
             emit("copy sp, R6", "store address of return address placeholder");
@@ -177,7 +197,9 @@ namespace Emitter {
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const {
-        auto result = fmt::format("\n{}:\n", function_definition->corresponding_symbol->signature);
+        const auto mangled_name =
+                function_definition->namespace_name + function_definition->corresponding_symbol->signature;
+        auto result = fmt::format("\n{}:\n", mangled_name);
 
         const auto emit = [&result](const std::string_view instruction, const std::string_view comment = "") {
             result += fmt::format("\t{}", instruction);

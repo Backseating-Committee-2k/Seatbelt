@@ -8,12 +8,14 @@
 #include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
+#include <fmt/format.h>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace Parser {
 
@@ -24,20 +26,65 @@ namespace Parser {
         explicit ParserState(const Lexer::TokenList& tokens) : m_tokens{ &tokens } { }
 
         [[nodiscard]] Program parse() {
+            auto header = parse_header();
+            auto body = parse_body();
+            auto program = Program{};
+            program.reserve(header.size() + body.size());
+
+            for (auto& top_level_statement : header) {
+                program.push_back(std::move(top_level_statement));
+            }
+
+            for (auto& top_level_statement : body) {
+                program.push_back(std::move(top_level_statement));
+            }
+
+            return program;
+        }
+
+        [[nodiscard]] Program parse_header() {
+            auto program = Program{};
+            while (not end_of_file() and current_is<Import>()) {
+                program.push_back(import_statement());
+            }
+            return program;
+        }
+
+        [[nodiscard]] Program parse_body() {
             auto program = Program{};
             while (not end_of_file()) {
-                if (current_is<Function>()) {
+                if (current_is<Namespace>()) {
+                    auto namespace_contents = parse_namespace();
+                    program.reserve(namespace_contents.size() + program.size());
+                    for (auto& top_level_statement : namespace_contents) {
+                        program.push_back(std::move(top_level_statement));
+                    }
+                } else if (current_is<Function>()) {
                     program.push_back(function_definition());
-                } else if (current_is<Import>()) {
-                    program.push_back(import_statement());
                 } else {
-                    error("\"function\" keyword expected");
+                    break;
                 }
             }
             return program;
         }
 
     private:
+        [[nodiscard]] Program parse_namespace() {
+            assert(current_is<Namespace>());
+            advance();
+            usize count = 1;
+            m_namespaces_stack.emplace_back(consume<Identifier>("expected identifier").location.view());
+            while (maybe_consume<DoubleColon>()) {
+                m_namespaces_stack.emplace_back(consume<Identifier>("expected identifier").location.view());
+                ++count;
+            }
+            consume<LeftCurlyBracket>("expected \"{\"");
+            auto namespace_contents = parse_body();
+            m_namespaces_stack.resize(m_namespaces_stack.size() - count);
+            consume<RightCurlyBracket>("expected \"}\"");
+            return namespace_contents;
+        }
+
         [[nodiscard]] std::unique_ptr<Expression> expression() {
             return addition_or_subtraction();
         }
@@ -94,8 +141,15 @@ namespace Parser {
             } else if (auto literal_token = maybe_consume<IntegerLiteral>()) {
                 return std::make_unique<Literal>(literal_token.value());
             }
-            if (auto identifier_token = maybe_consume<Identifier>()) {
-                return std::make_unique<Name>(identifier_token.value());
+            if (current_is<Identifier>()) {
+                const usize name_start = m_index;
+                advance();
+                while (maybe_consume<DoubleColon>()) {
+                    consume<Identifier>("expected identifier");
+                }
+                const usize name_end = m_index;
+                return std::make_unique<Name>(std::span{ std::cbegin(*m_tokens) + name_start,
+                                                         std::cbegin(*m_tokens) + name_end });
             }
             error("unexpected token");
             return nullptr;
@@ -120,11 +174,15 @@ namespace Parser {
             consume<Colon>("expected \":\"");
             const auto return_type_tokens = type();
             auto body = block();
-            return std::make_unique<FunctionDefinition>(FunctionDefinition{ .name{ name },
-                                                                            .parameters{ std::move(parameters) },
-                                                                            .return_type_tokens{ return_type_tokens },
-                                                                            .return_type{},
-                                                                            .body{ std::move(body) } });
+            auto namespace_name = fmt::format("{}", fmt::join(m_namespaces_stack, "%"));
+            fmt::print(stderr, "function \"{}\" is inside namespace \"{}\"\n", name.location.view(), namespace_name);
+            return std::make_unique<FunctionDefinition>(FunctionDefinition{
+                    .name{ name },
+                    .parameters{ std::move(parameters) },
+                    .return_type_tokens{ return_type_tokens },
+                    .return_type{},
+                    .body{ std::move(body) },
+                    .namespace_name{ std::move(namespace_name) } });
         }
 
         [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {
@@ -262,6 +320,7 @@ namespace Parser {
     private:
         usize m_index{ 0 };
         const Lexer::TokenList* m_tokens;
+        std::vector<std::string> m_namespaces_stack{};
     };
 
     [[nodiscard]] Program parse(const Lexer::TokenList& tokens) {

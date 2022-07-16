@@ -204,37 +204,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    /*auto current_path = std::filesystem::current_path();
-    auto current_imports = collect_imports(program, current_path);
-    for (auto& [path_string, token] : current_imports) {
-        if (not imports.contains(path_string)) {
-            imports[path_string] = ImportTask{
-                .status{ ImportStatus::NotImported },
-                .token{ token },
-            };
-        }
-    }
-
-    for (auto& [path_string, import_task] : imports) {
-        if (import_task.status == ImportStatus::NotImported) {
-            const auto path = std::filesystem::path{ path_string };
-            if (not exists(path)) {
-                Error::error(import_task.token, fmt::format("imported file not found: \"{}\"", path_string));
-            }
-            auto input_stream = std::ifstream{ path };
-            auto file_contents = read_whole_stream(input_stream);
-            source_files.emplace_back(path_string, std::move(file_contents));
-            const auto source_code = SourceCode{
-                .filename{ source_files.back().first },
-                .text{ source_files.back().second },
-            };
-            token_lists.push_back(Lexer::tokenize(source_code));
-            auto current_program = Parser::parse(token_lists.back());
-            fmt::print(stderr, "parsed file \"{}\"\n", path_string);
-        }
-    }*/
-
-    auto global_scope = Scope{ nullptr };
+    auto global_scope = Scope{ nullptr, "" };
     auto type_container = TypeContainer{};
     ScopeGenerator::generate(program, type_container, global_scope);
     TypeChecker::check(program, type_container, global_scope);

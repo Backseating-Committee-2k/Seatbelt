@@ -22,7 +22,8 @@ namespace ScopeGenerator {
         void visit(Parser::Statements::Block& statement) override {
             for (auto& sub_statement : statement.statements) {
                 if (const auto sub_block = dynamic_cast<Parser::Statements::Block*>(sub_statement.get())) {
-                    sub_block->scope = std::make_unique<Scope>(scope);
+                    sub_block->scope =
+                            std::make_unique<Scope>(scope, statement.surrounding_scope->surrounding_namespace);
                     auto sub_visitor = ScopeGenerator{ sub_block->scope.get(), offset, type_container };
                     sub_block->accept(sub_visitor);
                     offset = sub_visitor.offset;
@@ -61,7 +62,11 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::Name& expression) override {
             expression.surrounding_scope = scope;
             const Scope* current_scope = expression.surrounding_scope;
-            const auto identifier = expression.name.location.view();
+
+            // only the last token of the qualified name is relevant for lookup
+            const auto& identifier_token = expression.name_tokens.back();
+            const auto identifier = Error::token_location(identifier_token).view();
+
             while (current_scope != nullptr) {
                 const auto find_iterator = std::find_if(
                         std::cbegin(*current_scope), std::cend(*current_scope),
@@ -119,7 +124,7 @@ namespace ScopeGenerator {
             using namespace std::string_literals;
             using std::ranges::find_if;
 
-            auto function_scope = std::make_unique<Scope>(global_scope);
+            auto function_scope = std::make_unique<Scope>(global_scope, function_definition->namespace_name);
             usize offset = 0;
             for (auto& parameter : function_definition->parameters) {
                 if (function_scope->contains(parameter.name.location.view())) {
@@ -154,7 +159,7 @@ namespace ScopeGenerator {
             function_definition->body.accept(visitor);
         }
 
-        void operator()(std::unique_ptr<Parser::ImportStatement>& function_definition) { }
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         Parser::Program* program;
         TypeContainer* type_container;
