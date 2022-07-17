@@ -71,6 +71,12 @@ namespace TypeChecker {
             }
         }
 
+        void visit(Parser::Statements::IfStatement& statement) override {
+            statement.condition->accept(*this);
+            statement.then_block.accept(*this);
+            statement.else_block.accept(*this);
+        }
+
         void visit(Parser::Statements::VariableDefinition& statement) override {
             statement.type = type_container->from_tokens(statement.type_tokens);
             statement.initial_value->accept(*this);
@@ -129,6 +135,7 @@ namespace TypeChecker {
                         Error::error(name_token, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
                     }
                     assert(overloads.size() == 1);
+                    fmt::print(stderr, "setting type of name {}\n", identifier);
                     expression.data_type = type_container->from_data_type(
                             std::make_unique<FunctionPointerType>(overloads.front().signature, false)
                     );
@@ -196,6 +203,7 @@ namespace TypeChecker {
                     // erase all overloads except for the first one (which is the "inner" one)
                     possible_overloads.erase(std::begin(possible_overloads) + 1, std::end(possible_overloads));
                     assert(possible_overloads.size() == 1);
+                    expression.data_type = possible_overloads.front()->return_type;
                 } else {
                     // this is a function pointer
                     assert(false && "not implemented");

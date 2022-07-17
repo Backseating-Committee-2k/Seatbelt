@@ -37,12 +37,14 @@ namespace Parser {
         using Expressions::Expression;
 
         struct Block;
+        struct IfStatement;
         struct VariableDefinition;
         struct InlineAssembly;
         struct ExpressionStatement;
 
         struct StatementVisitor {
             virtual void visit(Block& statement) = 0;
+            virtual void visit(IfStatement& statement) = 0;
             virtual void visit(VariableDefinition& statement) = 0;
             virtual void visit(InlineAssembly& statement) = 0;
             virtual void visit(ExpressionStatement& statement) = 0;
@@ -69,6 +71,31 @@ namespace Parser {
 
             StatementList statements;
             std::unique_ptr<Scope> scope;
+        };
+
+        struct IfStatement : public Statement {
+            IfStatement(
+                    Lexer::Tokens::If if_token,
+                    std::unique_ptr<Expression> condition,
+                    Block then_block,
+                    std::optional<Lexer::Tokens::Else> else_token,
+                    Block else_block
+            )
+                : if_token{ if_token },
+                  condition{ std::move(condition) },
+                  then_block{ std::move(then_block) },
+                  else_token{ else_token },
+                  else_block{ std::move(else_block) } { }
+
+            void accept(StatementVisitor& visitor) override {
+                visitor.visit(*this);
+            }
+
+            Lexer::Tokens::If if_token;
+            std::unique_ptr<Expression> condition;
+            Block then_block;
+            std::optional<Lexer::Tokens::Else> else_token;
+            Block else_block;
         };
 
         struct VariableDefinition : public Statement {

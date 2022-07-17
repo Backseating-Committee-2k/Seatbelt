@@ -212,7 +212,19 @@ namespace Parser {
             Statements::StatementList statements;
             consume<LeftCurlyBracket>("expected \"{\"");
             while (not end_of_file() and not current_is<RightCurlyBracket>()) {
-                if (current_is<Let>()) {
+                if (const auto if_token = maybe_consume<If>()) {
+                    auto condition = expression();
+                    auto then_block = block();
+                    auto else_block = Statements::Block{ Statements::StatementList{} };
+                    auto else_token = std::optional<Else>{};
+                    if ((else_token = maybe_consume<Else>())) {
+                        else_block = block();
+                    }
+                    statements.push_back(std::make_unique<Statements::IfStatement>(
+                            if_token.value(), std::move(condition), std::move(then_block), else_token,
+                            std::move(else_block)
+                    ));
+                } else if (current_is<Let>()) {
                     statements.push_back(variable_definition());
                 } else if (current_is<LeftCurlyBracket>()) {
                     statements.push_back(std::make_unique<Statements::Block>(block()));
@@ -225,13 +237,6 @@ namespace Parser {
                     auto expression = this->expression();
                     consume<Semicolon>("expected \";\" to complete expression statement");
                     statements.push_back(std::make_unique<Statements::ExpressionStatement>(std::move(expression)));
-                    /*Error::error(
-                            current(), fmt::format(
-                                               "unexpected token: \"{}\"",
-                                               std::visit([](auto&& token) { return token.debug_name; }, current())
-                                       )
-                    );
-                    advance();*/
                 }
             }
             consume<RightCurlyBracket>("expected \"}\"");

@@ -36,6 +36,23 @@ namespace ScopeGenerator {
             }
         }
 
+        void visit(Parser::Statements::IfStatement& statement) override {
+            statement.surrounding_scope = scope;
+            statement.condition->accept(*this);
+
+            statement.then_block.scope =
+                    std::make_unique<Scope>(scope, statement.surrounding_scope->surrounding_namespace);
+            auto then_visitor = ScopeGenerator{ statement.then_block.scope.get(), offset, type_container };
+            statement.then_block.accept(then_visitor);
+            offset = then_visitor.offset;
+
+            statement.else_block.scope =
+                    std::make_unique<Scope>(scope, statement.surrounding_scope->surrounding_namespace);
+            auto else_visitor = ScopeGenerator{ statement.else_block.scope.get(), offset, type_container };
+            statement.else_block.accept(else_visitor);
+            offset = else_visitor.offset;
+        }
+
         void visit(Parser::Statements::VariableDefinition& statement) override {
             if (scope->contains(statement.name.location.view())) {
                 Error::error(
@@ -140,7 +157,7 @@ namespace ScopeGenerator {
                 }
                 current_scope = current_scope->surrounding_scope;
             }
-            Error::error(identifier_token, "no matching function overload found");
+            Error::error(identifier_token, "use of undeclared identifier");
         }
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {

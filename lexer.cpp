@@ -151,6 +151,10 @@ public:
                             emit_token<Not>(tokens, token_length);
                         } else if (identifier_result.view() == "xor") {
                             emit_token<Xor>(tokens, token_length);
+                        } else if (identifier_result.view() == "if") {
+                            emit_token<If>(tokens, token_length);
+                        } else if (identifier_result.view() == "else") {
+                            emit_token<Else>(tokens, token_length);
                         } else {
                             emit_token<Identifier>(tokens, token_length);
                         }

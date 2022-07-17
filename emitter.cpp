@@ -101,6 +101,14 @@ namespace Emitter {
             assembly += "\n";
         }
 
+        void emit_label(const std::string_view label, const std::string_view comment) {
+            assembly += fmt::format("{}:", label);
+            if (not comment.empty()) {
+                assembly += fmt::format(" // {}", comment);
+            }
+            assembly += "\n";
+        }
+
         void visit(Integer& expression) override {
             emit(fmt::format("copy {}, R1", expression.value.location.view()), "put immediate into register");
             emit("push R1", "push immediate onto stack");
@@ -204,6 +212,22 @@ namespace Emitter {
             }
         }
 
+        void visit(IfStatement& statement) override {
+            statement.condition->accept(*this);
+            emit("pop R1", "get result of condition");
+            emit("copy 0, R2", "get constant zero");
+            emit("comp R1, R2, R3", "evaluate if condition is true");
+            const auto else_label = next_label("else");
+            const auto endif_label = next_label("endif");
+            emit(fmt::format("jump_eq R3, {}", else_label), "jump to else-block");
+            emit("", "begin of then-block");
+            statement.then_block.accept(*this);
+            emit(fmt::format("jump {}", endif_label), "jump to end of else-block");
+            emit_label(else_label, "begin of else-block");
+            statement.else_block.accept(*this);
+            emit_label(endif_label, "end of else-block");
+        }
+
         void visit(VariableDefinition& statement) override {
             using std::ranges::max_element;
 
@@ -229,6 +253,12 @@ namespace Emitter {
             statement.expression->accept(*this);
             emit("pop R1", "discard value of expression statement");
         }
+
+        [[nodiscard]] std::string next_label(const std::string_view tag) {
+            return fmt::format("${}${}", label_counter++, tag);
+        }
+
+        usize label_counter{ 0 };
     };
 
     std::string emit_statement(const Parser::Program& program, Statement& statement) {
