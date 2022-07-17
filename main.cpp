@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
     if (command_line_parser({ "-o", "--output" }) >> out_filename) {
         write_to_file(assembly, out_filename);
     } else {
-        fmt::print(assembly);
+        fmt::print("{}", assembly);
     }
 
     std::exit(EXIT_SUCCESS);
