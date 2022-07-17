@@ -162,8 +162,9 @@ int main(int argc, char** argv) {
 
         const auto& current_source_file = source_files.back();
 
-        auto base_directory =
-                is_main_file ? std::filesystem::current_path() : std::filesystem::path{ path_string }.remove_filename();
+        const auto base_directory = source_files.back().first == "<stdin>"
+                                            ? std::filesystem::current_path()
+                                            : std::filesystem::path{ current_source_file.first }.remove_filename();
 
         const auto& current_token_list = token_lists.emplace_back(Lexer::tokenize(SourceCode{
                 .filename{ current_source_file.first },
@@ -221,13 +222,9 @@ int main(int argc, char** argv) {
 
     auto out_filename = std::string{};
     if (command_line_parser({ "-o", "--output" }) >> out_filename) {
-        std::cout << "out filename is " << out_filename << "\n";
-    }
-
-    if (out_filename.empty()) {
-        std::cout << assembly;
-    } else {
         write_to_file(assembly, out_filename);
+    } else {
+        fmt::print(assembly);
     }
 
     std::exit(EXIT_SUCCESS);
