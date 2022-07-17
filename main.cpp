@@ -83,6 +83,8 @@ struct ImportTask {
 };
 
 using ImportsMap = std::unordered_map<std::string, ImportTask>;
+using SourceFileContainer = std::vector<std::pair<std::string, std::string>>;
+using TokenListsContainer = std::vector<Lexer::TokenList>;
 
 std::unordered_map<std::string, Lexer::Tokens::Token>
 collect_imports(const Parser::Program& program, const std::filesystem::path& base_directory) {
@@ -112,27 +114,25 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
     return imports;
 }
 
-int main(int argc, char** argv) {
-    using namespace Lexer::Tokens;
+[[nodiscard]] Parser::Program resolve_imports(
+        argh::parser& command_line_parser,
+        SourceFileContainer& source_files,
+        TokenListsContainer& token_lists
+) {
+    using std::ranges::find_if;
+    using Parser::concatenate_programs;
 
-    auto command_line_parser = argh::parser{};
-    command_line_parser.add_params({ "-o", "--output" });
-    command_line_parser.parse(argc, argv);
-
-    auto source_files = std::vector<std::pair<std::string, std::string>>{};
-    auto token_lists = std::vector<Lexer::TokenList>{};
-
-    auto imports = ImportsMap{};
-    // the empty string marks the main code file (which doesn't need to have a filename
-    // since it could be input from stdin)
-    imports[""] = ImportTask{
-        .status{ ImportStatus::NotImported },
-        .token{},
+    // the empty string represents the main code file
+    auto imports = ImportsMap{
+        {"",
+         ImportTask{
+         .status{ ImportStatus::NotImported },
+         .token{},
+         }},
     };
 
     auto program = Parser::Program{};
 
-    using std::ranges::find_if;
     while (true) {
         const auto find_iterator =
                 find_if(imports, [](const auto& pair) { return pair.second.status == ImportStatus::NotImported; });
@@ -200,6 +200,20 @@ int main(int argc, char** argv) {
             import_task.status = ImportStatus::Imported;
         }
     }
+    return program;
+}
+
+int main(int argc, char** argv) {
+    using namespace Lexer::Tokens;
+
+    auto command_line_parser = argh::parser{};
+    command_line_parser.add_params({ "-o", "--output" });
+    command_line_parser.parse(argc, argv);
+
+    auto source_files = SourceFileContainer{};
+    auto token_lists = TokenListsContainer{};
+
+    auto program = resolve_imports(command_line_parser, source_files, token_lists);
 
     auto global_scope = Scope{ nullptr, "" };
     auto type_container = TypeContainer{};
