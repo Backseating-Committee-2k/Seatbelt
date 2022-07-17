@@ -88,14 +88,6 @@ private:
         return m_index >= m_source_code.text.length();
     }
 
-    [[nodiscard]] char consume() {
-        return m_source_code.text[m_index++];
-    }
-
-    void skip() {
-        advance(1);
-    }
-
     void advance(usize amount) {
         m_index += amount;
     }
