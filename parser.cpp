@@ -208,22 +208,30 @@ namespace Parser {
             });
         }
 
+        [[nodiscard]] std::unique_ptr<Statements::IfStatement> if_statement() {
+            const auto if_token = consume<If>("this error should be unreachable");
+            auto condition = expression();
+            auto then_block = block();
+            auto else_block = Statements::Block{ Statements::StatementList{} };
+            auto else_token = std::optional<Else>{};
+            if ((else_token = maybe_consume<Else>())) {
+                if (current_is<If>()) {
+                    else_block.statements.push_back(if_statement());
+                } else {
+                    else_block = block();
+                }
+            }
+            return std::make_unique<Statements::IfStatement>(
+                    if_token, std::move(condition), std::move(then_block), else_token, std::move(else_block)
+            );
+        }
+
         [[nodiscard]] Statements::Block block() {
             Statements::StatementList statements;
             consume<LeftCurlyBracket>("expected \"{\"");
             while (not end_of_file() and not current_is<RightCurlyBracket>()) {
-                if (const auto if_token = maybe_consume<If>()) {
-                    auto condition = expression();
-                    auto then_block = block();
-                    auto else_block = Statements::Block{ Statements::StatementList{} };
-                    auto else_token = std::optional<Else>{};
-                    if ((else_token = maybe_consume<Else>())) {
-                        else_block = block();
-                    }
-                    statements.push_back(std::make_unique<Statements::IfStatement>(
-                            if_token.value(), std::move(condition), std::move(then_block), else_token,
-                            std::move(else_block)
-                    ));
+                if (current_is<If>()) {
+                    statements.push_back(if_statement());
                 } else if (current_is<Let>()) {
                     statements.push_back(variable_definition());
                 } else if (current_is<LeftCurlyBracket>()) {
