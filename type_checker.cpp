@@ -17,16 +17,6 @@ namespace TypeChecker {
     static constexpr std::string_view CharIdentifier{ "Char" };
     static constexpr std::string_view BoolIdentifier{ "Bool" };
 
-    template<typename T>
-    [[nodiscard]] bool is(const Lexer::Tokens::Token& token) {
-        return std::holds_alternative<T>(token);
-    }
-
-    template<typename... T>
-    [[nodiscard]] bool is_one_of(const Lexer::Tokens::Token& token) {
-        return (is<T>(token) or ...);
-    }
-
     [[nodiscard]] std::optional<std::string_view> concrete_type(const DataType* data_type) {
         if (const auto concrete = dynamic_cast<const ConcreteType*>(data_type)) {
             return concrete->name;

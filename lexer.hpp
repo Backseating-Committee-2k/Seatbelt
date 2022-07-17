@@ -44,5 +44,15 @@ namespace Lexer {
 
 }// namespace Lexer
 
+template<typename T>
+[[nodiscard]] bool is(const Lexer::Tokens::Token& token) {
+    return std::holds_alternative<T>(token);
+}
+
+template<typename... T>
+[[nodiscard]] bool is_one_of(const Lexer::Tokens::Token& token) {
+    return (is<T>(token) or ...);
+}
+
 #undef TOKEN_LIST
 #undef DEFINE_TOKEN

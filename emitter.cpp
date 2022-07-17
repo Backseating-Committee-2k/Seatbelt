@@ -4,6 +4,7 @@
 
 #include "emitter.hpp"
 #include "error.hpp"
+#include "lexer.hpp"
 #include "namespace.hpp"
 #include "parser.hpp"
 #include "types.hpp"
@@ -101,7 +102,7 @@ namespace Emitter {
             assembly += "\n";
         }
 
-        void emit_label(const std::string_view label, const std::string_view comment) {
+        void emit_label(const std::string_view label, const std::string_view comment = "") {
             assembly += fmt::format("{}:", label);
             if (not comment.empty()) {
                 assembly += fmt::format(" // {}", comment);
@@ -163,20 +164,59 @@ namespace Emitter {
         }
 
         void visit(BinaryOperator& expression) override {
+            using namespace Lexer::Tokens;
+
             expression.lhs->accept(*this);
-            expression.rhs->accept(*this);
+            if (is<And>(expression.operator_token)) {
+                emit("pop R1", fmt::format(
+                                       R"(store lhs for {}-operator in R1)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
+                const auto end_of_evaluation = next_label("end_of_short_circuiting");
+                emit(fmt::format("jump_eq R1, {}", end_of_evaluation), "skip rest of evaluation if value is false");
+                expression.rhs->accept(*this);
+                emit("pop R2", fmt::format(
+                                       R"(store rhs for {}-operator in R2)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
+                std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
+                const auto after_push = next_label("after_push");
+                emit(fmt::format("jump {}", after_push));
+                emit_label(end_of_evaluation);
+                emit("copy R1, R3", "store \"false\" as result");
+                emit_label(after_push);
+            } else if (is<Or>(expression.operator_token)) {
+                emit("pop R1", fmt::format(
+                                       R"(store lhs for {}-operator in R1)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
+                const auto end_of_evaluation = next_label("end_of_short_circuiting");
+                emit(fmt::format("jump_gt R1, {}", end_of_evaluation), "skip rest of evaluation if value is true");
+                expression.rhs->accept(*this);
+                emit("pop R2", fmt::format(
+                                       R"(store rhs for {}-operator in R2)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
+                std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
+                const auto after_push = next_label("after_push");
+                emit(fmt::format("jump {}", after_push));
+                emit_label(end_of_evaluation);
+                emit("copy R1, R3", "store \"true\" as result");
+                emit_label(after_push);
+            } else {
+                expression.rhs->accept(*this);
 
-            emit("pop R2",
-                 fmt::format(
-                         R"(store rhs for {}-operator in R2)", Error::token_location(expression.operator_token).view()
-                 ));
-            emit("pop R1",
-                 fmt::format(
-                         R"(store lhs for {}-operator in R1)", Error::token_location(expression.operator_token).view()
-                 ));
+                emit("pop R2", fmt::format(
+                                       R"(store rhs for {}-operator in R2)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
+                emit("pop R1", fmt::format(
+                                       R"(store lhs for {}-operator in R1)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
 
-            std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
-
+                std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
+            }
             emit("push R3", "push result onto stack");
         }
 
