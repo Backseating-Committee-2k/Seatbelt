@@ -9,6 +9,25 @@
 #include <fmt/core.h>
 #include <iostream>
 
+
+#define KEYWORD(keyword, type)                 \
+    if (identifier_result.view() == keyword) { \
+        emit_token<type>(tokens, length);      \
+        return length;                         \
+    }
+
+#define KEYWORDS(first_keyword, second_keyword, type)                                                   \
+    else if (identifier_result.view() == first_keyword or identifier_result.view() == second_keyword) { \
+        emit_token<type>(tokens, length);                                                               \
+        return length;                                                                                  \
+    }
+
+#define SINGLE_CHAR_TOKEN(single_char, token_type)  \
+    case single_char:                               \
+        emit_single_char_token<token_type>(tokens); \
+        break;
+
+
 class LexerState {
 public:
     explicit LexerState(SourceCode source_code) : m_source_code{ source_code } { }
@@ -22,148 +41,28 @@ public:
         while (not end_of_file()) {
             usize token_length = 1;
             switch (current()) {
-                case '.':
-                    emit_single_char_token<Dot>(tokens);
-                    break;
-                case '+':
-                    emit_single_char_token<Plus>(tokens);
-                    break;
+                SINGLE_CHAR_TOKEN('.', Dot)
+                SINGLE_CHAR_TOKEN('+', Plus)
+                SINGLE_CHAR_TOKEN('*', Asterisk)
+                SINGLE_CHAR_TOKEN('%', Percent)
+                SINGLE_CHAR_TOKEN('(', LeftParenthesis)
+                SINGLE_CHAR_TOKEN(')', RightParenthesis)
+                SINGLE_CHAR_TOKEN(';', Semicolon)
+                SINGLE_CHAR_TOKEN('{', LeftCurlyBracket)
+                SINGLE_CHAR_TOKEN('}', RightCurlyBracket)
+                SINGLE_CHAR_TOKEN(',', Comma)
+                SINGLE_CHAR_TOKEN('=', Equals)
                 case '-':
-                    if (peek() == '>') {
-                        token_length = 2;
-                        emit_token<Arrow>(tokens, token_length);
-                    } else {
-                        emit_single_char_token<Minus>(tokens);
-                    }
-                    break;
-                case '*':
-                    emit_single_char_token<Asterisk>(tokens);
+                    token_length = minus(tokens);
                     break;
                 case '/':
-                    if (peek() == '/') {
-                        while (not end_of_file() && current() != '\n') {
-                            advance(1);
-                        }
-                        continue;
-                    } else if (peek() == '*') {
-                        usize last_opening_block_comment_index = m_index;
-                        i64 nesting_depth = 1;
-                        advance(2);
-                        while ([[maybe_unused]] bool two_remaining = m_index < m_source_code.text.length() - 1) {
-                            if (current() == '/' and peek() == '*') {
-                                last_opening_block_comment_index = m_index;
-                                ++nesting_depth;
-                                advance(2);
-                            } else if (current() == '*' and peek() == '/') {
-                                --nesting_depth;
-                                advance(1);
-                            } else {
-                                advance(1);
-                            }
-                            if (nesting_depth == 0) {
-                                break;
-                            }
-                        }
-                        if (nesting_depth != 0) {
-                            fmt::print(
-                                    stderr, "unclosed block comment: {}\n",
-                                    m_source_code.text.substr(last_opening_block_comment_index)
-                            );
-                            std::exit(EXIT_FAILURE);
-                        }
-                    } else {
-                        emit_single_char_token<ForwardSlash>(tokens);
-                    }
-                    break;
-                case '%':
-                    emit_single_char_token<Percent>(tokens);
-                    break;
-                case '(':
-                    emit_single_char_token<LeftParenthesis>(tokens);
-                    break;
-                case ')':
-                    emit_single_char_token<RightParenthesis>(tokens);
-                    break;
-                case ';':
-                    emit_single_char_token<Semicolon>(tokens);
-                    break;
-                case '{':
-                    emit_single_char_token<LeftCurlyBracket>(tokens);
-                    break;
-                case '}':
-                    emit_single_char_token<RightCurlyBracket>(tokens);
+                    token_length = forward_slash(tokens);
                     break;
                 case ':':
-                    if (peek() == ':') {
-                        token_length = 2;
-                        emit_token<DoubleColon>(tokens, token_length);
-                    } else {
-                        emit_single_char_token<Colon>(tokens);
-                    }
-                    break;
-                case ',':
-                    emit_single_char_token<Comma>(tokens);
-                    break;
-                case '=':
-                    emit_single_char_token<Equals>(tokens);
+                    token_length = colon(tokens);
                     break;
                 default:
-                    const auto c = current();
-                    if (std::isspace(current())) {
-                        break;
-                    }
-                    std::string_view remaining_source = m_source_code.text.substr(m_index);
-
-                    static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
-                    static constexpr char integer_pattern[] =
-                            "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
-                    static constexpr char char_pattern[] = R"('(\\'|[ -~]|\\[n\\tnvfr0])')";
-
-                    if (const auto char_literal_result = ctre::starts_with<char_pattern>(remaining_source)) {
-                        token_length = char_literal_result.view().length();
-                        emit_token<CharLiteral>(tokens, token_length);
-                    } else if (const auto integer_literal_result = ctre::starts_with<integer_pattern>(remaining_source)) {
-                        token_length = integer_literal_result.view().length();
-                        emit_token<IntegerLiteral>(tokens, token_length);
-                    } else if (const auto identifier_result = ctre::starts_with<identifier_pattern>(remaining_source)) {
-                        token_length = identifier_result.view().length();
-                        if (identifier_result.view() == "dump_registers") {
-                            emit_token<DumpRegisters>(tokens, token_length);
-                        } else if (identifier_result.view() == "function") {
-                            emit_token<Function>(tokens, token_length);
-                        } else if (identifier_result.view() == "import") {
-                            emit_token<Import>(tokens, token_length);
-                        } else if (identifier_result.view() == "let") {
-                            emit_token<Let>(tokens, token_length);
-                        } else if (identifier_result.view() == "bsm") {
-                            token_length = inline_assembly(tokens);
-                        } else if (identifier_result.view() == "namespace") {
-                            emit_token<Namespace>(tokens, token_length);
-                        } else if (identifier_result.view() == "true") {
-                            emit_token<BoolLiteral>(tokens, token_length);
-                        } else if (identifier_result.view() == "false") {
-                            emit_token<BoolLiteral>(tokens, token_length);
-                        } else if (identifier_result.view() == "and") {
-                            emit_token<And>(tokens, token_length);
-                        } else if (identifier_result.view() == "or") {
-                            emit_token<Or>(tokens, token_length);
-                        } else if (identifier_result.view() == "not") {
-                            emit_token<Not>(tokens, token_length);
-                        } else if (identifier_result.view() == "xor") {
-                            emit_token<Xor>(tokens, token_length);
-                        } else if (identifier_result.view() == "if") {
-                            emit_token<If>(tokens, token_length);
-                        } else if (identifier_result.view() == "else") {
-                            emit_token<Else>(tokens, token_length);
-                        } else {
-                            emit_token<Identifier>(tokens, token_length);
-                        }
-                    } else {
-                        std::cerr << "unexpected input: " << remaining_source << "\n";
-                        std::exit(EXIT_FAILURE);
-                    }
-
-                    break;
+                    token_length = keyword_or_identifier(tokens);
             }
             advance(token_length);
         }
@@ -262,6 +161,120 @@ private:
         assert(m_index >= token_length);
         m_index -= token_length;
         return token_length;
+    }
+
+    [[nodiscard]] usize minus(Lexer::TokenList& tokens) {
+        using namespace Lexer::Tokens;
+        assert(current() == '-');
+        if (peek() == '>') {
+            emit_token<Arrow>(tokens, 2);
+            return 2;
+        }
+        emit_single_char_token<Minus>(tokens);
+        return 1;
+    }
+
+    [[nodiscard]] usize single_line_comment() {
+        assert(current() == '/' and peek() == '/');
+        while (not end_of_file() && current() != '\n') {
+            advance(1);
+        }
+        return 0;
+    }
+
+    [[nodiscard]] usize block_comment() {
+        assert(current() == '/' and peek() == '*');
+        usize last_opening_block_comment_index = m_index;
+        i64 nesting_depth = 1;
+        advance(2);
+        while ([[maybe_unused]] bool two_remaining = m_index < m_source_code.text.length() - 1) {
+            if (current() == '/' and peek() == '*') {
+                last_opening_block_comment_index = m_index;
+                ++nesting_depth;
+                advance(2);
+            } else if (current() == '*' and peek() == '/') {
+                --nesting_depth;
+                advance(1);
+            } else {
+                advance(1);
+            }
+            if (nesting_depth == 0) {
+                break;
+            }
+        }
+        if (nesting_depth != 0) {
+            fmt::print(
+                    stderr, "unclosed block comment: {}\n", m_source_code.text.substr(last_opening_block_comment_index)
+            );
+            std::exit(EXIT_FAILURE);
+        }
+        return 1;
+    }
+
+    [[nodiscard]] usize forward_slash(Lexer::TokenList& tokens) {
+        assert(current() == '/');
+        switch (peek()) {
+            case '/':
+                return single_line_comment();
+            case '*':
+                return block_comment();
+            default:
+                emit_single_char_token<Lexer::Tokens::ForwardSlash>(tokens);
+                return 1;
+        }
+    }
+
+    [[nodiscard]] usize colon(Lexer::TokenList& tokens) {
+        if (peek() == ':') {
+            emit_token<Lexer::Tokens::DoubleColon>(tokens, 2);
+            return 2;
+        }
+        emit_single_char_token<Lexer::Tokens::Colon>(tokens);
+        return 1;
+    }
+
+    [[nodiscard]] usize keyword_or_identifier(Lexer::TokenList& tokens) {
+        using namespace Lexer::Tokens;
+        const auto c = current();
+        if (std::isspace(current())) {
+            return 1;
+        }
+        std::string_view remaining_source = m_source_code.text.substr(m_index);
+
+        static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
+        static constexpr char integer_pattern[] = "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
+        static constexpr char char_pattern[] = R"('(\\'|[ -~]|\\[n\\tnvfr0])')";
+
+        if (const auto char_literal_result = ctre::starts_with<char_pattern>(remaining_source)) {
+            const usize length = char_literal_result.view().length();
+            emit_token<CharLiteral>(tokens, length);
+            return length;
+        } else if (const auto integer_literal_result = ctre::starts_with<integer_pattern>(remaining_source)) {
+            const usize length = integer_literal_result.view().length();
+            emit_token<IntegerLiteral>(tokens, length);
+            return length;
+        } else if (const auto identifier_result = ctre::starts_with<identifier_pattern>(remaining_source)) {
+            const usize length = identifier_result.view().length();
+            KEYWORD("dump_registers", DumpRegisters)
+            KEYWORD("function", Function)
+            KEYWORD("import", Import)
+            KEYWORD("let", Let)
+            KEYWORD("namespace", Namespace)
+            KEYWORDS("true", "false", BoolLiteral)
+            KEYWORD("and", And)
+            KEYWORD("or", Or)
+            KEYWORD("not", Not)
+            KEYWORD("xor", Xor)
+            KEYWORD("if", If)
+            KEYWORD("else", Else)
+            if (identifier_result.view() == "bsm") {
+                return inline_assembly(tokens);
+            }
+            emit_token<Identifier>(tokens, length);
+            return length;
+        }
+        std::cerr << "unexpected input: " << remaining_source << "\n";
+        std::exit(EXIT_FAILURE);
     }
 
     template<typename T, typename... Args>
