@@ -211,7 +211,7 @@ namespace Emitter {
         return result;
     }
 
-    std::string Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>& function_definition) const {
+    std::string Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) const {
         return "";
     }
 

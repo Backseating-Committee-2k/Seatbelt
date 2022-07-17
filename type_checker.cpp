@@ -175,7 +175,7 @@ namespace TypeChecker {
             }
         }
 
-        void operator()(std::unique_ptr<Parser::ImportStatement>& import_statement) { }
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         const Parser::Program* program;
         TypeContainer* type_container;
