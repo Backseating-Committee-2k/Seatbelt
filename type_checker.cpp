@@ -54,6 +54,7 @@ namespace TypeChecker {
             }
             return concrete_types[0].value() == BoolIdentifier ? expression.lhs->data_type : nullptr;
         }
+        return nullptr;
     }
 
     template<typename... Types>
