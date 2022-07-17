@@ -51,7 +51,7 @@ namespace Emitter {
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
         struct BinaryOperatorEmitter {
             void operator()(const Lexer::Tokens::Plus&) const {
-                visitor->emit("push R3", "push result onto stack");
+                visitor->emit("add R1, R2, R3", "add values");
             }
 
             void operator()(const Lexer::Tokens::Minus&) const {
@@ -100,6 +100,12 @@ namespace Emitter {
 
         void visit(Char& expression) override {
             emit(fmt::format("copy {}, R1", char_token_to_u8(expression.value)), "put immediate into register");
+            emit("push R1", "push immediate onto stack");
+        }
+
+        void visit(Bool& expression) override {
+            const u8 value = expression.value.location.view() == "true" ? 1 : 0;
+            emit(fmt::format("copy {}, R1", value), "put immediate into register");
             emit("push R1", "push immediate onto stack");
         }
 
