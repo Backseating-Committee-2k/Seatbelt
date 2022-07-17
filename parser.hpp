@@ -200,6 +200,8 @@ namespace Parser {
 
     using Program = std::vector<PointerVariant<FunctionDefinition, ImportStatement>>;
 
+    void concatenate_programs(Program& first, Program&& second);
+
     [[nodiscard]] Program parse(const Lexer::TokenList& tokens);
 
 }// namespace Parser

@@ -27,19 +27,8 @@ namespace Parser {
         explicit ParserState(const Lexer::TokenList& tokens) : m_tokens{ &tokens } { }
 
         [[nodiscard]] Program parse() {
-            auto header = parse_header();
-            auto body = parse_body();
-            auto program = Program{};
-            program.reserve(header.size() + body.size());
-
-            for (auto& top_level_statement : header) {
-                program.push_back(std::move(top_level_statement));
-            }
-
-            for (auto& top_level_statement : body) {
-                program.push_back(std::move(top_level_statement));
-            }
-
+            auto program = parse_header();
+            concatenate_programs(program, parse_body());
             return program;
         }
 
@@ -55,11 +44,7 @@ namespace Parser {
             auto program = Program{};
             while (not end_of_file()) {
                 if (current_is<Namespace>()) {
-                    auto namespace_contents = parse_namespace();
-                    program.reserve(namespace_contents.size() + program.size());
-                    for (auto& top_level_statement : namespace_contents) {
-                        program.push_back(std::move(top_level_statement));
-                    }
+                    concatenate_programs(program, parse_namespace());
                 } else if (current_is<Function>()) {
                     program.push_back(function_definition());
                 } else {
@@ -322,6 +307,13 @@ namespace Parser {
         const Lexer::TokenList* m_tokens;
         NamespacesStack m_namespaces_stack{};
     };
+
+    void concatenate_programs(Program& first, Program&& second) {
+        first.reserve(first.size() + second.size());
+        for (auto& top_level_statement : second) {
+            first.push_back(std::move(top_level_statement));
+        }
+    }
 
     [[nodiscard]] Program parse(const Lexer::TokenList& tokens) {
         auto parser_state = ParserState{ tokens };

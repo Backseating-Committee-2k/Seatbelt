@@ -191,10 +191,7 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
             };
         }
 
-        program.reserve(program.size() + current_program.size());
-        for (auto& top_level_statement : current_program) {
-            program.push_back(std::move(top_level_statement));
-        }
+        concatenate_programs(program, std::move(current_program));
 
         if (not is_main_file) {
             import_task.status = ImportStatus::Imported;
