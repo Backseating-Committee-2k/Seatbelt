@@ -9,10 +9,6 @@
 #include <ranges>
 #include <stdexcept>
 
-[[nodiscard]] Location Error::token_location(const auto& token) {
-    return std::visit([](const auto& token) { return token.location; }, token);
-}
-
 void print_message(const Lexer::Tokens::Token& token, const std::string_view message) {
     using namespace std::ranges::views;
     using std::ranges::count, std::ranges::find;
