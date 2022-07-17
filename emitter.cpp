@@ -13,10 +13,40 @@
 #include <optional>
 #include <string_view>
 
+[[nodiscard]] static u8 char_token_to_u8(const Lexer::Tokens::CharLiteral& token) {
+    const auto view = token.location.view();
+    assert(view.front() == '\'');
+    assert(view.back() == '\'');
+    const auto is_escaped = (view[1] == '\\');
+    assert((is_escaped and view.size() == 4) or (not is_escaped and view.size() == 3));
+    if (not is_escaped) {
+        return static_cast<u8>(view[1]);
+    }
+    switch (view[2]) {
+        case '\'':
+        case '\\':
+            return static_cast<u8>(view[2]);
+        case 't':
+            return static_cast<u8>('\t');
+        case 'n':
+            return static_cast<u8>('\n');
+        case 'v':
+            return static_cast<u8>('\v');
+        case 'f':
+            return static_cast<u8>('\f');
+        case 'r':
+            return static_cast<u8>('\r');
+        case '0':
+            return 0;
+        default:
+            Error::error(token, "invalid escape sequence");
+            return 0;
+    }
+}
+
 namespace Emitter {
     using namespace Parser::Statements;
     using namespace Parser::Expressions;
-
 
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
         struct BinaryOperatorEmitter {
@@ -63,8 +93,13 @@ namespace Emitter {
             assembly += "\n";
         }
 
-        void visit(Literal& expression) override {
+        void visit(Integer& expression) override {
             emit(fmt::format("copy {}, R1", expression.value.location.view()), "put immediate into register");
+            emit("push R1", "push immediate onto stack");
+        }
+
+        void visit(Char& expression) override {
+            emit(fmt::format("copy {}, R1", char_token_to_u8(expression.value)), "put immediate into register");
             emit("push R1", "push immediate onto stack");
         }
 

@@ -15,6 +15,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 
 [[nodiscard]] std::string read_whole_stream(std::istream& stream) {
     return { std::istreambuf_iterator<char>(stream), {} };
@@ -86,30 +87,39 @@ using ImportsMap = std::unordered_map<std::string, ImportTask>;
 using SourceFileContainer = std::vector<std::pair<std::string, std::string>>;
 using TokenListsContainer = std::vector<Lexer::TokenList>;
 
+template<typename T>
+struct PrintType;
+
 std::unordered_map<std::string, Lexer::Tokens::Token>
 collect_imports(const Parser::Program& program, const std::filesystem::path& base_directory) {
     using std::ranges::for_each;
     auto imports = std::unordered_map<std::string, Lexer::Tokens::Token>{};
-    for_each(program, [&base_directory, &imports](const auto& top_level_statement) {
-        if (const auto import_statement = std::get_if<std::unique_ptr<Parser::ImportStatement>>(&top_level_statement)) {
-            auto path = base_directory;
-            for (const auto& token : (*import_statement)->import_path_tokens) {
-                if (const auto& identifier = std::get_if<Lexer::Tokens::Identifier>(&token)) {
-                    path = path / identifier->location.view();
-                } else if (not std::holds_alternative<Lexer::Tokens::Dot>(token)) {
-                    assert(false and "unreachable");
-                }
-            }
-            path += ".bs";
+    for_each(program, [&](const auto& top_level_statement) {
+        std::visit(
+                overloaded{
+                        [&](const std::unique_ptr<Parser::ImportStatement>& import_statement) {
+                            auto path = base_directory;
+                            for (const auto& token : import_statement->import_path_tokens) {
+                                if (const auto& identifier = std::get_if<Lexer::Tokens::Identifier>(&token)) {
+                                    path = path / identifier->location.view();
+                                } else if (not std::holds_alternative<Lexer::Tokens::Dot>(token)) {
+                                    assert(false and "unreachable");
+                                }
+                            }
+                            path += ".bs";
 
-            const auto path_string = path.string();
-            const auto last_token = (*import_statement)->import_path_tokens.back();
-            if (imports.contains(path_string)) {
-                Error::warning(last_token, "duplicate import");
-            } else {
-                imports[path_string] = last_token;
-            }
-        }
+                            const auto path_string = path.string();
+                            const auto last_token = import_statement->import_path_tokens.back();
+                            if (imports.contains(path_string)) {
+                                Error::warning(last_token, "duplicate import");
+                            } else {
+                                imports[path_string] = last_token;
+                            }
+                        },
+                        [&](auto&&) {},
+                },
+                top_level_statement
+        );
     });
     return imports;
 }
@@ -119,8 +129,8 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
         SourceFileContainer& source_files,
         TokenListsContainer& token_lists
 ) {
-    using std::ranges::find_if;
     using Parser::concatenate_programs;
+    using std::ranges::find_if;
 
     // the empty string represents the main code file
     auto imports = ImportsMap{

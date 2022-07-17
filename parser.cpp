@@ -47,6 +47,8 @@ namespace Parser {
                     concatenate_programs(program, parse_namespace());
                 } else if (current_is<Function>()) {
                     program.push_back(function_definition());
+                } else if (current_is<Import>()) {
+                    Error::error(current(), "imports must precede all other top level statements of a source file");
                 } else {
                     break;
                 }
@@ -124,8 +126,12 @@ namespace Parser {
                 auto sub_expression = expression();
                 consume<RightParenthesis>("expected \")\"");
                 return sub_expression;
-            } else if (auto literal_token = maybe_consume<IntegerLiteral>()) {
-                return std::make_unique<Literal>(literal_token.value());
+            }
+            if (const auto integer_literal_token = maybe_consume<IntegerLiteral>()) {
+                return std::make_unique<Integer>(integer_literal_token.value());
+            }
+            if (const auto char_literal_token = maybe_consume<CharLiteral>()) {
+                return std::make_unique<Char>(char_literal_token.value());
             }
             if (current_is<Identifier>()) {
                 const usize name_start = m_index;
@@ -172,7 +178,7 @@ namespace Parser {
 
         [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {
             assert(current_is<Import>());
-            advance();
+            const auto import_token = consume<Import>("error should be impossible here");
             const usize path_start = m_index;
             consume<Identifier>("expected identifier");
             while (maybe_consume<Dot>()) {
@@ -180,9 +186,13 @@ namespace Parser {
             }
             const usize path_end = m_index;
             consume<Semicolon>("expected \";\"");
-            return std::make_unique<ImportStatement>(ImportStatement{ .import_path_tokens{
-                    std::span{ std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_start),
-                               std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_end) } } });
+            return std::make_unique<ImportStatement>(ImportStatement{
+                    .import_token{ import_token },
+                    .import_path_tokens{ std::span{
+                            std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_start),
+                            std::begin(*m_tokens) + static_cast<Lexer::TokenList::difference_type>(path_end),
+                    } },
+            });
         }
 
         [[nodiscard]] Statements::Block block() {

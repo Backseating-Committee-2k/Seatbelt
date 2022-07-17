@@ -18,6 +18,11 @@
 #include <variant>
 #include <vector>
 
+template<class... Ts>
+struct overloaded : Ts... {
+    using Ts::operator()...;
+};
+
 namespace Parser {
     using namespace Lexer::Tokens;
 
@@ -114,13 +119,15 @@ namespace Parser {
 
     namespace Expressions {
 
-        struct Literal;
+        struct Integer;
+        struct Char;
         struct Name;
         struct BinaryOperator;
         struct FunctionCall;
 
         struct ExpressionVisitor {
-            virtual void visit(Literal& expression) = 0;
+            virtual void visit(Integer& expression) = 0;
+            virtual void visit(Char& expression) = 0;
             virtual void visit(Name& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
@@ -145,10 +152,16 @@ namespace Parser {
             }
         };
 
-        struct Literal : public ExpressionAcceptor<Literal> {
-            explicit Literal(IntegerLiteral value) : value{ value } { }
+        struct Integer : public ExpressionAcceptor<Integer> {
+            explicit Integer(IntegerLiteral value) : value{ value } { }
 
             IntegerLiteral value;
+        };
+
+        struct Char : public ExpressionAcceptor<Char> {
+            explicit Char(CharLiteral value) : value{ value } { }
+
+            CharLiteral value;
         };
 
         struct Name : public ExpressionAcceptor<Name> {
@@ -192,6 +205,7 @@ namespace Parser {
     };
 
     struct ImportStatement {
+        Import import_token;
         std::span<const Token> import_path_tokens;
     };
 

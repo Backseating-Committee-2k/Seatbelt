@@ -117,8 +117,15 @@ public:
                     static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
                     static constexpr char integer_pattern[] =
                             "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
+                    static constexpr char char_pattern[] = R"('(\\'|[ -~]|\\[n\\tnvfr0])')";
 
-                    if (const auto identifier_result = ctre::starts_with<identifier_pattern>(remaining_source)) {
+                    if (const auto char_literal_result = ctre::starts_with<char_pattern>(remaining_source)) {
+                        token_length = char_literal_result.view().length();
+                        emit_token<CharLiteral>(tokens, token_length);
+                    } else if (const auto integer_literal_result = ctre::starts_with<integer_pattern>(remaining_source)) {
+                        token_length = integer_literal_result.view().length();
+                        emit_token<IntegerLiteral>(tokens, token_length);
+                    } else if (const auto identifier_result = ctre::starts_with<identifier_pattern>(remaining_source)) {
                         token_length = identifier_result.view().length();
                         if (identifier_result.view() == "dump_registers") {
                             emit_token<DumpRegisters>(tokens, token_length);
@@ -135,9 +142,6 @@ public:
                         } else {
                             emit_token<Identifier>(tokens, token_length);
                         }
-                    } else if (const auto integer_literal_result = ctre::starts_with<integer_pattern>(remaining_source)) {
-                        token_length = integer_literal_result.view().length();
-                        emit_token<IntegerLiteral>(tokens, token_length);
                     } else {
                         std::cerr << "unexpected input: " << remaining_source << "\n";
                         std::exit(EXIT_FAILURE);

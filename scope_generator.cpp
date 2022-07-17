@@ -13,11 +13,6 @@
 #include <fmt/format.h>
 #include <ranges>
 
-template<class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-
 namespace ScopeGenerator {
 
     struct ScopeGenerator : public Parser::Statements::StatementVisitor, public Parser::Expressions::ExpressionVisitor {
@@ -62,7 +57,11 @@ namespace ScopeGenerator {
             statement.expression->accept(*this);
         }
 
-        void visit(Parser::Expressions::Literal& expression) override {
+        void visit(Parser::Expressions::Integer& expression) override {
+            expression.surrounding_scope = scope;
+        }
+
+        void visit(Parser::Expressions::Char& expression) override {
             expression.surrounding_scope = scope;
         }
 

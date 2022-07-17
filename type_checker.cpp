@@ -12,6 +12,7 @@
 
 namespace TypeChecker {
     static constexpr std::string_view U32Identifier{ "U32" };
+    static constexpr std::string_view CharIdentifier{ "Char" };
 
     template<typename... Types>
     [[nodiscard]] static bool holds_any_of(const Lexer::Tokens::Token& token) {
@@ -50,8 +51,13 @@ namespace TypeChecker {
             statement.expression->accept(*this);
         }
 
-        void visit(Parser::Expressions::Literal& expression) override {
+        void visit(Parser::Expressions::Integer& expression) override {
             expression.data_type = type_container->from_data_type(std::make_unique<ConcreteType>(U32Identifier, false));
+        }
+
+        void visit(Parser::Expressions::Char& expression) override {
+            expression.data_type =
+                    type_container->from_data_type(std::make_unique<ConcreteType>(CharIdentifier, false));
         }
 
         void visit(Parser::Expressions::Name& expression) override {
@@ -89,6 +95,9 @@ namespace TypeChecker {
             using namespace Lexer::Tokens;
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
+            if (expression.lhs->data_type != expression.rhs->data_type) {
+                goto error;
+            }
             if (const auto concrete_type = dynamic_cast<const ConcreteType*>(expression.lhs->data_type)) {
                 if (holds_any_of<Plus, Minus, Asterisk, ForwardSlash>(expression.operator_token) and
                     concrete_type->name == U32Identifier) {
@@ -96,6 +105,7 @@ namespace TypeChecker {
                     return;
                 }
             }
+        error:
             Error::error(
                     expression.operator_token,
                     fmt::format(
