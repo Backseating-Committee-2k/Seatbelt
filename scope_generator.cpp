@@ -93,7 +93,7 @@ namespace ScopeGenerator {
                                         // do not know the function signature), but the function can only be a valid choice
                                         // if it is within the correct namespace
                                         auto remaining_namespaces = remaining.empty() ? 0 : count(remaining, '%') + 1;
-                                        const auto was_qualified_name = (remaining_namespaces > 0);
+                                        const auto was_qualified_name = (expression.name_tokens.size() > 1);
                                         auto possible_overloads = std::vector<const FunctionOverload*>{};
                                         while (true) {
                                             // Function definitions are only allowed in the global scope. That means

@@ -121,14 +121,10 @@ int main(int argc, char** argv) {
 
     auto source_files = std::vector<std::pair<std::string, std::string>>{};
     auto token_lists = std::vector<Lexer::TokenList>{};
-    /*source_files.push_back(read_source_code(command_line_parser));
-    token_lists.push_back(Lexer::tokenize(SourceCode{
-            .filename{ source_files.front().first },
-            .text{ source_files.front().second },
-    }));
-    auto program = Parser::parse(token_lists.back());*/
 
     auto imports = ImportsMap{};
+    // the empty string marks the main code file (which doesn't need to have a filename
+    // since it could be input from stdin)
     imports[""] = ImportTask{
         .status{ ImportStatus::NotImported },
         .token{},

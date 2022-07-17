@@ -143,8 +143,8 @@ namespace TypeChecker {
                             ),
                             std::end(possible_overloads)
                     );
-                    // erase all overloads except for the last one (which is the "inner" one)
-                    possible_overloads.erase(std::begin(possible_overloads), std::end(possible_overloads) - 1);
+                    // erase all overloads except for the first one (which is the "inner" one)
+                    possible_overloads.erase(std::begin(possible_overloads) + 1, std::end(possible_overloads));
                     assert(possible_overloads.size() == 1);
                 } else {
                     // this is a function pointer
