@@ -66,6 +66,14 @@ namespace Emitter {
                 assert(false && "not implemented");
             }
 
+            void operator()(const Lexer::Tokens::And&) const {
+                visitor->emit("and R1, R2, R3", "and values");
+            }
+
+            void operator()(const Lexer::Tokens::Or&) const {
+                visitor->emit("or R1, R2, R3", "or values");
+            }
+
             void operator()(const auto&) const {
                 assert(false && "unreachable");
             }
