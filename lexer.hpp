@@ -16,11 +16,11 @@
         static constexpr const char* debug_name = #name; \
     };
 
-#define TOKEN_LIST                                                                                                     \
-    x(DumpRegisters) x(Identifier) x(Function) x(Colon) x(Comma) x(Arrow) x(EndOfFile) x(Semicolon) x(Plus) x(Minus)   \
-            x(Asterisk) x(Percent) x(ForwardSlash) x(LeftParenthesis) x(RightParenthesis) x(LeftCurlyBracket)          \
-                    x(RightCurlyBracket) x(Let) x(Equals) x(IntegerLiteral) x(CharLiteral) x(InlineAssembly) x(Import) \
-                            x(Dot) x(DoubleColon) x(Namespace)
+#define TOKEN_LIST                                                                                                   \
+    x(DumpRegisters) x(Identifier) x(Function) x(Colon) x(Comma) x(Arrow) x(EndOfFile) x(Semicolon) x(Plus) x(Minus) \
+            x(Asterisk) x(Percent) x(ForwardSlash) x(LeftParenthesis) x(RightParenthesis) x(LeftCurlyBracket)        \
+                    x(RightCurlyBracket) x(Let) x(Equals) x(IntegerLiteral) x(CharLiteral) x(BoolLiteral)            \
+                            x(InlineAssembly) x(Import) x(Dot) x(DoubleColon) x(Namespace) x(And) x(Or) x(Not) x(Xor)
 
 namespace Lexer {
 

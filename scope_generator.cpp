@@ -22,6 +22,7 @@ namespace ScopeGenerator {
               type_container{ type_container } { }
 
         void visit(Parser::Statements::Block& statement) override {
+            statement.surrounding_scope = scope;
             for (auto& sub_statement : statement.statements) {
                 if (const auto sub_block = dynamic_cast<Parser::Statements::Block*>(sub_statement.get())) {
                     sub_block->scope =
@@ -62,6 +63,10 @@ namespace ScopeGenerator {
         }
 
         void visit(Parser::Expressions::Char& expression) override {
+            expression.surrounding_scope = scope;
+        }
+
+        void visit(Parser::Expressions::Bool& expression) override {
             expression.surrounding_scope = scope;
         }
 

@@ -4,6 +4,7 @@
 
 #include "type_checker.hpp"
 #include "error.hpp"
+#include <array>
 #include <cassert>
 #include <fmt/core.h>
 #include <ranges>
@@ -13,6 +14,47 @@
 namespace TypeChecker {
     static constexpr std::string_view U32Identifier{ "U32" };
     static constexpr std::string_view CharIdentifier{ "Char" };
+    static constexpr std::string_view BoolIdentifier{ "Bool" };
+
+    template<typename T>
+    [[nodiscard]] bool is(const Lexer::Tokens::Token& token) {
+        return std::holds_alternative<T>(token);
+    }
+
+    template<typename... T>
+    [[nodiscard]] bool is_one_of(const Lexer::Tokens::Token& token) {
+        return (is<T>(token) or ...);
+    }
+
+    [[nodiscard]] std::optional<std::string_view> concrete_type(const DataType* data_type) {
+        if (const auto concrete = dynamic_cast<const ConcreteType*>(data_type)) {
+            return concrete->name;
+        }
+        return {};
+    }
+
+    [[nodiscard]] const DataType* get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression) {
+        using namespace Lexer::Tokens;
+        assert(expression.lhs->data_type != nullptr);
+        assert(expression.rhs->data_type != nullptr);
+        const auto& token = expression.operator_token;
+        const auto same_type = (expression.lhs->data_type == expression.rhs->data_type);
+        const auto concrete_types =
+                std::array{ concrete_type(expression.lhs->data_type), concrete_type(expression.rhs->data_type) };
+        const auto both_concrete = (concrete_types[0].has_value() and concrete_types[1].has_value());
+        if (is_one_of<Plus, Minus, Asterisk, ForwardSlash>(token)) {
+            if (not same_type or not both_concrete) {
+                return nullptr;
+            }
+            return concrete_types[0].value() == U32Identifier ? expression.lhs->data_type : nullptr;
+        }
+        if (is_one_of<And, Or, Xor>(token)) {
+            if (not same_type or not both_concrete) {
+                return nullptr;
+            }
+            return concrete_types[0].value() == BoolIdentifier ? expression.lhs->data_type : nullptr;
+        }
+    }
 
     template<typename... Types>
     [[nodiscard]] static bool holds_any_of(const Lexer::Tokens::Token& token) {
@@ -60,6 +102,11 @@ namespace TypeChecker {
                     type_container->from_data_type(std::make_unique<ConcreteType>(CharIdentifier, false));
         }
 
+        void visit(Parser::Expressions::Bool& expression) override {
+            expression.data_type =
+                    type_container->from_data_type(std::make_unique<ConcreteType>(BoolIdentifier, false));
+        }
+
         void visit(Parser::Expressions::Name& expression) override {
             /*  The scope generator fills in the data types of variable definitions beforehand.
              *  But for function pointers we do not have any type information available and
@@ -95,17 +142,10 @@ namespace TypeChecker {
             using namespace Lexer::Tokens;
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
-            if (expression.lhs->data_type != expression.rhs->data_type) {
-                goto error;
+            if (const auto resulting_type = get_resulting_data_type(expression)) {
+                expression.data_type = resulting_type;
+                return;
             }
-            if (const auto concrete_type = dynamic_cast<const ConcreteType*>(expression.lhs->data_type)) {
-                if (holds_any_of<Plus, Minus, Asterisk, ForwardSlash>(expression.operator_token) and
-                    concrete_type->name == U32Identifier) {
-                    expression.data_type = concrete_type;
-                    return;
-                }
-            }
-        error:
             Error::error(
                     expression.operator_token,
                     fmt::format(

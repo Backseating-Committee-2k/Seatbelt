@@ -18,6 +18,32 @@
 #include <variant>
 #include <vector>
 
+#define DEFINE_BINARY_OPERATOR_PARSER_FUNCTION(name, token, next)                          \
+    [[nodiscard]] std::unique_ptr<Expression> name() {                                     \
+        using Expressions::BinaryOperator;                                                 \
+        auto accumulator = next();                                                         \
+        while (auto current_token = maybe_consume<token>()) {                              \
+            auto next_operand = next();                                                    \
+            accumulator = std::make_unique<BinaryOperator>(                                \
+                    std::move(accumulator), std::move(next_operand), current_token.value() \
+            );                                                                             \
+        }                                                                                  \
+        return accumulator;                                                                \
+    }
+
+#define DEFINE_BINARY_OPERATOR_PARSER_FUNCTION_2(name, first_token, second_token, next)    \
+    [[nodiscard]] std::unique_ptr<Expression> name() {                                     \
+        using Expressions::BinaryOperator;                                                 \
+        auto accumulator = next();                                                         \
+        while (auto current_token = maybe_consume_one_of<first_token, second_token>()) {   \
+            auto next_operand = next();                                                    \
+            accumulator = std::make_unique<BinaryOperator>(                                \
+                    std::move(accumulator), std::move(next_operand), current_token.value() \
+            );                                                                             \
+        }                                                                                  \
+        return accumulator;                                                                \
+    }
+
 namespace Parser {
 
     using Expressions::Expression;
@@ -74,32 +100,16 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<Expression> expression() {
-            return addition_or_subtraction();
+            return logical_or();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> addition_or_subtraction() {
-            using Expressions::BinaryOperator;
-            auto accumulator = multiplication_or_division();
-            while (auto token = maybe_consume_one_of<Plus, Minus>()) {
-                auto next_operand = multiplication_or_division();
-                accumulator = std::make_unique<BinaryOperator>(
-                        std::move(accumulator), std::move(next_operand), token.value()
-                );
-            }
-            return accumulator;
-        }
+        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION(logical_or, Or, logical_and)
 
-        [[nodiscard]] std::unique_ptr<Expression> multiplication_or_division() {
-            using Expressions::BinaryOperator;
-            auto accumulator = function_call();
-            while (auto token = maybe_consume_one_of<Asterisk, ForwardSlash>()) {
-                auto next_operand = function_call();
-                accumulator = std::make_unique<BinaryOperator>(
-                        std::move(accumulator), std::move(next_operand), token.value()
-                );
-            }
-            return accumulator;
-        }
+        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION(logical_and, And, addition_or_subtraction)
+
+        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION_2(addition_or_subtraction, Plus, Minus, multiplication_or_division)
+
+        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION_2(multiplication_or_division, Asterisk, ForwardSlash, function_call)
 
         [[nodiscard]] std::unique_ptr<Expression> function_call() {
             using Expressions::FunctionCall;
@@ -132,6 +142,9 @@ namespace Parser {
             }
             if (const auto char_literal_token = maybe_consume<CharLiteral>()) {
                 return std::make_unique<Char>(char_literal_token.value());
+            }
+            if (const auto bool_literal_token = maybe_consume<BoolLiteral>()) {
+                return std::make_unique<Bool>(bool_literal_token.value());
             }
             if (current_is<Identifier>()) {
                 const usize name_start = m_index;

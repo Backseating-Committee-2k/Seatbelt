@@ -121,6 +121,7 @@ namespace Parser {
 
         struct Integer;
         struct Char;
+        struct Bool;
         struct Name;
         struct BinaryOperator;
         struct FunctionCall;
@@ -128,6 +129,7 @@ namespace Parser {
         struct ExpressionVisitor {
             virtual void visit(Integer& expression) = 0;
             virtual void visit(Char& expression) = 0;
+            virtual void visit(Bool& expression) = 0;
             virtual void visit(Name& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
@@ -162,6 +164,12 @@ namespace Parser {
             explicit Char(CharLiteral value) : value{ value } { }
 
             CharLiteral value;
+        };
+
+        struct Bool : public ExpressionAcceptor<Bool> {
+            explicit Bool(BoolLiteral value) : value{ value } { }
+
+            BoolLiteral value;
         };
 
         struct Name : public ExpressionAcceptor<Name> {

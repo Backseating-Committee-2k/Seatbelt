@@ -139,6 +139,18 @@ public:
                             token_length = inline_assembly(tokens);
                         } else if (identifier_result.view() == "namespace") {
                             emit_token<Namespace>(tokens, token_length);
+                        } else if (identifier_result.view() == "true") {
+                            emit_token<BoolLiteral>(tokens, token_length);
+                        } else if (identifier_result.view() == "false") {
+                            emit_token<BoolLiteral>(tokens, token_length);
+                        } else if (identifier_result.view() == "and") {
+                            emit_token<And>(tokens, token_length);
+                        } else if (identifier_result.view() == "or") {
+                            emit_token<Or>(tokens, token_length);
+                        } else if (identifier_result.view() == "not") {
+                            emit_token<Not>(tokens, token_length);
+                        } else if (identifier_result.view() == "xor") {
+                            emit_token<Xor>(tokens, token_length);
                         } else {
                             emit_token<Identifier>(tokens, token_length);
                         }
