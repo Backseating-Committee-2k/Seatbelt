@@ -173,11 +173,14 @@ namespace Emitter {
             emit("add sp, 4, sp", "reserve stack space for the return address placeholder");
 
             emit("push R0", "store current stack frame base pointer for later");
-            emit("copy sp, R0");
+            emit("copy sp, R7", "this will be the new stack frame base pointer");
 
+            emit("", "evaluate arguments in current stack frame");
             for (const auto& argument : expression.arguments) {
                 argument->accept(*this);
             }
+
+            emit("copy R7, R0", "set the new stack frame base pointer");
 
             emit("add ip, 24, R1", "calculate return address");
             emit("copy R1, *R6", "fill return address placeholder");
