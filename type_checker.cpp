@@ -79,6 +79,14 @@ namespace TypeChecker {
             statement.else_block.accept(*this);
         }
 
+        void visit(Parser::Statements::LoopStatement& statement) override {
+            statement.body.accept(*this);
+        }
+
+        void visit(Parser::Statements::BreakStatement&) override {}
+
+        void visit(Parser::Statements::ContinueStatement&) override {}
+
         void visit(Parser::Statements::VariableDefinition& statement) override {
             statement.type = type_container->from_tokens(statement.type_tokens);
             statement.initial_value->accept(*this);

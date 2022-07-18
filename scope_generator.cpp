@@ -53,6 +53,18 @@ namespace ScopeGenerator {
             offset = else_visitor.offset;
         }
 
+        void visit(Parser::Statements::LoopStatement& statement) override {
+            statement.surrounding_scope = scope;
+            statement.body.scope = scope->create_child_scope();
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            statement.body.accept(body_visitor);
+            offset = body_visitor.offset;
+        }
+
+        void visit(Parser::Statements::BreakStatement&) override { }
+
+        void visit(Parser::Statements::ContinueStatement&) override { }
+
         void visit(Parser::Statements::VariableDefinition& statement) override {
             if (scope->contains(statement.name.location.view())) {
                 Error::error(

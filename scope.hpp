@@ -37,6 +37,10 @@ struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
           surrounding_scope{ surrounding_scope },
           surrounding_namespace{ surrounding_namespace } { }
 
+    [[nodiscard]] std::unique_ptr<Scope> create_child_scope() {
+        return std::make_unique<Scope>(this, surrounding_namespace);
+    }
+
     const Scope* surrounding_scope;
     std::string_view surrounding_namespace;
 };

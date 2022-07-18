@@ -226,12 +226,35 @@ namespace Parser {
             );
         }
 
+        [[nodiscard]] std::unique_ptr<Statements::LoopStatement> loop_statement() {
+            const auto loop_token = consume<Loop>("this error should be unreachable");
+            return std::make_unique<Parser::Statements::LoopStatement>(loop_token, block());
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::BreakStatement> break_statement() {
+            const auto loop_token = consume<Break>("this error should be unreachable");
+            consume<Semicolon>("expected \";\"");
+            return std::make_unique<Parser::Statements::BreakStatement>(loop_token);
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::ContinueStatement> continue_statement() {
+            const auto continue_token = consume<Continue>("this error should be unreachable");
+            consume<Semicolon>("expected \";\"");
+            return std::make_unique<Parser::Statements::ContinueStatement>(continue_token);
+        }
+
         [[nodiscard]] Statements::Block block() {
             Statements::StatementList statements;
             consume<LeftCurlyBracket>("expected \"{\"");
             while (not end_of_file() and not current_is<RightCurlyBracket>()) {
                 if (current_is<If>()) {
                     statements.push_back(if_statement());
+                } else if (current_is<Loop>()) {
+                    statements.push_back(loop_statement());
+                } else if (current_is<Break>()) {
+                    statements.push_back(break_statement());
+                } else if (current_is<Continue>()) {
+                    statements.push_back(continue_statement());
                 } else if (current_is<Let>()) {
                     statements.push_back(variable_definition());
                 } else if (current_is<LeftCurlyBracket>()) {

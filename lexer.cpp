@@ -259,6 +259,9 @@ private:
             KEYWORD("xor", Xor)
             KEYWORD("if", If)
             KEYWORD("else", Else)
+            KEYWORD("loop", Loop)
+            KEYWORD("break", Break)
+            KEYWORD("continue", Continue)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

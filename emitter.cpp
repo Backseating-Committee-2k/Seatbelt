@@ -12,6 +12,7 @@
 #include <cassert>
 #include <fmt/core.h>
 #include <optional>
+#include <stack>
 #include <string_view>
 
 [[nodiscard]] static u8 char_token_to_u8(const Lexer::Tokens::CharLiteral& token) {
@@ -48,6 +49,11 @@
 namespace Emitter {
     using namespace Parser::Statements;
     using namespace Parser::Expressions;
+
+    struct LoopLabels {
+        std::string continue_to_label;
+        std::string break_to_label;
+    };
 
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
         struct BinaryOperatorEmitter {
@@ -268,6 +274,34 @@ namespace Emitter {
             emit_label(endif_label, "end of else-block");
         }
 
+        void visit(LoopStatement& statement) override {
+            const auto loop_start_label = next_label("loop_start");
+            const auto loop_end_label = next_label("loop_end");
+            loop_stack.push(LoopLabels{
+                    .continue_to_label{ loop_start_label },
+                    .break_to_label{ loop_end_label }
+            });
+            emit_label(loop_start_label, "brrrrr");
+            statement.body.accept(*this);
+            loop_stack.pop();
+            emit(fmt::format("jump {}", loop_start_label));
+            emit_label(loop_end_label, "end of loop");
+        }
+
+        void visit(Parser::Statements::BreakStatement& statement) override {
+            if (loop_stack.empty()) {
+                Error::error(statement.break_token, "break statement not allowed here");
+            }
+            emit(fmt::format("jump {}", loop_stack.top().break_to_label), "break out of loop");
+        }
+
+        void visit(Parser::Statements::ContinueStatement& statement) override {
+            if (loop_stack.empty()) {
+                Error::error(statement.continue_token, "continue statement not allowed here");
+            }
+            emit(fmt::format("jump {}", loop_stack.top().continue_to_label), "continue to top of loop");
+        }
+
         void visit(VariableDefinition& statement) override {
             using std::ranges::max_element;
 
@@ -299,6 +333,8 @@ namespace Emitter {
         }
 
         usize label_counter{ 0 };
+
+        std::stack<LoopLabels> loop_stack{};
     };
 
     std::string emit_statement(const Parser::Program& program, Statement& statement) {

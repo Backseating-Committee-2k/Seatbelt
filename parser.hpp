@@ -42,6 +42,9 @@ namespace Parser {
 
         struct Block;
         struct IfStatement;
+        struct LoopStatement;
+        struct BreakStatement;
+        struct ContinueStatement;
         struct VariableDefinition;
         struct InlineAssembly;
         struct ExpressionStatement;
@@ -49,6 +52,9 @@ namespace Parser {
         struct StatementVisitor {
             virtual void visit(Block& statement) = 0;
             virtual void visit(IfStatement& statement) = 0;
+            virtual void visit(LoopStatement& statement) = 0;
+            virtual void visit(BreakStatement& statement) = 0;
+            virtual void visit(ContinueStatement& statement) = 0;
             virtual void visit(VariableDefinition& statement) = 0;
             virtual void visit(InlineAssembly& statement) = 0;
             virtual void visit(ExpressionStatement& statement) = 0;
@@ -100,6 +106,39 @@ namespace Parser {
             Block then_block;
             std::optional<Lexer::Tokens::Else> else_token;
             Block else_block;
+        };
+
+        struct LoopStatement : public Statement {
+            LoopStatement(Lexer::Tokens::Loop loop_token, Block body)
+                : loop_token{ loop_token },
+                  body{ std::move(body) } { }
+
+            void accept(StatementVisitor& visitor) override {
+                visitor.visit(*this);
+            }
+
+            Lexer::Tokens::Loop loop_token;
+            Block body;
+        };
+
+        struct BreakStatement : public Statement {
+            BreakStatement(Lexer::Tokens::Break break_token) : break_token{ break_token } { }
+
+            void accept(StatementVisitor& visitor) override {
+                visitor.visit(*this);
+            }
+
+            Lexer::Tokens::Break break_token;
+        };
+
+        struct ContinueStatement : public Statement {
+            ContinueStatement(Lexer::Tokens::Continue continue_token) : continue_token{ continue_token } { }
+
+            void accept(StatementVisitor& visitor) override {
+                visitor.visit(*this);
+            }
+
+            Lexer::Tokens::Continue continue_token;
         };
 
         struct VariableDefinition : public Statement {
