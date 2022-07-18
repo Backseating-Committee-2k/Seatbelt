@@ -65,6 +65,16 @@ namespace TypeChecker {
 
         void visit(Parser::Statements::IfStatement& statement) override {
             statement.condition->accept(*this);
+            const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
+            if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+                Error::error(
+                        statement.if_token,
+                        fmt::format(
+                                "condition of if-statement must evaluate to a boolean expression (found type \"{}\")",
+                                statement.condition->data_type->to_string()
+                        )
+                );
+            }
             statement.then_block.accept(*this);
             statement.else_block.accept(*this);
         }
