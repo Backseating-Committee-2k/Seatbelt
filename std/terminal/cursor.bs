@@ -1,0 +1,10 @@
+namespace std {
+
+    function set_cursor_mode(mode: U32): Void {
+        bsm {
+            copy *R0, R1 // get parameter
+            copy R1, *CURSOR_MODE // set mode
+        }
+    }
+
+}

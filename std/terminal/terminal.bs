@@ -1,0 +1,22 @@
+namespace std {
+
+    function put_char(char: Char): Void {
+        bsm {
+            copy *R0, R1 // put the value of char into R1
+            copy *CURSOR_POINTER, R2 // get the current cursor pointer value
+            copy R1, *R2 // write x onto the terminal
+            add R2, 4, R2 // increase the cursor pointer by 4
+            copy R2, *CURSOR_POINTER // write the cursor pointer back
+            copy TERMINAL_END, R45
+            comp R2, R45, R2
+            jump_lt R2, $end_of_put_char
+
+            // reset cursor to the terminal start
+            copy TERMINAL_START, R2
+            copy R2, *CURSOR_POINTER
+
+        $end_of_put_char:
+        }
+    }
+
+}
