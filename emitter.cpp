@@ -66,7 +66,7 @@ namespace Emitter {
             }
 
             void operator()(const Lexer::Tokens::Asterisk&) const {
-                visitor->emit("mult R1, R2, R3, R4", "multiply values");
+                visitor->emit("mult R1, R2, R4, R3", "multiply values");
             }
 
             void operator()(const Lexer::Tokens::ForwardSlash&) const {
