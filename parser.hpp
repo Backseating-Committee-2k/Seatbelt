@@ -45,6 +45,9 @@ namespace Parser {
         struct LoopStatement;
         struct BreakStatement;
         struct ContinueStatement;
+        struct WhileStatement;
+        struct DoWhileStatement;
+        struct ForStatement;
         struct VariableDefinition;
         struct InlineAssembly;
         struct ExpressionStatement;
@@ -55,6 +58,9 @@ namespace Parser {
             virtual void visit(LoopStatement& statement) = 0;
             virtual void visit(BreakStatement& statement) = 0;
             virtual void visit(ContinueStatement& statement) = 0;
+            virtual void visit(WhileStatement& statement) = 0;
+            virtual void visit(DoWhileStatement& statement) = 0;
+            virtual void visit(ForStatement& statement) = 0;
             virtual void visit(VariableDefinition& statement) = 0;
             virtual void visit(InlineAssembly& statement) = 0;
             virtual void visit(ExpressionStatement& statement) = 0;
@@ -70,20 +76,23 @@ namespace Parser {
             const Scope* surrounding_scope{ nullptr };
         };
 
+        template<typename T>
+        struct StatementAcceptor : public Statement {
+            void accept(StatementVisitor& visitor) final {
+                visitor.visit(static_cast<T&>(*this));
+            }
+        };
+
         using StatementList = std::vector<std::unique_ptr<Statement>>;
 
-        struct Block : public Statement {
+        struct Block : public StatementAcceptor<Block> {
             explicit Block(StatementList statements) : statements{ std::move(statements) } { }
-
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             StatementList statements;
             std::unique_ptr<Scope> scope;
         };
 
-        struct IfStatement : public Statement {
+        struct IfStatement : public StatementAcceptor<IfStatement> {
             IfStatement(
                     Lexer::Tokens::If if_token,
                     std::unique_ptr<Expression> condition,
@@ -97,10 +106,6 @@ namespace Parser {
                   else_token{ else_token },
                   else_block{ std::move(else_block) } { }
 
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
-
             Lexer::Tokens::If if_token;
             std::unique_ptr<Expression> condition;
             Block then_block;
@@ -108,40 +113,73 @@ namespace Parser {
             Block else_block;
         };
 
-        struct LoopStatement : public Statement {
+        struct LoopStatement : public StatementAcceptor<LoopStatement> {
             LoopStatement(Lexer::Tokens::Loop loop_token, Block body)
                 : loop_token{ loop_token },
                   body{ std::move(body) } { }
-
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             Lexer::Tokens::Loop loop_token;
             Block body;
         };
 
-        struct BreakStatement : public Statement {
+        struct BreakStatement : public StatementAcceptor<BreakStatement> {
             BreakStatement(Lexer::Tokens::Break break_token) : break_token{ break_token } { }
-
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             Lexer::Tokens::Break break_token;
         };
 
-        struct ContinueStatement : public Statement {
+        struct ContinueStatement : public StatementAcceptor<ContinueStatement> {
             ContinueStatement(Lexer::Tokens::Continue continue_token) : continue_token{ continue_token } { }
-
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             Lexer::Tokens::Continue continue_token;
         };
 
-        struct VariableDefinition : public Statement {
+        struct WhileStatement : public StatementAcceptor<WhileStatement> {
+            WhileStatement(While while_token, std::unique_ptr<Expression> condition, Block body)
+                : while_token{ while_token },
+                  condition{ std::move(condition) },
+                  body{ std::move(body) } { }
+
+            While while_token;
+            std::unique_ptr<Expression> condition;
+            Block body;
+        };
+
+        struct DoWhileStatement : public StatementAcceptor<DoWhileStatement> {
+            DoWhileStatement(Do do_token, Block body, While while_token, std::unique_ptr<Expression> condition)
+                : do_token{ do_token },
+                  body{ std::move(body) },
+                  while_token{ while_token },
+                  condition{ std::move(condition) } { }
+
+            Do do_token;
+            Block body;
+            While while_token;
+            std::unique_ptr<Expression> condition;
+        };
+
+        struct ForStatement : public StatementAcceptor<ForStatement> {
+            ForStatement(
+                    For for_token,
+                    std::unique_ptr<Statement> initializer,
+                    std::unique_ptr<Expression> condition,
+                    std::unique_ptr<Expression> increment,
+                    Block body
+            )
+                : for_token{ for_token },
+                  initializer{ std::move(initializer) },
+                  condition{ std::move(condition) },
+                  increment{ std::move(increment) },
+                  body{ std::move(body) } { }
+
+            For for_token;
+            std::unique_ptr<Statement> initializer;
+            std::unique_ptr<Expression> condition;
+            std::unique_ptr<Expression> increment;
+            Block body;
+        };
+
+        struct VariableDefinition : public StatementAcceptor<VariableDefinition> {
             explicit VariableDefinition(
                     Identifier name,
                     Equals equals_token,
@@ -153,10 +191,6 @@ namespace Parser {
                   type_tokens{ type_tokens },
                   initial_value{ std::move(initial_value) } { }
 
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
-
             Identifier name;
             Equals equals_token;
             std::span<const Token> type_tokens;
@@ -164,23 +198,15 @@ namespace Parser {
             std::unique_ptr<Expression> initial_value;
         };
 
-        struct InlineAssembly : public Statement {
+        struct InlineAssembly : public StatementAcceptor<InlineAssembly> {
             explicit InlineAssembly(const Lexer::Tokens::InlineAssembly* token) : token{ token } { }
-
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             const Lexer::Tokens::InlineAssembly* token;
         };
 
-        struct ExpressionStatement : public Statement {
+        struct ExpressionStatement : public StatementAcceptor<ExpressionStatement> {
             explicit ExpressionStatement(std::unique_ptr<Expression> expression)
                 : expression{ std::move(expression) } { }
-
-            void accept(StatementVisitor& visitor) override {
-                visitor.visit(*this);
-            }
 
             std::unique_ptr<Expression> expression;
         };

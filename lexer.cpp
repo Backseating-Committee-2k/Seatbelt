@@ -263,6 +263,9 @@ private:
             KEYWORD("loop", Loop)
             KEYWORD("break", Break)
             KEYWORD("continue", Continue)
+            KEYWORD("while", While)
+            KEYWORD("do", Do)
+            KEYWORD("for", For)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

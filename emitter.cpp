@@ -277,15 +277,89 @@ namespace Emitter {
         void visit(LoopStatement& statement) override {
             const auto loop_start_label = next_label("loop_start");
             const auto loop_end_label = next_label("loop_end");
-            loop_stack.push(LoopLabels{
-                    .continue_to_label{ loop_start_label },
-                    .break_to_label{ loop_end_label }
-            });
+            loop_stack.push(LoopLabels{ .continue_to_label{ loop_start_label }, .break_to_label{ loop_end_label } });
             emit_label(loop_start_label, "brrrrr");
             statement.body.accept(*this);
             loop_stack.pop();
             emit(fmt::format("jump {}", loop_start_label));
             emit_label(loop_end_label, "end of loop");
+        }
+
+        void visit(WhileStatement& statement) override {
+            const auto while_start_label = next_label("while_start");
+            const auto while_condition_label = next_label("while_condition");
+            const auto while_end_label = next_label("while_end");
+            loop_stack.push(LoopLabels{ .continue_to_label{ while_condition_label },
+                                        .break_to_label{ while_end_label } });
+            emit(fmt::format("jump {}", while_condition_label), "jump to condition of while-loop");
+            emit_label(while_start_label);
+
+            statement.body.accept(*this);
+
+            emit_label(while_condition_label);
+            statement.condition->accept(*this);
+            emit("pop R1", "get value of while-loop condition");
+
+            emit(fmt::format("jump_gt R1, {}", while_start_label), "repeat the while-loop if the condition is true");
+
+            emit_label(while_end_label);
+            loop_stack.pop();
+        }
+
+        void visit(DoWhileStatement& statement) override {
+            const auto do_while_start_label = next_label("do_while_start");
+            const auto do_while_condition_label = next_label("do_while_condition");
+            const auto do_while_end_label = next_label("do_while_end");
+            loop_stack.push(LoopLabels{ .continue_to_label{ do_while_condition_label },
+                                        .break_to_label{ do_while_end_label } });
+
+            emit_label(do_while_start_label);
+            statement.body.accept(*this);
+
+            emit_label(do_while_condition_label);
+            statement.condition->accept(*this);
+            emit("pop R1", "get value of do-while-loop condition");
+
+            emit(fmt::format("jump_gt R1, {}", do_while_start_label),
+                 "repeat the do-while-loop if the condition is true");
+
+            emit_label(do_while_end_label);
+            loop_stack.pop();
+        }
+
+        void visit(ForStatement& statement) override {
+            const auto for_start_label = next_label("for_start");
+            const auto for_condition_label = next_label("for_condition");
+            const auto for_end_label = next_label("for_end");
+
+            loop_stack.push(LoopLabels{ .continue_to_label{ for_condition_label }, .break_to_label{ for_end_label } });
+
+            if (statement.initializer) {
+                statement.initializer->accept(*this);
+            }
+
+            if (statement.condition) {
+                emit(fmt::format("jump {}", for_condition_label), "jump to the condition of the for-loop");
+            }
+
+            emit_label(for_start_label);
+
+            statement.body.accept(*this);
+
+            if (statement.increment) {
+                statement.increment->accept(*this);
+            }
+
+            emit_label(for_condition_label);
+            if (statement.condition) {
+                statement.condition->accept(*this);
+                emit("pop R1", "get value of for-loop condition");
+                emit(fmt::format("jump_gt R1, {}", for_start_label), "jump to the beginning of the for-loop");
+            } else {
+                emit(fmt::format("jump {}", for_start_label), "jump to the beginning of the for-loop");
+            }
+            emit_label(for_end_label);
+            loop_stack.pop();
         }
 
         void visit(Parser::Statements::BreakStatement& statement) override {

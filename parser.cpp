@@ -209,7 +209,7 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<Statements::IfStatement> if_statement() {
-            const auto if_token = consume<If>("this error should be unreachable");
+            const auto if_token = consume<If>();
             auto condition = expression();
             auto then_block = block();
             auto else_block = Statements::Block{ Statements::StatementList{} };
@@ -227,20 +227,72 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<Statements::LoopStatement> loop_statement() {
-            const auto loop_token = consume<Loop>("this error should be unreachable");
+            const auto loop_token = consume<Loop>();
             return std::make_unique<Parser::Statements::LoopStatement>(loop_token, block());
         }
 
         [[nodiscard]] std::unique_ptr<Statements::BreakStatement> break_statement() {
-            const auto loop_token = consume<Break>("this error should be unreachable");
+            const auto loop_token = consume<Break>();
             consume<Semicolon>("expected \";\"");
             return std::make_unique<Parser::Statements::BreakStatement>(loop_token);
         }
 
         [[nodiscard]] std::unique_ptr<Statements::ContinueStatement> continue_statement() {
-            const auto continue_token = consume<Continue>("this error should be unreachable");
+            const auto continue_token = consume<Continue>();
             consume<Semicolon>("expected \";\"");
             return std::make_unique<Parser::Statements::ContinueStatement>(continue_token);
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::WhileStatement> while_statement() {
+            const auto while_token = consume<While>();
+            auto condition = expression();
+            auto body = block();
+            return std::make_unique<Statements::WhileStatement>(while_token, std::move(condition), std::move(body));
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::DoWhileStatement> do_while_statement() {
+            const auto do_token = consume<Do>();
+            auto body = block();
+            const auto while_token = consume<While>("expected \"while\"");
+            auto condition = expression();
+            consume<Semicolon>("expected \";\"");
+            return std::make_unique<Statements::DoWhileStatement>(
+                    do_token, std::move(body), while_token, std::move(condition)
+            );
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::ForStatement> for_statement() {
+            const auto for_token = consume<For>();
+            const auto uses_parentheses = maybe_consume<LeftParenthesis>();
+            auto initializer = std::unique_ptr<Statements::Statement>{};
+            if (current_is<Let>()) {
+                initializer = variable_definition();
+            } else if (not current_is<Semicolon>()) {
+                initializer = std::make_unique<Statements::ExpressionStatement>(expression());
+                consume<Semicolon>("expected \";\"");
+            } else {
+                consume<Semicolon>();
+            }
+
+            auto condition = std::unique_ptr<Expression>{};
+            if (not current_is<Semicolon>()) {
+                condition = expression();
+            }
+            consume<Semicolon>("expected \";\"");
+
+            auto increment = std::unique_ptr<Expression>{};
+            if (not current_is<RightParenthesis>()) {
+                increment = expression();
+            }
+
+            if (uses_parentheses) {
+                consume<RightParenthesis>("expected \")\"");
+            }
+
+            auto body = block();
+            return std::make_unique<Statements::ForStatement>(
+                    for_token, std::move(initializer), std::move(condition), std::move(increment), std::move(body)
+            );
         }
 
         [[nodiscard]] Statements::Block block() {
@@ -255,6 +307,12 @@ namespace Parser {
                     statements.push_back(break_statement());
                 } else if (current_is<Continue>()) {
                     statements.push_back(continue_statement());
+                } else if (current_is<While>()) {
+                    statements.push_back(while_statement());
+                } else if (current_is<Do>()) {
+                    statements.push_back(do_while_statement());
+                } else if (current_is<For>()) {
+                    statements.push_back(for_statement());
                 } else if (current_is<Let>()) {
                     statements.push_back(variable_definition());
                 } else if (current_is<LeftCurlyBracket>()) {
@@ -309,8 +367,11 @@ namespace Parser {
         }
 
         template<typename T>
-        T consume(const std::string_view message) {
+        T consume(const std::string_view message = "") {
             if (not current_is<T>()) {
+                if (message.empty()) {
+                    assert(false and "this error should be unreachable");
+                }
                 error(message);
             }
             const auto result = std::get<T>(current());

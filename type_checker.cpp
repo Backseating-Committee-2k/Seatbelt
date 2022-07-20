@@ -83,9 +83,62 @@ namespace TypeChecker {
             statement.body.accept(*this);
         }
 
-        void visit(Parser::Statements::BreakStatement&) override {}
+        void visit(Parser::Statements::BreakStatement&) override { }
 
-        void visit(Parser::Statements::ContinueStatement&) override {}
+        void visit(Parser::Statements::ContinueStatement&) override { }
+
+        void visit(Parser::Statements::WhileStatement& statement) override {
+            statement.condition->accept(*this);
+            const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
+            if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+                Error::error(
+                        statement.while_token, fmt::format(
+                                                       "condition of while-statement must evaluate to a boolean "
+                                                       "expression (found type \"{}\")",
+                                                       statement.condition->data_type->to_string()
+                                               )
+                );
+            }
+            statement.body.accept(*this);
+        }
+
+        void visit(Parser::Statements::DoWhileStatement& statement) override {
+            statement.body.accept(*this);
+            statement.condition->accept(*this);
+            const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
+            if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+                Error::error(
+                        statement.while_token, fmt::format(
+                                                       "condition of do-while-statement must evaluate to a boolean "
+                                                       "expression (found type \"{}\")",
+                                                       statement.condition->data_type->to_string()
+                                               )
+                );
+            }
+        }
+
+        void visit(Parser::Statements::ForStatement& statement) override {
+            if (statement.initializer) {
+                statement.initializer->accept(*this);
+            }
+            if (statement.condition) {
+                statement.condition->accept(*this);
+                const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
+                if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+                    Error::error(
+                            statement.for_token, fmt::format(
+                                                         "condition of for-statement must evaluate to a boolean "
+                                                         "expression (found type \"{}\")",
+                                                         statement.condition->data_type->to_string()
+                                                 )
+                    );
+                }
+            }
+            if (statement.increment) {
+                statement.increment->accept(*this);
+            }
+            statement.body.accept(*this);
+        }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
             statement.type = type_container->from_tokens(statement.type_tokens);

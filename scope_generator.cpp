@@ -61,6 +61,41 @@ namespace ScopeGenerator {
             offset = body_visitor.offset;
         }
 
+        void visit(Parser::Statements::WhileStatement& statement) override {
+            statement.surrounding_scope = scope;
+            statement.condition->accept(*this);
+            statement.body.scope = scope->create_child_scope();
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            statement.body.accept(body_visitor);
+            offset = body_visitor.offset;
+        }
+
+        void visit(Parser::Statements::DoWhileStatement& statement) override {
+            statement.surrounding_scope = scope;
+            statement.body.scope = scope->create_child_scope();
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            statement.body.accept(body_visitor);
+            offset = body_visitor.offset;
+            statement.condition->accept(*this);
+        }
+
+        void visit(Parser::Statements::ForStatement& statement) override {
+            statement.surrounding_scope = scope;
+            statement.body.scope = scope->create_child_scope();
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            if (statement.initializer) {
+                statement.initializer->accept(body_visitor);
+            }
+            if (statement.condition) {
+                statement.condition->accept(body_visitor);
+            }
+            if (statement.increment) {
+                statement.increment->accept(body_visitor);
+            }
+            statement.body.accept(body_visitor);
+            offset = body_visitor.offset;
+        }
+
         void visit(Parser::Statements::BreakStatement&) override { }
 
         void visit(Parser::Statements::ContinueStatement&) override { }
