@@ -107,7 +107,8 @@ namespace ScopeGenerator {
                 );
             }
             statement.initial_value->accept(*this);
-            const auto data_type = type_container->from_tokens(statement.type_tokens);
+            const auto is_mutable = statement.mutable_token.has_value();
+            const auto data_type = type_container->from_tokens(statement.type_tokens, is_mutable);
             (*scope)[statement.name.location.view()] = VariableSymbol{ .offset{ offset }, .data_type{ data_type } };
             offset += 4;// TODO: different data types
             statement.surrounding_scope = scope;
@@ -149,13 +150,13 @@ namespace ScopeGenerator {
                         find_if(*current_scope, [identifier](const auto& pair) { return pair.first == identifier; });
                 const auto identifier_found = find_iterator != std::cend(*current_scope);
                 if (identifier_found) {
-                    expression.definition_data_type = std::visit(
+                    std::visit(
                             overloaded{
-                                    [](const VariableSymbol& variable) -> const DataType* {
-                                        return variable.data_type;
+                                    [&](const VariableSymbol& variable) {
+                                        expression.variable_symbol = &variable;
                                     },
                                     [remaining = namespace_qualifier, &identifier_token, &identifier,
-                                     &expression](const FunctionSymbol& function) mutable -> const DataType* {
+                                     &expression](const FunctionSymbol& function) mutable {
                                         using std::ranges::count;
                                         // We *did* find a function symbol with the correct function name (even though we
                                         // do not know the function signature), but the function can only be a valid choice
@@ -196,7 +197,6 @@ namespace ScopeGenerator {
                                             Error::error(identifier_token, "no matching function overload found");
                                         }
                                         expression.possible_overloads = std::move(possible_overloads);
-                                        return nullptr;
                                     } },
                             find_iterator->second
                     );
@@ -219,6 +219,12 @@ namespace ScopeGenerator {
                 argument->accept(*this);
             }
             expression.surrounding_scope = scope;
+        }
+
+        void visit(Parser::Expressions::Assignment& expression) override {
+            expression.surrounding_scope = scope;
+            expression.assignee->accept(*this);
+            expression.value->accept(*this);
         }
 
         Scope* scope;

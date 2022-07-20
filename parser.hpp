@@ -181,16 +181,22 @@ namespace Parser {
 
         struct VariableDefinition : public StatementAcceptor<VariableDefinition> {
             explicit VariableDefinition(
+                    Let let_token,
+                    std::optional<Mutable> mutable_token,
                     Identifier name,
                     Equals equals_token,
                     std::span<const Token> type_tokens,
                     std::unique_ptr<Expression> initial_value
             )
-                : name{ name },
+                : let_token{ let_token },
+                  mutable_token{ mutable_token },
+                  name{ name },
                   equals_token{ equals_token },
                   type_tokens{ type_tokens },
                   initial_value{ std::move(initial_value) } { }
 
+            Let let_token;
+            std::optional<Mutable> mutable_token;
             Identifier name;
             Equals equals_token;
             std::span<const Token> type_tokens;
@@ -221,6 +227,7 @@ namespace Parser {
         struct Name;
         struct BinaryOperator;
         struct FunctionCall;
+        struct Assignment;
 
         struct ExpressionVisitor {
             virtual void visit(Integer& expression) = 0;
@@ -229,6 +236,7 @@ namespace Parser {
             virtual void visit(Name& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
+            virtual void visit(Assignment& expression) = 0;
 
             virtual ~ExpressionVisitor() = default;
         };
@@ -272,8 +280,8 @@ namespace Parser {
             explicit Name(std::span<const Lexer::Tokens::Token> name_tokens) : name_tokens{ name_tokens } { }
 
             std::span<const Lexer::Tokens::Token> name_tokens;
-            const DataType* definition_data_type{ nullptr };
             std::optional<std::vector<const FunctionOverload*>> possible_overloads{};
+            std::optional<const VariableSymbol*> variable_symbol{};
         };
 
         struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {
@@ -294,6 +302,17 @@ namespace Parser {
 
             std::unique_ptr<Expression> callee;
             std::vector<std::unique_ptr<Expression>> arguments;
+        };
+
+        struct Assignment : public ExpressionAcceptor<Assignment> {
+            Assignment(std::unique_ptr<Expression> assignee, Equals equals_token, std::unique_ptr<Expression> value)
+                : assignee{ std::move(assignee) },
+                  equals_token{ equals_token },
+                  value{ std::move(value) } { }
+
+            std::unique_ptr<Expression> assignee;
+            Equals equals_token;
+            std::unique_ptr<Expression> value;
         };
 
     }// namespace Expressions

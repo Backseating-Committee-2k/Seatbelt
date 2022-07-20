@@ -21,7 +21,7 @@
             x(Asterisk) x(Percent) x(ForwardSlash) x(LeftParenthesis) x(RightParenthesis) x(LeftCurlyBracket)         \
                     x(RightCurlyBracket) x(Let) x(Equals) x(IntegerLiteral) x(CharLiteral) x(BoolLiteral)             \
                             x(InlineAssembly) x(Import) x(Dot) x(DoubleColon) x(Namespace) x(And) x(Or) x(Not) x(Xor) \
-                                    x(If) x(Else) x(Loop) x(Break) x(Continue) x(While) x(Do) x(For)
+                                    x(If) x(Else) x(Loop) x(Break) x(Continue) x(While) x(Do) x(For) x(Mutable)
 namespace Lexer {
 
     namespace Tokens {

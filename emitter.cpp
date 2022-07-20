@@ -252,6 +252,21 @@ namespace Emitter {
             emit("push R1", "push return value onto stack");
         }
 
+        void visit(Assignment& expression) override {
+            /* we cannot simply evaluate the assignee since that would only give us the
+             * value of the left hand side, so this is a special case */
+            const auto assignee = dynamic_cast<const Name*>(expression.assignee.get());
+            assert(assignee and "assignee must be a name");
+            assert(assignee->variable_symbol.has_value() and "there must be a pointer to the corresponding symbol");
+            const auto offset = assignee->variable_symbol.value()->offset;
+
+            expression.value->accept(*this); // puts value to assign onto stack
+            emit("pop R2", "get value of right side of assignment");
+            emit(fmt::format("add R0, {}, R1 ", offset), "get target address of assignment");
+            emit("copy R2, *R1", "store value at target address");
+            emit("push R2", "push value of assignment expression");
+        }
+
         void visit(Block& statement) override {
             for (auto& sub_statement : statement.statements) {
                 sub_statement->accept(*this);

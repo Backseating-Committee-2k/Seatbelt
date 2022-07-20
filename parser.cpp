@@ -100,7 +100,19 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<Expression> expression() {
-            return logical_or();
+            return assignment();
+        }
+
+        [[nodiscard]] std::unique_ptr<Expression> assignment() {
+            auto lhs = logical_or();
+            if (const auto equals_token = maybe_consume<Equals>()) {
+                auto rhs = expression();
+                return std::make_unique<Parser::Expressions::Assignment>(
+                        std::move(lhs), equals_token.value(), std::move(rhs)
+                );
+            } else {
+                return lhs;
+            }
         }
 
         DEFINE_BINARY_OPERATOR_PARSER_FUNCTION(logical_or, Or, logical_and)
@@ -281,7 +293,8 @@ namespace Parser {
             consume<Semicolon>("expected \";\"");
 
             auto increment = std::unique_ptr<Expression>{};
-            if (not current_is<RightParenthesis>()) {
+            if ((uses_parentheses and not current_is<RightParenthesis>()) or
+                (not uses_parentheses and not current_is<LeftCurlyBracket>())) {
                 increment = expression();
             }
 
@@ -343,8 +356,8 @@ namespace Parser {
         }
 
         std::unique_ptr<Statements::VariableDefinition> variable_definition() {
-            assert(current_is<Let>());
-            advance();
+            const auto let_token = consume<Let>();
+            const auto mutable_token = maybe_consume<Mutable>();
             const auto identifier = consume<Identifier>("expected variable name");
             consume<Colon>("expected \":\"");
             auto type_tokens = type();
@@ -352,7 +365,7 @@ namespace Parser {
             auto initial_value = expression();
             consume<Semicolon>("expected \";\"");
             return std::make_unique<Statements::VariableDefinition>(
-                    identifier, equals_token, type_tokens, std::move(initial_value)
+                    let_token, mutable_token, identifier, equals_token, type_tokens, std::move(initial_value)
             );
         }
 

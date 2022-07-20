@@ -12,12 +12,13 @@
     return static_cast<bool>(lhs) and static_cast<bool>(rhs) and *lhs == *rhs;
 }
 
-[[nodiscard]] static std::unique_ptr<DataType> token_to_type(const Lexer::Tokens::Token token) {
-    return std::make_unique<ConcreteType>(Error::token_location(token).view(), false);
+[[nodiscard]] static std::unique_ptr<DataType> token_to_type(const Lexer::Tokens::Token token, const bool is_mutable) {
+    return std::make_unique<ConcreteType>(Error::token_location(token).view(), is_mutable);
 }
 
-[[nodiscard]] static std::unique_ptr<DataType> tokens_to_type(const std::span<const Lexer::Tokens::Token> tokens) {
-    auto result = token_to_type(tokens.back());
+[[nodiscard]] static std::unique_ptr<DataType>
+tokens_to_type(const std::span<const Lexer::Tokens::Token> tokens, const bool is_mutable) {
+    auto result = token_to_type(tokens.back(), is_mutable);
     for (auto iterator = std::crbegin(tokens) + 1; iterator != std::crend(tokens); ++iterator) {
         if (not std::holds_alternative<Lexer::Tokens::Arrow>(*iterator)) {
             Error::error(*iterator, "invalid type specifier");
@@ -27,8 +28,9 @@
     return result;
 }
 
-[[nodiscard]] const DataType* TypeContainer::from_tokens(const std::span<const Lexer::Tokens::Token> type_tokens) {
-    auto data_type = tokens_to_type(type_tokens);
+[[nodiscard]] const DataType*
+TypeContainer::from_tokens(const std::span<const Lexer::Tokens::Token> type_tokens, const bool is_mutable) {
+    auto data_type = tokens_to_type(type_tokens, is_mutable);
     return from_data_type(std::move(data_type));
 }
 

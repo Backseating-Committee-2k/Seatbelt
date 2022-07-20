@@ -266,6 +266,7 @@ private:
             KEYWORD("while", While)
             KEYWORD("do", Do)
             KEYWORD("for", For)
+            KEYWORD("mutable", Mutable)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

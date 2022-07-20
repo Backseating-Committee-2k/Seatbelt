@@ -24,28 +24,37 @@ namespace TypeChecker {
         return {};
     }
 
-    [[nodiscard]] const DataType* get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression) {
+    [[nodiscard]] const DataType*
+    get_resulting_data_type(const DataType* lhs, const Lexer::Tokens::Token& token, const DataType* rhs) {
         using namespace Lexer::Tokens;
-        assert(expression.lhs->data_type != nullptr);
-        assert(expression.rhs->data_type != nullptr);
-        const auto& token = expression.operator_token;
-        const auto same_type = (expression.lhs->data_type == expression.rhs->data_type);
-        const auto concrete_types =
-                std::array{ concrete_type(expression.lhs->data_type), concrete_type(expression.rhs->data_type) };
+        assert(lhs != nullptr);
+        assert(rhs != nullptr);
+        const auto same_type = (lhs == rhs);
+        const auto concrete_types = std::array{ concrete_type(lhs), concrete_type(rhs) };
         const auto both_concrete = (concrete_types[0].has_value() and concrete_types[1].has_value());
+        if (is<Equals>(token)) {
+            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or not lhs->is_mutable) {
+                return nullptr;
+            }
+            return rhs;
+        }
         if (is_one_of<Plus, Minus, Asterisk, ForwardSlash>(token)) {
             if (not same_type or not both_concrete) {
                 return nullptr;
             }
-            return concrete_types[0].value() == U32Identifier ? expression.lhs->data_type : nullptr;
+            return concrete_types[0].value() == U32Identifier ? lhs : nullptr;
         }
         if (is_one_of<And, Or, Xor>(token)) {
             if (not same_type or not both_concrete) {
                 return nullptr;
             }
-            return concrete_types[0].value() == BoolIdentifier ? expression.lhs->data_type : nullptr;
+            return concrete_types[0].value() == BoolIdentifier ? lhs : nullptr;
         }
         return nullptr;
+    }
+
+    [[nodiscard]] const DataType* get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression) {
+        return get_resulting_data_type(expression.lhs->data_type, expression.operator_token, expression.rhs->data_type);
     }
 
     template<typename... Types>
@@ -141,11 +150,14 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
-            statement.type = type_container->from_tokens(statement.type_tokens);
+            const auto is_mutable = statement.mutable_token.has_value();
+            statement.type = type_container->from_tokens(statement.type_tokens, is_mutable);
             statement.initial_value->accept(*this);
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
-            if (statement.type != statement.initial_value->data_type) {
+            // TODO: check types!!!
+
+            /*if (resulting_type == nullptr) {
                 Error::error(
                         statement.equals_token,
                         fmt::format(
@@ -153,7 +165,7 @@ namespace TypeChecker {
                                 statement.initial_value->data_type->to_string()
                         )
                 );
-            }
+            }*/
         }
 
         void visit(Parser::Statements::InlineAssembly&) override { }
@@ -177,12 +189,9 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Name& expression) override {
-            /*  The scope generator fills in the data types of variable definitions beforehand.
-             *  But for function pointers we do not have any type information available and
-             *  have to fetch the data here. */
-            const auto is_variable = expression.definition_data_type != nullptr;
+            const auto is_variable = expression.variable_symbol.has_value();
             if (is_variable) {
-                expression.data_type = expression.definition_data_type;
+                expression.data_type = expression.variable_symbol.value()->data_type;
             } else {
                 // only the last token of a qualified name is relevant for lookup
                 const auto& name_token = expression.name_tokens.back();
@@ -271,6 +280,24 @@ namespace TypeChecker {
                     // this is a function pointer
                     assert(false && "not implemented");
                 }
+            }
+        }
+
+        void visit(Parser::Expressions::Assignment& expression) override {
+            expression.assignee->accept(*this);
+            expression.value->accept(*this);
+            if (const auto resulting_data_type = get_resulting_data_type(
+                        expression.assignee->data_type, expression.equals_token, expression.value->data_type
+                )) {
+                expression.data_type = resulting_data_type;
+            } else {
+                Error::error(
+                        expression.equals_token,
+                        fmt::format(
+                                R"(expression of type "{}" cannot be assigned to expression of type "{}")",
+                                expression.assignee->data_type->to_string(), expression.value->data_type->to_string()
+                        )
+                );
             }
         }
 
