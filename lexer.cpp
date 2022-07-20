@@ -63,6 +63,7 @@ public:
                     break;
                 default:
                     token_length = keyword_or_identifier(tokens);
+                    break;
             }
             advance(token_length);
         }
