@@ -27,6 +27,11 @@
         emit_single_char_token<token_type>(tokens); \
         break;
 
+#define NON_KEYWORD_MULTICHAR_TOKEN(text, token_type) \
+    if (remaining_source.starts_with(text)) { \
+        emit_token<token_type>(tokens, sizeof(text) - 1); \
+        return sizeof(text) - 1; \
+    }
 
 class LexerState {
 public:
@@ -51,7 +56,11 @@ public:
                 SINGLE_CHAR_TOKEN('{', LeftCurlyBracket)
                 SINGLE_CHAR_TOKEN('}', RightCurlyBracket)
                 SINGLE_CHAR_TOKEN(',', Comma)
-                SINGLE_CHAR_TOKEN('=', Equals)
+                SINGLE_CHAR_TOKEN('>', GreaterThan)
+                SINGLE_CHAR_TOKEN('<', LessThan)
+                case '=':
+                    token_length = equals(tokens);
+                    break;
                 case '-':
                     token_length = minus(tokens);
                     break;
@@ -62,7 +71,7 @@ public:
                     token_length = colon(tokens);
                     break;
                 default:
-                    token_length = keyword_or_identifier(tokens);
+                    token_length = other_multichar_token(tokens);
                     break;
             }
             advance(token_length);
@@ -156,6 +165,17 @@ private:
         return token_length;
     }
 
+    [[nodiscard]] usize equals(Lexer::TokenList& tokens) {
+        using namespace Lexer::Tokens;
+        assert(current() == '=');
+        if (peek() == '=') {
+            emit_token<EqualsEquals>(tokens, 2);
+            return 2;
+        }
+        emit_single_char_token<Equals>(tokens);
+        return 1;
+    }
+
     [[nodiscard]] usize minus(Lexer::TokenList& tokens) {
         using namespace Lexer::Tokens;
         assert(current() == '-');
@@ -226,13 +246,18 @@ private:
         return 1;
     }
 
-    [[nodiscard]] usize keyword_or_identifier(Lexer::TokenList& tokens) {
+    [[nodiscard]] usize other_multichar_token(Lexer::TokenList& tokens) {
         using namespace Lexer::Tokens;
         const auto c = current();
         if (std::isspace(current())) {
             return 1;
         }
+
         std::string_view remaining_source = m_source_code.text.substr(m_index);
+
+        NON_KEYWORD_MULTICHAR_TOKEN("!=", ExclamationEquals)
+        NON_KEYWORD_MULTICHAR_TOKEN(">=", GreaterOrEquals)
+        NON_KEYWORD_MULTICHAR_TOKEN("<=", LessOrEquals)
 
         static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
         static constexpr char integer_pattern[] = "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
