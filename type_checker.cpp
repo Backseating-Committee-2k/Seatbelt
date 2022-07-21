@@ -17,6 +17,8 @@ namespace TypeChecker {
     static constexpr std::string_view CharIdentifier{ "Char" };
     static constexpr std::string_view BoolIdentifier{ "Bool" };
 
+    using Lexer::Tokens::Token;
+
     [[nodiscard]] std::optional<std::string_view> concrete_type(const DataType* data_type) {
         if (const auto concrete = dynamic_cast<const ConcreteType*>(data_type)) {
             return concrete->name;
@@ -24,14 +26,24 @@ namespace TypeChecker {
         return {};
     }
 
-    [[nodiscard]] const DataType*
-    get_resulting_data_type(const DataType* lhs, const Lexer::Tokens::Token& token, const DataType* rhs) {
+    [[nodiscard]] const DataType* get_resulting_data_type(
+            const DataType* lhs,
+            const Token& token,
+            const DataType* rhs,
+            TypeContainer& type_container
+    ) {
         using namespace Lexer::Tokens;
         assert(lhs != nullptr);
         assert(rhs != nullptr);
         const auto same_type = (lhs == rhs);
         const auto concrete_types = std::array{ concrete_type(lhs), concrete_type(rhs) };
         const auto both_concrete = (concrete_types[0].has_value() and concrete_types[1].has_value());
+        if (is<EqualsEquals>(token) or is<ExclamationEquals>(token)) {
+            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
+                return nullptr;
+            }
+            return type_container.from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
+        }
         if (is<Equals>(token)) {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or not lhs->is_mutable) {
                 return nullptr;
@@ -53,8 +65,11 @@ namespace TypeChecker {
         return nullptr;
     }
 
-    [[nodiscard]] const DataType* get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression) {
-        return get_resulting_data_type(expression.lhs->data_type, expression.operator_token, expression.rhs->data_type);
+    [[nodiscard]] const DataType*
+    get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression, TypeContainer& type_container) {
+        return get_resulting_data_type(
+                expression.lhs->data_type, expression.operator_token, expression.rhs->data_type, type_container
+        );
     }
 
     template<typename... Types>
@@ -161,8 +176,9 @@ namespace TypeChecker {
                                                : type_container->from_type_definition(statement.type->as_mutable());
 
             // type checking rules are the same as if we would do type checking during an assignment
-            const auto resulting_type =
-                    get_resulting_data_type(assignee_type, statement.equals_token, statement.initial_value->data_type);
+            const auto resulting_type = get_resulting_data_type(
+                    assignee_type, statement.equals_token, statement.initial_value->data_type, *type_container
+            );
 
             if (resulting_type == nullptr) {
                 Error::error(
@@ -238,7 +254,7 @@ namespace TypeChecker {
             using namespace Lexer::Tokens;
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
-            if (const auto resulting_type = get_resulting_data_type(expression)) {
+            if (const auto resulting_type = get_resulting_data_type(expression, *type_container)) {
                 expression.data_type = resulting_type;
                 return;
             }
@@ -312,7 +328,8 @@ namespace TypeChecker {
             }
 
             if (const auto resulting_data_type = get_resulting_data_type(
-                        expression.assignee->data_type, expression.equals_token, expression.value->data_type
+                        expression.assignee->data_type, expression.equals_token, expression.value->data_type,
+                        *type_container
                 )) {
                 expression.data_type = resulting_data_type;
             } else {
