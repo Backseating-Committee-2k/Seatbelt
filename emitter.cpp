@@ -55,30 +55,62 @@ namespace Emitter {
         std::string break_to_label;
     };
 
+    using namespace Lexer::Tokens;
+
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
+
+        // operands are already stored in R1 and R2, result has to be stored in R3
         struct BinaryOperatorEmitter {
-            void operator()(const Lexer::Tokens::Plus&) const {
+            void operator()(const Plus&) const {
                 visitor->emit("add R1, R2, R3", "add values");
             }
 
-            void operator()(const Lexer::Tokens::Minus&) const {
+            void operator()(const Minus&) const {
                 assert(false && "not implemented");
             }
 
-            void operator()(const Lexer::Tokens::Asterisk&) const {
+            void operator()(const Asterisk&) const {
                 visitor->emit("mult R1, R2, R4, R3", "multiply values");
             }
 
-            void operator()(const Lexer::Tokens::ForwardSlash&) const {
+            void operator()(const ForwardSlash&) const {
                 assert(false && "not implemented");
             }
 
-            void operator()(const Lexer::Tokens::And&) const {
+            void operator()(const And&) const {
                 visitor->emit("and R1, R2, R3", "and values");
             }
 
-            void operator()(const Lexer::Tokens::Or&) const {
+            void operator()(const Or&) const {
                 visitor->emit("or R1, R2, R3", "or values");
+            }
+
+            void operator()(const EqualsEquals&) {
+                const auto zero_flag_set_label = visitor->next_label("zero_flag_set");
+                const auto comparison_end_label = visitor->next_label("comparison_end");
+
+                visitor->emit("sub R1, R2, R3", "subtract values");
+                // if the values were equal, the zero flag is now set
+                visitor->emit(fmt::format("jump_zero {}", zero_flag_set_label));
+                visitor->emit("copy 0, R3", "store \"false\" as result");
+                visitor->emit(fmt::format("jump {}", comparison_end_label));
+                visitor->emit_label(zero_flag_set_label);
+                visitor->emit("copy 1, R3", "store \"true\" as result");
+                visitor->emit_label(comparison_end_label);
+            }
+
+            void operator()(const ExclamationEquals&) {
+                const auto zero_flag_set_label = visitor->next_label("zero_flag_set");
+                const auto comparison_end_label = visitor->next_label("comparison_end");
+
+                visitor->emit("sub R1, R2, R3", "subtract values");
+                // if the values were equal, the zero flag is now set
+                visitor->emit(fmt::format("jump_zero {}", zero_flag_set_label));
+                visitor->emit("copy 1, R3", "store \"true\" as result");
+                visitor->emit(fmt::format("jump {}", comparison_end_label));
+                visitor->emit_label(zero_flag_set_label);
+                visitor->emit("copy 0, R3", "store \"false\" as result");
+                visitor->emit_label(comparison_end_label);
             }
 
             void operator()(const auto&) const {
@@ -402,7 +434,7 @@ namespace Emitter {
             statement.initial_value->accept(*this);
         }
 
-        void visit(InlineAssembly& statement) override {
+        void visit(Parser::Statements::InlineAssembly& statement) override {
             const auto assembly_block = statement.token->location.view();
             const auto start_iterator = std::find(assembly_block.cbegin(), assembly_block.cend(), '{');
             assert(start_iterator != assembly_block.cend());
