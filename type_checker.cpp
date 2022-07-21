@@ -410,13 +410,6 @@ namespace TypeChecker {
                 }
             }
 
-            /*const auto find_signature_iterator =
-                    find_if(overloads, [&](const auto& overload) { return overload.signature == signature; });
-            const auto duplicate_signature = (find_signature_iterator != std::cend(overloads));
-            fmt::print(stderr, "duplicate signature found for {}? {}\n", identifier, duplicate_signature);
-            fmt::print(stderr, "there are {} functions called {}\n", overloads.size(), identifier);*/
-
-
             function_definition->corresponding_symbol->signature = std::move(signature);
 
             assert(function_definition->return_type_definition and "function return type must have been set before");
