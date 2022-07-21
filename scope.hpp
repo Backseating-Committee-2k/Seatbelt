@@ -13,9 +13,13 @@
 #include <unordered_map>
 #include <variant>
 
+namespace Parser::Statements {
+    struct VariableDefinition;
+}
+
 struct VariableSymbol {
     usize offset{ 0 };
-    const DataType* data_type{ nullptr };
+    std::variant<std::monostate, const Parser::Statements::VariableDefinition*, const Parameter*> definition{};
 };
 
 struct FunctionOverload {

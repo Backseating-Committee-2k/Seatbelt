@@ -182,24 +182,21 @@ namespace Parser {
         struct VariableDefinition : public StatementAcceptor<VariableDefinition> {
             explicit VariableDefinition(
                     Let let_token,
-                    std::optional<Mutable> mutable_token,
                     Identifier name,
                     Equals equals_token,
-                    std::span<const Token> type_tokens,
+                    std::unique_ptr<DataType> type_definition,
                     std::unique_ptr<Expression> initial_value
             )
                 : let_token{ let_token },
-                  mutable_token{ mutable_token },
                   name{ name },
                   equals_token{ equals_token },
-                  type_tokens{ type_tokens },
+                  type_definition{ std::move(type_definition) },
                   initial_value{ std::move(initial_value) } { }
 
             Let let_token;
-            std::optional<Mutable> mutable_token;
             Identifier name;
             Equals equals_token;
-            std::span<const Token> type_tokens;
+            std::unique_ptr<DataType> type_definition;
             const DataType* type{ nullptr };
             std::unique_ptr<Expression> initial_value;
         };
@@ -320,7 +317,7 @@ namespace Parser {
     struct FunctionDefinition {
         Identifier name;
         ParameterList parameters;
-        std::span<const Token> return_type_tokens;
+        std::unique_ptr<DataType> return_type_definition;
         const DataType* return_type{ nullptr };
         Statements::Block body;
         FunctionOverload* corresponding_symbol{ nullptr };

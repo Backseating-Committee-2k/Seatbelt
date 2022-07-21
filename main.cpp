@@ -64,7 +64,7 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
         error("main function must not be overloaded");
     }
     const auto expected_main_function_return_type =
-            type_container.from_data_type(std::make_unique<ConcreteType>("Void", false));
+            type_container.from_type_definition(std::make_unique<ConcreteType>("Void", false));
     const auto main_function_has_correct_signature =
             (main_symbol->overloads.front().signature == "$main" and
              main_symbol->overloads.front().return_type == expected_main_function_return_type);

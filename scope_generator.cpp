@@ -107,9 +107,7 @@ namespace ScopeGenerator {
                 );
             }
             statement.initial_value->accept(*this);
-            const auto is_mutable = statement.mutable_token.has_value();
-            const auto data_type = type_container->from_tokens(statement.type_tokens, is_mutable);
-            (*scope)[statement.name.location.view()] = VariableSymbol{ .offset{ offset }, .data_type{ data_type } };
+            (*scope)[statement.name.location.view()] = VariableSymbol{ .offset{ offset }, .definition{ &statement } };
             offset += 4;// TODO: different data types
             statement.surrounding_scope = scope;
         }
@@ -152,10 +150,8 @@ namespace ScopeGenerator {
                 if (identifier_found) {
                     std::visit(
                             overloaded{
-                                    [&](const VariableSymbol& variable) {
-                                        expression.variable_symbol = &variable;
-                                    },
-                                    [remaining = namespace_qualifier, &identifier_token, &identifier,
+                                    [&](const VariableSymbol& variable) { expression.variable_symbol = &variable; },
+                                    [remaining = namespace_qualifier, &identifier_token,
                                      &expression](const FunctionSymbol& function) mutable {
                                         using std::ranges::count;
                                         // We *did* find a function symbol with the correct function name (even though we
@@ -248,9 +244,8 @@ namespace ScopeGenerator {
                             fmt::format("duplicate parameter name \"{}\"", parameter.name.location.view())
                     );
                 }
-                const auto parameter_type = type_container->from_tokens(parameter.type_tokens);
                 (*function_scope)[parameter.name.location.view()] =
-                        VariableSymbol{ .offset{ offset }, .data_type{ parameter_type } };
+                        VariableSymbol{ .offset{ offset }, .definition{ &parameter } };
                 offset += 4;// TODO: different data types
             }
 
@@ -280,6 +275,7 @@ namespace ScopeGenerator {
             auto find_iterator = find_if(*global_scope, [&](const auto& pair) { return pair.first == identifier; });
             const auto found = find_iterator != std::end(*global_scope);
             auto function_overload = FunctionOverload{ .namespace_name{ function_definition->namespace_name } };
+
             if (found) {
                 assert(std::holds_alternative<FunctionSymbol>(find_iterator->second) &&
                        "other cases not implemented yet");

@@ -11,7 +11,7 @@
 
 struct Parameter {
     Lexer::Tokens::Identifier name;
-    std::span<const Lexer::Tokens::Token> type_tokens;
+    std::unique_ptr<DataType> type_definition;
     const DataType* type{ nullptr };
 };
 

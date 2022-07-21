@@ -11,10 +11,7 @@
 
 class TypeContainer {
 public:
-    [[nodiscard]] const DataType*
-    from_tokens(std::span<const Lexer::Tokens::Token> type_tokens, bool is_mutable = false);
-
-    [[nodiscard]] const DataType* from_data_type(std::unique_ptr<DataType> data_type);
+    [[nodiscard]] const DataType* from_type_definition(std::unique_ptr<DataType> data_type);
 
     [[nodiscard]] const DataType* remove_const(const DataType* data_type);
 

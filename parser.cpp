@@ -181,21 +181,23 @@ namespace Parser {
             while (not end_of_file() and not current_is<RightParenthesis>()) {
                 const auto parameter_name = consume<Identifier>("expected parameter name");
                 consume<Colon>("expected \":\"");
-                const auto type_tokens = type();
-                parameters.push_back(Parameter{ .name{ parameter_name }, .type_tokens{ type_tokens }, .type{} });
+                auto type_definition = data_type();
+                parameters.push_back(
+                        Parameter{ .name{ parameter_name }, .type_definition{ std::move(type_definition) }, .type{} }
+                );
                 if (not maybe_consume<Comma>()) {
                     break;
                 }
             }
             consume<RightParenthesis>("expected \")\"");
             consume<Colon>("expected \":\"");
-            const auto return_type_tokens = type();
+            auto return_type_definition = data_type();
             auto body = block();
             auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
             return std::make_unique<FunctionDefinition>(FunctionDefinition{
                     .name{ name },
                     .parameters{ std::move(parameters) },
-                    .return_type_tokens{ return_type_tokens },
+                    .return_type_definition{ std::move(return_type_definition) },
                     .return_type{},
                     .body{ std::move(body) },
                     .namespace_name{ std::move(namespace_name) } });
@@ -345,27 +347,45 @@ namespace Parser {
             return Statements::Block{ std::move(statements) };
         }
 
-        [[nodiscard]] std::span<const Token> type() {
-            const auto type_start_index = m_index;
-            while (current_is<Arrow>()) {
-                advance();
+        [[nodiscard]] std::unique_ptr<DataType> data_type() {
+            return pointer_type();
+        }
+
+        [[nodiscard]] std::unique_ptr<DataType> pointer_type() {
+            const auto is_mutable = current_is<Mutable>();
+            if (not is_mutable and next_is<Arrow>()) {
+                maybe_consume<Const>();
             }
-            consume<Identifier>("typanem expected");
-            return std::span{ std::begin(*m_tokens) + static_cast<ptrdiff_t>(type_start_index),
-                              std::begin(*m_tokens) + static_cast<ptrdiff_t>(m_index) };
+            if ((not is_mutable and current_is<Arrow>()) or (is_mutable and peek_is<Arrow>())) {
+                if (is_mutable) {
+                    advance();
+                }
+                advance();
+                auto pointee_type = data_type();
+                return std::make_unique<PointerType>(std::move(pointee_type), is_mutable);
+            }
+            return primitive_type();
+        }
+
+        [[nodiscard]] std::unique_ptr<DataType> primitive_type() {
+            const auto is_mutable = static_cast<bool>(maybe_consume<Mutable>());
+            if (not is_mutable) {
+                maybe_consume<Const>();
+            }
+            auto identifier = consume<Identifier>("type identifier expected");
+            return std::make_unique<ConcreteType>(identifier.location.view(), is_mutable);
         }
 
         std::unique_ptr<Statements::VariableDefinition> variable_definition() {
             const auto let_token = consume<Let>();
-            const auto mutable_token = maybe_consume<Mutable>();
             const auto identifier = consume<Identifier>("expected variable name");
             consume<Colon>("expected \":\"");
-            auto type_tokens = type();
+            auto type_definition = data_type();
             auto equals_token = consume<Equals>("expected variable initialization");
             auto initial_value = expression();
             consume<Semicolon>("expected \";\"");
             return std::make_unique<Statements::VariableDefinition>(
-                    let_token, mutable_token, identifier, equals_token, type_tokens, std::move(initial_value)
+                    let_token, identifier, equals_token, std::move(type_definition), std::move(initial_value)
             );
         }
 
@@ -421,6 +441,11 @@ namespace Parser {
 
         [[nodiscard]] const Token& peek() const {
             return (*m_tokens)[m_index + 1];
+        }
+
+        template<typename T>
+        [[nodiscard]] bool peek_is() const {
+            return std::holds_alternative<T>(peek());
         }
 
         [[nodiscard]] bool end_of_file() const {

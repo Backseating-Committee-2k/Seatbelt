@@ -21,6 +21,20 @@ public:
         return is_mutable == other.is_mutable;
     }
 
+    [[nodiscard]] std::unique_ptr<DataType> as_mutable() const {
+        auto copy = clone();
+        copy->is_mutable = true;
+        return copy;
+    }
+
+    [[nodiscard]] std::unique_ptr<DataType> as_const() const {
+        auto copy = clone();
+        copy->is_mutable = false;
+        return copy;
+    }
+
+    [[nodiscard]] virtual std::unique_ptr<DataType> clone() const = 0;
+
     [[nodiscard]] virtual std::string to_string() const {
         return is_mutable ? "mutable " : "const ";
     }
@@ -46,6 +60,10 @@ struct ConcreteType : public DataType {
 
     [[nodiscard]] std::string mangled_name() const override {
         return fmt::format("${}", name);
+    }
+
+    [[nodiscard]] std::unique_ptr<DataType> clone() const final {
+        return std::make_unique<ConcreteType>(name, is_mutable);
     }
 
     std::string_view name;
@@ -74,6 +92,10 @@ struct PointerType : public DataType {
         return fmt::format("$pointer${}", contained->mangled_name());
     }
 
+    [[nodiscard]] std::unique_ptr<DataType> clone() const final {
+        return std::make_unique<PointerType>(contained->clone(), is_mutable);
+    }
+
     std::unique_ptr<DataType> contained;
 };
 
@@ -95,6 +117,10 @@ struct FunctionPointerType : public DataType {
 
     [[nodiscard]] std::string mangled_name() const override {
         return fmt::format("$function_pointer${}", signature);
+    }
+
+    [[nodiscard]] std::unique_ptr<DataType> clone() const final {
+        return std::make_unique<FunctionPointerType>(signature, is_mutable);
     }
 
     std::string signature;

@@ -150,22 +150,29 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
-            const auto is_mutable = statement.mutable_token.has_value();
-            statement.type = type_container->from_tokens(statement.type_tokens, is_mutable);
+            assert(statement.type_definition and "type definition must have been set before");// TODO: type deduction
+            statement.type = type_container->from_type_definition(std::move(statement.type_definition));
             statement.initial_value->accept(*this);
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
-            // TODO: check types!!!
+            // get the mutable version of the assignee type (if it is not mutable already)
+            DataType const* const assignee_type =
+                    statement.type->is_mutable ? statement.type
+                                               : type_container->from_type_definition(statement.type->as_mutable());
 
-            /*if (resulting_type == nullptr) {
+            // type checking rules are the same as if we would do type checking during an assignment
+            const auto resulting_type =
+                    get_resulting_data_type(assignee_type, statement.equals_token, statement.initial_value->data_type);
+
+            if (resulting_type == nullptr) {
                 Error::error(
                         statement.equals_token,
                         fmt::format(
-                                R"(incompatible types "{}" and "{}")", statement.type->to_string(),
-                                statement.initial_value->data_type->to_string()
+                                R"(cannot initialize a variable of type "{}" with a value of type "{}")",
+                                statement.type->to_string(), statement.initial_value->data_type->to_string()
                         )
                 );
-            }*/
+            }
         }
 
         void visit(Parser::Statements::InlineAssembly&) override { }
@@ -175,23 +182,33 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Integer& expression) override {
-            expression.data_type = type_container->from_data_type(std::make_unique<ConcreteType>(U32Identifier, false));
+            expression.data_type =
+                    type_container->from_type_definition(std::make_unique<ConcreteType>(U32Identifier, false));
         }
 
         void visit(Parser::Expressions::Char& expression) override {
             expression.data_type =
-                    type_container->from_data_type(std::make_unique<ConcreteType>(CharIdentifier, false));
+                    type_container->from_type_definition(std::make_unique<ConcreteType>(CharIdentifier, false));
         }
 
         void visit(Parser::Expressions::Bool& expression) override {
             expression.data_type =
-                    type_container->from_data_type(std::make_unique<ConcreteType>(BoolIdentifier, false));
+                    type_container->from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
         }
 
         void visit(Parser::Expressions::Name& expression) override {
             const auto is_variable = expression.variable_symbol.has_value();
             if (is_variable) {
-                expression.data_type = expression.variable_symbol.value()->data_type;
+                expression.data_type = std::visit(
+                        overloaded{ [](const Parser::Statements::VariableDefinition* variable_definition
+                                    ) -> const DataType* { return variable_definition->type; },
+                                    [](const Parameter* parameter) -> const DataType* { return parameter->type; },
+                                    [](std::monostate) -> const DataType* {
+                                        assert(false and "unreachable");
+                                        return nullptr;
+                                    } },
+                        expression.variable_symbol.value()->definition
+                );
             } else {
                 // only the last token of a qualified name is relevant for lookup
                 const auto& name_token = expression.name_tokens.back();
@@ -208,7 +225,7 @@ namespace TypeChecker {
                     }
                     assert(overloads.size() == 1);
                     fmt::print(stderr, "setting type of name {}\n", identifier);
-                    expression.data_type = type_container->from_data_type(
+                    expression.data_type = type_container->from_type_definition(
                             std::make_unique<FunctionPointerType>(overloads.front().signature, false)
                     );
                 } else {
@@ -255,7 +272,7 @@ namespace TypeChecker {
                     for (const auto& overload : possible_overloads) {
                         if (overload->signature == signature) {
                             assert(overload->return_type != nullptr && "return type has to be set before");
-                            name->data_type = type_container->from_data_type(
+                            name->data_type = type_container->from_type_definition(
                                     std::make_unique<FunctionPointerType>(signature, false)
                             );
                             overload_found = true;
@@ -286,6 +303,14 @@ namespace TypeChecker {
         void visit(Parser::Expressions::Assignment& expression) override {
             expression.assignee->accept(*this);
             expression.value->accept(*this);
+
+            // check if the left side is an LVALUE
+            const auto name = dynamic_cast<const Parser::Expressions::Name*>(expression.assignee.get());
+            const auto assignee_is_name = (name != nullptr);
+            if (not assignee_is_name or not name->variable_symbol.has_value()) {
+                Error::error(expression.equals_token, "left-hand side of assignment is not assignable");
+            }
+
             if (const auto resulting_data_type = get_resulting_data_type(
                         expression.assignee->data_type, expression.equals_token, expression.value->data_type
                 )) {
@@ -340,7 +365,8 @@ namespace TypeChecker {
 
             auto signature = fmt::format("${}", function_definition->name.location.view());
             for (auto& parameter : function_definition->parameters) {
-                parameter.type = type_container->from_tokens(parameter.type_tokens);
+                assert(parameter.type_definition and "type definition must have been set before");
+                parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
                 signature += parameter.type->mangled_name();
             }
 
@@ -376,7 +402,9 @@ namespace TypeChecker {
 
             function_definition->corresponding_symbol->signature = std::move(signature);
 
-            function_definition->return_type = type_container->from_tokens(function_definition->return_type_tokens);
+            assert(function_definition->return_type_definition and "function return type must have been set before");
+            function_definition->return_type =
+                    type_container->from_type_definition(std::move(function_definition->return_type_definition));
             function_definition->corresponding_symbol->return_type = function_definition->return_type;
 
             // the body of the function is not recursively visited here since we have to first visit
