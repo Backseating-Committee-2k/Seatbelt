@@ -18,32 +18,6 @@
 #include <variant>
 #include <vector>
 
-#define DEFINE_BINARY_OPERATOR_PARSER_FUNCTION(name, token, next)                          \
-    [[nodiscard]] std::unique_ptr<Expression> name() {                                     \
-        using Expressions::BinaryOperator;                                                 \
-        auto accumulator = next();                                                         \
-        while (auto current_token = maybe_consume<token>()) {                              \
-            auto next_operand = next();                                                    \
-            accumulator = std::make_unique<BinaryOperator>(                                \
-                    std::move(accumulator), std::move(next_operand), current_token.value() \
-            );                                                                             \
-        }                                                                                  \
-        return accumulator;                                                                \
-    }
-
-#define DEFINE_BINARY_OPERATOR_PARSER_FUNCTION_2(name, first_token, second_token, next)    \
-    [[nodiscard]] std::unique_ptr<Expression> name() {                                     \
-        using Expressions::BinaryOperator;                                                 \
-        auto accumulator = next();                                                         \
-        while (auto current_token = maybe_consume_one_of<first_token, second_token>()) {   \
-            auto next_operand = next();                                                    \
-            accumulator = std::make_unique<BinaryOperator>(                                \
-                    std::move(accumulator), std::move(next_operand), current_token.value() \
-            );                                                                             \
-        }                                                                                  \
-        return accumulator;                                                                \
-    }
-
 namespace Parser {
 
     using Expressions::Expression;
@@ -83,6 +57,10 @@ namespace Parser {
         }
 
     private:
+        // this serves as a container for type tags
+        template<typename... T>
+        struct PrecedenceGroup { };
+
         [[nodiscard]] Program parse_namespace() {
             assert(current_is<Namespace>());
             advance();
@@ -104,7 +82,19 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<Expression> assignment() {
-            auto lhs = logical_or();
+            // clang-format off
+
+            // left-associative binary operators, from lowest to highest precedence
+            auto lhs = binary_operator(
+                    PrecedenceGroup<Or>{},
+                    PrecedenceGroup<And>{},
+                    PrecedenceGroup<EqualsEquals, ExclamationEquals>{},
+                    PrecedenceGroup<LessThan, LessOrEquals, GreaterThan, GreaterOrEquals>{},
+                    PrecedenceGroup<Plus, Minus>{},
+                    PrecedenceGroup<Asterisk, ForwardSlash>{}
+            );
+            // clang-format on
+
             if (const auto equals_token = maybe_consume<Equals>()) {
                 auto rhs = expression();
                 return std::make_unique<Parser::Expressions::Assignment>(
@@ -115,13 +105,26 @@ namespace Parser {
             }
         }
 
-        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION(logical_or, Or, logical_and)
+        template<typename FirstGroup, typename... RemainingGroups>
+        [[nodiscard]] std::unique_ptr<Expression> binary_operator(FirstGroup first, RemainingGroups... remaining) {
+            using Expressions::BinaryOperator;
+            auto accumulator = binary_operator(remaining...);// fold expression leads to parsing the last group first
+            while (auto current_token = maybe_consume_one_of(first)) {// try to consume any of the tokens of first group
+                auto next_operand = binary_operator(remaining...);    // same as above, but now for right-hand side
 
-        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION(logical_and, And, addition_or_subtraction)
+                // nest the parsed expressions to accomplish left-associativity
+                accumulator = std::make_unique<BinaryOperator>(
+                        std::move(accumulator), std::move(next_operand), current_token.value()
+                );
+            }
+            return accumulator;
+        }
 
-        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION_2(addition_or_subtraction, Plus, Minus, multiplication_or_division)
-
-        DEFINE_BINARY_OPERATOR_PARSER_FUNCTION_2(multiplication_or_division, Asterisk, ForwardSlash, function_call)
+        // When called without any arguments, this overload is chosen. Since there are no precedence groups left over,
+        // we just pass on the call to the expression with the next higher precedence.
+        [[nodiscard]] std::unique_ptr<Expression> binary_operator() {
+            return function_call();
+        }
 
         [[nodiscard]] std::unique_ptr<Expression> function_call() {
             using Expressions::FunctionCall;
@@ -433,6 +436,17 @@ namespace Parser {
                 }
                 return maybe_consume_one_of<RemainingTypes...>();
             }
+        }
+
+        // This function "unpacks" the type tags that are contained in a PrecedenceGroup
+        // and invokes its own overload (see above) with the unpacked types as
+        // template type parameters.
+        // Example: A call to maybe_consume_one_of(PrecedenceGroup<Plus, Minus>{}) leads to a call
+        //          to maybe_consume_one_of<Plus, Minus>() (notice that the template type arguments
+        //          in the first call are automatically deduced using the passed argument).
+        template<typename... TokenTypes>
+        std::optional<Token> maybe_consume_one_of(PrecedenceGroup<TokenTypes...>) {
+            return maybe_consume_one_of<TokenTypes...>();
         }
 
         [[nodiscard]] const Token& current() const {
