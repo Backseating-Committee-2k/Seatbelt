@@ -268,7 +268,6 @@ private:
 
     [[nodiscard]] usize other_multichar_token(Lexer::TokenList& tokens) {
         using namespace Lexer::Tokens;
-        const auto c = current();
         if (std::isspace(current())) {
             return 1;
         }
