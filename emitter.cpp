@@ -93,6 +93,22 @@ namespace Emitter {
                 visitor->emit("comp_neq R1, R2, R3");
             }
 
+            void operator()(const GreaterThan&) const {
+                visitor->emit("comp_gt R1, R2, R3");
+            }
+
+            void operator()(const GreaterOrEquals&) const {
+                visitor->emit("comp_ge R1, R2, R3");
+            }
+
+            void operator()(const LessThan&) const {
+                visitor->emit("comp_lt R1, R2, R3");
+            }
+
+            void operator()(const LessOrEquals&) const {
+                visitor->emit("comp_le R1, R2, R3");
+            }
+
             void operator()(const auto&) const {
                 assert(false && "unreachable");
             }
