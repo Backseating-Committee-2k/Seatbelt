@@ -76,10 +76,10 @@ foreach (target ${TARGET_LIST})
     # set warning levels
     if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         message("MSVC build")
-        target_compile_options(${target} PUBLIC /W4 /permissive- /fsanitize=address)
+        target_compile_options(${target} PUBLIC /W4 /WX /permissive- /fsanitize=address)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message("GCC build")
-        target_compile_options(${target} PUBLIC -Wall -Wextra -pedantic -Wconversion -pthread)
+        target_compile_options(${target} PUBLIC -Wall -Wextra -Werror -pedantic -Wconversion -pthread)
     endif ()
 
     # define DEBUG_BUILD
