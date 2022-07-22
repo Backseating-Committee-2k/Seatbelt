@@ -46,6 +46,13 @@ namespace TypeChecker {
             }
             return type_container.from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
         }
+        if (is_one_of<GreaterThan, GreaterOrEquals, LessThan, LessOrEquals>(token)) {
+            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or
+                concrete_types[0].value() != U32Identifier) {
+                return nullptr;
+            }
+            return type_container.from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
+        }
         if (is<Equals>(token)) {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or not lhs->is_mutable) {
                 return nullptr;
