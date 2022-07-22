@@ -18,7 +18,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     message("GCC build")
     target_compile_options(Tests PUBLIC -Wall -Wextra -pedantic -Wconversion -pthread)
-    target_link_libraries(Tests PRIVATE TBB::tbb)
 endif ()
 
 # define DEBUG_BUILD
