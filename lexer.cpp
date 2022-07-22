@@ -27,12 +27,6 @@
         emit_single_char_token<token_type>(tokens); \
         break;
 
-#define NON_KEYWORD_MULTICHAR_TOKEN(text, token_type) \
-    if (remaining_source.starts_with(text)) { \
-        emit_token<token_type>(tokens, sizeof(text) - 1); \
-        return sizeof(text) - 1; \
-    }
-
 class LexerState {
 public:
     explicit LexerState(SourceCode source_code) : m_source_code{ source_code } { }
@@ -56,8 +50,12 @@ public:
                 SINGLE_CHAR_TOKEN('{', LeftCurlyBracket)
                 SINGLE_CHAR_TOKEN('}', RightCurlyBracket)
                 SINGLE_CHAR_TOKEN(',', Comma)
-                SINGLE_CHAR_TOKEN('>', GreaterThan)
-                SINGLE_CHAR_TOKEN('<', LessThan)
+                case '>':
+                    token_length = greater_than(tokens);
+                    break;
+                case '<':
+                    token_length = less_than(tokens);
+                    break;
                 case '=':
                     token_length = equals(tokens);
                     break;
@@ -165,6 +163,28 @@ private:
         return token_length;
     }
 
+    [[nodiscard]] usize greater_than(Lexer::TokenList& tokens) {
+        assert(current() == '>');
+        using namespace Lexer::Tokens;
+        if (peek() == '=') {
+            emit_token<GreaterOrEquals>(tokens, 2);
+            return 2;
+        }
+        emit_single_char_token<GreaterThan>(tokens);
+        return 1;
+    }
+
+    [[nodiscard]] usize less_than(Lexer::TokenList& tokens) {
+        assert(current() == '<');
+        using namespace Lexer::Tokens;
+        if (peek() == '=') {
+            emit_token<LessOrEquals>(tokens, 2);
+            return 2;
+        }
+        emit_single_char_token<LessThan>(tokens);
+        return 1;
+    }
+
     [[nodiscard]] usize equals(Lexer::TokenList& tokens) {
         using namespace Lexer::Tokens;
         assert(current() == '=');
@@ -255,9 +275,10 @@ private:
 
         std::string_view remaining_source = m_source_code.text.substr(m_index);
 
-        NON_KEYWORD_MULTICHAR_TOKEN("!=", ExclamationEquals)
-        NON_KEYWORD_MULTICHAR_TOKEN(">=", GreaterOrEquals)
-        NON_KEYWORD_MULTICHAR_TOKEN("<=", LessOrEquals)
+        if (remaining_source.starts_with("!=")) {
+            emit_token<ExclamationEquals>(tokens, 2);
+            return 2;
+        }
 
         static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
         static constexpr char integer_pattern[] = "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
