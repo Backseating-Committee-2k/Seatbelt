@@ -72,10 +72,6 @@ add_executable(Seatbelt
 
 target_link_libraries(Seatbelt fmt ctre argh)
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    find_package(TBB CONFIG REQUIRED)
-endif ()
-
 foreach (target ${TARGET_LIST})
     # set warning levels
     if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -84,7 +80,6 @@ foreach (target ${TARGET_LIST})
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message("GCC build")
         target_compile_options(${target} PUBLIC -Wall -Wextra -pedantic -Wconversion -pthread)
-        target_link_libraries(${target} PRIVATE TBB::tbb)
     endif ()
 
     # define DEBUG_BUILD
