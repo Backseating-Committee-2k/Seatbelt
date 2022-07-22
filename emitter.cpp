@@ -85,32 +85,12 @@ namespace Emitter {
                 visitor->emit("or R1, R2, R3", "or values");
             }
 
-            void operator()(const EqualsEquals&) {
-                const auto zero_flag_set_label = visitor->next_label("zero_flag_set");
-                const auto comparison_end_label = visitor->next_label("comparison_end");
-
-                visitor->emit("sub R1, R2, R3", "subtract values");
-                // if the values were equal, the zero flag is now set
-                visitor->emit(fmt::format("jump_zero {}", zero_flag_set_label));
-                visitor->emit("copy 0, R3", "store \"false\" as result");
-                visitor->emit(fmt::format("jump {}", comparison_end_label));
-                visitor->emit_label(zero_flag_set_label);
-                visitor->emit("copy 1, R3", "store \"true\" as result");
-                visitor->emit_label(comparison_end_label);
+            void operator()(const EqualsEquals&) const {
+                visitor->emit("comp_eq R1, R2, R3");
             }
 
-            void operator()(const ExclamationEquals&) {
-                const auto zero_flag_set_label = visitor->next_label("zero_flag_set");
-                const auto comparison_end_label = visitor->next_label("comparison_end");
-
-                visitor->emit("sub R1, R2, R3", "subtract values");
-                // if the values were equal, the zero flag is now set
-                visitor->emit(fmt::format("jump_zero {}", zero_flag_set_label));
-                visitor->emit("copy 1, R3", "store \"true\" as result");
-                visitor->emit(fmt::format("jump {}", comparison_end_label));
-                visitor->emit_label(zero_flag_set_label);
-                visitor->emit("copy 0, R3", "store \"false\" as result");
-                visitor->emit_label(comparison_end_label);
+            void operator()(const ExclamationEquals&) const {
+                visitor->emit("comp_neq R1, R2, R3");
             }
 
             void operator()(const auto&) const {
