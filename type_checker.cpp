@@ -36,6 +36,8 @@ namespace TypeChecker {
         assert(lhs != nullptr);
         assert(rhs != nullptr);
         const auto same_type = (lhs == rhs);
+
+        // the following array represents the concrete data types ignoring their mutability
         const auto concrete_types = std::array{ concrete_type(lhs), concrete_type(rhs) };
         const auto both_concrete = (concrete_types[0].has_value() and concrete_types[1].has_value());
         if (is<EqualsEquals>(token) or is<ExclamationEquals>(token)) {
