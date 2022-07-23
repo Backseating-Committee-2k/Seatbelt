@@ -93,7 +93,8 @@ namespace ScopeGenerator {
                 statement.increment->accept(body_visitor);
             }
             statement.body.accept(body_visitor);
-            offset = body_visitor.offset;
+            // we do not set the offset to body_visitor.offset, because the stack is restored
+            // to the previous state after leaving the loop
         }
 
         void visit(Parser::Statements::BreakStatement&) override { }

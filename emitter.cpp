@@ -377,6 +377,8 @@ namespace Emitter {
 
             loop_stack.push(LoopLabels{ .continue_to_label{ for_condition_label }, .break_to_label{ for_end_label } });
 
+            emit("copy sp, R8", "save current stack pointer before for-loop starts");
+
             if (statement.initializer) {
                 statement.initializer->accept(*this);
             }
@@ -394,6 +396,14 @@ namespace Emitter {
                 emit("pop R1", "pop result of increment");
             }
 
+            if (statement.initializer and dynamic_cast<const VariableDefinition*>(statement.initializer.get())) {
+                // there was an initializer and the initializer created a new variable
+                emit("add R8, 4, sp", "reset stack pointer to position after for-loop initialization");
+            } else {
+                // no initializer - no problem
+                emit("copy R8, sp", "reset stack pointer to position at start of for-loop");
+            }
+
             emit_label(for_condition_label);
             if (statement.condition) {
                 statement.condition->accept(*this);
@@ -404,6 +414,8 @@ namespace Emitter {
             }
             emit_label(for_end_label);
             loop_stack.pop();
+
+            emit("copy R8, sp", "reset stack pointer to position at start of for-loop");
         }
 
         void visit(Parser::Statements::BreakStatement& statement) override {
