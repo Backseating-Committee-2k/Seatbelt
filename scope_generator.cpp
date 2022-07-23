@@ -189,6 +189,35 @@ namespace ScopeGenerator {
                                             }
                                             --remaining_namespaces;
                                         }
+
+                                        // if we couldn't find any overloads yet and this is a qualified name,
+                                        // then we can also look into the global namespace and try to find an
+                                        // exact match in there
+                                        const auto is_global_lookup_fallback = possible_overloads.empty();
+
+                                        const auto inside_global_namespace =
+                                                expression.surrounding_scope->surrounding_namespace.empty();
+
+                                        if (was_qualified_name) {
+                                            const auto global_name_qualifier =
+                                                    get_absolute_namespace_qualifier(expression);
+                                            for (const auto& overload : function.overloads) {
+                                                if (overload.namespace_name == global_name_qualifier) {
+                                                    // we cannot determine the return type of the function here because
+                                                    // we cannot do overload resolution as of now
+                                                    if (is_global_lookup_fallback) {
+                                                        possible_overloads.push_back(&overload);
+                                                    } else if (not inside_global_namespace) {
+                                                        Error::warning(
+                                                                expression.name_tokens.back(),
+                                                                "absolute/relative namespace ambiguity can lead to "
+                                                                "confusion"
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         if (possible_overloads.empty()) {
                                             Error::error(identifier_token, "no matching function overload found");
                                         }

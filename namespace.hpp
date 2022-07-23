@@ -10,4 +10,5 @@
 using NamespacesStack = std::vector<std::string>;
 
 [[nodiscard]] std::string get_namespace_qualifier(const Parser::Expressions::Name& expression);
+[[nodiscard]] std::string get_absolute_namespace_qualifier(const Parser::Expressions::Name& expression);
 [[nodiscard]] std::string get_namespace_qualifier(const NamespacesStack& namespaces_stack);
