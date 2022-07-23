@@ -60,10 +60,12 @@ namespace TypeChecker {
             return rhs;
         }
         if (is_one_of<Plus, Minus, Asterisk, ForwardSlash>(token)) {
-            if (not same_type or not both_concrete) {
+            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
                 return nullptr;
             }
-            return concrete_types[0].value() == U32Identifier ? lhs : nullptr;
+            return concrete_types[0].value() == U32Identifier
+                           ? type_container.from_type_definition(std::make_unique<ConcreteType>(U32Identifier, false))
+                           : nullptr;
         }
         if (is_one_of<And, Or, Xor>(token)) {
             if (not same_type or not both_concrete) {
