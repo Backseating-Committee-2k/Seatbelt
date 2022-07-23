@@ -391,6 +391,7 @@ namespace Emitter {
 
             if (statement.increment) {
                 statement.increment->accept(*this);
+                emit("pop R1", "pop result of increment");
             }
 
             emit_label(for_condition_label);
