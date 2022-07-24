@@ -169,27 +169,13 @@ namespace Emitter {
                 emit("push R1", "push address of label onto stack");
                 return;
             }
+            assert(expression.variable_symbol.has_value() and "if this is not a function, it has to be a variable");
 
+            const auto offset = expression.variable_symbol.value()->offset.value();
             const auto& variable_token = expression.name_tokens.back();
             const auto variable_name = Error::token_location(variable_token).view();
 
-            if (expression.name_tokens.size() != 1) {
-                Error::error(expression.name_tokens.back(), "qualified name not allowed here");
-            }
-            std::optional<usize> offset;
-            const Scope* current_scope = expression.surrounding_scope;
-            while (current_scope != nullptr) {
-                const auto find_iterator = current_scope->find(variable_name);
-                if (find_iterator != current_scope->end()) {
-                    offset = std::get<VariableSymbol>(find_iterator->second).offset;
-                    break;
-                }
-                current_scope = current_scope->surrounding_scope;
-            }
-            if (not offset.has_value()) {
-                Error::error(variable_token, fmt::format("use of undeclared identifier \"{}\"", variable_name));
-            }
-            emit(fmt::format("add R0, {}, R1", offset.value()),
+            emit(fmt::format("add R0, {}, R1", offset),
                  fmt::format("calculate address of variable \"{}\"", variable_name));
             emit("copy *R1, R2", fmt::format("load value of variable \"{}\" into R2", variable_name));
             emit("push R2", fmt::format("push value of variable \"{}\" onto the stack", variable_name));
