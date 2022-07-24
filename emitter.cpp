@@ -239,26 +239,43 @@ namespace Emitter {
         }
 
         void visit(FunctionCall& expression) override {
-            expression.callee->accept(*this);// evaluate callee
+            emit("\n", "evaluate function call");
 
-            emit("pop R5", "get jump address");
+            emit("add sp, 12, sp",
+                 "reserve stack space for jump address, return address, and old stack frame base pointer");
 
-            emit("copy sp, R6", "store address of return address placeholder");
-            emit("add sp, 4, sp", "reserve stack space for the return address placeholder");
-
-            emit("push R0", "store current stack frame base pointer for later");
-            emit("copy sp, R7", "this will be the new stack frame base pointer");
-
-            emit("", "evaluate arguments in current stack frame");
+            usize arguments_size = 0;
             for (const auto& argument : expression.arguments) {
-                argument->accept(*this);
+                argument->accept(*this);// evaluate argument => result will be pushed
+                arguments_size += argument->data_type->size();
             }
 
-            emit("copy R7, R0", "set the new stack frame base pointer");
+            expression.callee->accept(*this);// evaluate callee => jump address is pushed
+            emit("pop R1", "get jump address");
+            emit(fmt::format("sub sp, {}, R2", arguments_size + 12), "calculate address of jump address placeholder");
+            emit("copy R1, *R2", "store jump address in stack");
+            emit("add R2, 8, R2", "calculate address of old stack frame base pointer placeholder");
+            emit("copy R0, *R2", "save old stack frame base pointer in stack");
 
-            emit("add ip, 24, R1", "calculate return address");
-            emit("copy R1, *R6", "fill return address placeholder");
-            emit("jump R5", "call function");
+            assert(expression.function_to_call and "function must have been set before");
+            assert(expression.function_to_call->body.occupied_stack_space.has_value() and
+                   "stack size of function body must be known");
+            const auto function_stack_frame_size = expression.function_to_call->body.occupied_stack_space.value();
+
+            emit(fmt::format("add sp, {}, sp", function_stack_frame_size - arguments_size),
+                 "reserve stack space for function (excluding arguments)");
+
+            emit(fmt::format("sub sp, {}, R0", function_stack_frame_size), "set new stack frame base pointer");
+
+            emit("add ip, 48, R1", "calculate return address");
+            emit(fmt::format("sub sp, {}, R2", 8 + function_stack_frame_size),
+                 "calculate address of return address placeholder");
+            emit("copy R1, *R2", "fill return address placeholder");
+
+            emit("sub R0, 12, R2", "calculate address of jump address");
+            emit("copy *R2, R2", "get jump address");
+            emit("jump R2", "call function");
+            emit("pop", "pop jump address");
 
             // after the call the return value is inside R1
             emit("push R1", "push return value onto stack");
@@ -270,9 +287,9 @@ namespace Emitter {
             const auto assignee = dynamic_cast<const Name*>(expression.assignee.get());
             assert(assignee and "assignee must be a name");
             assert(assignee->variable_symbol.has_value() and "there must be a pointer to the corresponding symbol");
-            const auto offset = assignee->variable_symbol.value()->offset;
+            const auto offset = assignee->variable_symbol.value()->offset.value();
 
-            expression.value->accept(*this); // puts value to assign onto stack
+            expression.value->accept(*this);// puts value to assign onto stack
             emit("pop R2", "get value of right side of assignment");
             emit(fmt::format("add R0, {}, R1 ", offset), "get target address of assignment");
             emit("copy R2, *R1", "store value at target address");
@@ -361,8 +378,6 @@ namespace Emitter {
 
             loop_stack.push(LoopLabels{ .continue_to_label{ for_condition_label }, .break_to_label{ for_end_label } });
 
-            emit("copy sp, R8", "save current stack pointer before for-loop starts");
-
             if (statement.initializer) {
                 statement.initializer->accept(*this);
             }
@@ -380,14 +395,6 @@ namespace Emitter {
                 emit("pop R1", "pop result of increment");
             }
 
-            if (statement.initializer and dynamic_cast<const VariableDefinition*>(statement.initializer.get())) {
-                // there was an initializer and the initializer created a new variable
-                emit("add R8, 4, sp", "reset stack pointer to position after for-loop initialization");
-            } else {
-                // no initializer - no problem
-                emit("copy R8, sp", "reset stack pointer to position at start of for-loop");
-            }
-
             emit_label(for_condition_label);
             if (statement.condition) {
                 statement.condition->accept(*this);
@@ -398,8 +405,6 @@ namespace Emitter {
             }
             emit_label(for_end_label);
             loop_stack.pop();
-
-            emit("copy R8, sp", "reset stack pointer to position at start of for-loop");
         }
 
         void visit(Parser::Statements::BreakStatement& statement) override {
@@ -417,14 +422,17 @@ namespace Emitter {
         }
 
         void visit(VariableDefinition& statement) override {
-            using std::ranges::max_element;
-
             const usize offset =
-                    std::get<VariableSymbol>((*statement.surrounding_scope).at(statement.name.location.view())).offset;
+                    std::get<VariableSymbol>((*statement.surrounding_scope).at(statement.name.location.view()))
+                            .offset.value();
             assembly += fmt::format(
                     "\t// new variable called \"{}\" with offset {}\n", statement.name.location.view(), offset
             );
-            statement.initial_value->accept(*this);
+            statement.initial_value->accept(*this);// initial value is evaluated and pushed
+            emit(fmt::format("add R0, {}, R1", offset),
+                 fmt::format("calculate address for variable {}\n", statement.name.location.view()));
+            emit("pop R2", "get initial value of variable");
+            emit("copy R2, *R1", "store initial value in stack");
         }
 
         void visit(Parser::Statements::InlineAssembly& statement) override {
@@ -469,11 +477,15 @@ namespace Emitter {
             }
             result += "\n";
         };
-        if (function_definition->name.location.view() == "main") {
-            emit("copy sp, R0", "save current stack pointer into R0 (this is the new stack frame base pointer)");
+        if (function_definition->is_entry_point) {
+            emit("copy sp, R0", "save stack frame base pointer for main function into R0");
+            assert(function_definition->body.occupied_stack_space.has_value() and
+                   "needed stack size for function must be known");
+            emit(fmt::format("add sp, {}, sp", function_definition->body.occupied_stack_space.value()),
+                 "reserve stack space for main function");
         }
         result += emit_statement(*program, function_definition->body);
-        if (function_definition->name.location.view() == "main") {
+        if (function_definition->is_entry_point) {
             emit("halt");
         } else {
             emit("copy R0, sp", "clear current stack frame");

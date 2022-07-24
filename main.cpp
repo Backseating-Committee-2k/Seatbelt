@@ -71,6 +71,7 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
     if (not main_function_has_correct_signature) {
         error("main function must not take any parameters and must return Void");
     }
+    main_symbol->overloads.front().definition->is_entry_point = true;
 }
 
 enum class ImportStatus {

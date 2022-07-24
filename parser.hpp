@@ -90,6 +90,7 @@ namespace Parser {
 
             StatementList statements;
             std::unique_ptr<Scope> scope;
+            std::optional<usize> occupied_stack_space{};
         };
 
         struct IfStatement : public StatementAcceptor<IfStatement> {
@@ -199,6 +200,7 @@ namespace Parser {
             std::unique_ptr<DataType> type_definition;
             const DataType* type{ nullptr };
             std::unique_ptr<Expression> initial_value;
+            VariableSymbol* variable_symbol{ nullptr };
         };
 
         struct InlineAssembly : public StatementAcceptor<InlineAssembly> {
@@ -299,6 +301,7 @@ namespace Parser {
 
             std::unique_ptr<Expression> callee;
             std::vector<std::unique_ptr<Expression>> arguments;
+            const FunctionDefinition* function_to_call{ nullptr };
         };
 
         struct Assignment : public ExpressionAcceptor<Assignment> {
@@ -322,6 +325,7 @@ namespace Parser {
         Statements::Block body;
         FunctionOverload* corresponding_symbol{ nullptr };
         std::string namespace_name{};
+        bool is_entry_point{ false };
     };
 
     struct ImportStatement {

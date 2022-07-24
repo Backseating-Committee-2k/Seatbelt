@@ -86,12 +86,19 @@ namespace TypeChecker {
 
     struct TypeCheckerVisitor : public Parser::Statements::StatementVisitor,
                                 public Parser::Expressions::ExpressionVisitor {
-        explicit TypeCheckerVisitor(TypeContainer* type_container) : type_container{ type_container } { }
+        TypeCheckerVisitor(TypeContainer* type_container, usize starting_offset) : type_container{ type_container } {
+            if (starting_offset > 0) {
+                claim_stack_space(starting_offset);
+            }
+        }
 
         void visit(Parser::Statements::Block& statement) override {
+            const auto old_offset = offset;
             for (auto& sub_statement : statement.statements) {
                 sub_statement->accept(*this);
             }
+            statement.occupied_stack_space = occupied_stack_space;
+            offset = old_offset;
         }
 
         void visit(Parser::Statements::IfStatement& statement) override {
@@ -149,6 +156,8 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Statements::ForStatement& statement) override {
+            using Parser::Statements::VariableDefinition;
+            const auto old_offset = offset;
             if (statement.initializer) {
                 statement.initializer->accept(*this);
             }
@@ -169,11 +178,16 @@ namespace TypeChecker {
                 statement.increment->accept(*this);
             }
             statement.body.accept(*this);
+            offset = old_offset;
         }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
             assert(statement.type_definition and "type definition must have been set before");// TODO: type deduction
             statement.type = type_container->from_type_definition(std::move(statement.type_definition));
+
+            assert(statement.variable_symbol != nullptr);
+            statement.variable_symbol->offset = claim_stack_space(statement.type->size());
+
             statement.initial_value->accept(*this);
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
@@ -220,12 +234,18 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Name& expression) override {
+            using Parser::Statements::VariableDefinition;
             const auto is_variable = expression.variable_symbol.has_value();
             if (is_variable) {
                 expression.data_type = std::visit(
-                        overloaded{ [](const Parser::Statements::VariableDefinition* variable_definition
-                                    ) -> const DataType* { return variable_definition->type; },
-                                    [](const Parameter* parameter) -> const DataType* { return parameter->type; },
+                        overloaded{ [](const VariableDefinition* variable_definition) -> const DataType* {
+                                       assert(variable_definition->type and "type must be known");
+                                       return variable_definition->type;
+                                   },
+                                    [](const Parameter* parameter) -> const DataType* {
+                                        assert(parameter->type and "type must be known");
+                                        return parameter->type;
+                                    },
                                     [](std::monostate) -> const DataType* {
                                         assert(false and "unreachable");
                                         return nullptr;
@@ -316,9 +336,12 @@ namespace TypeChecker {
                     possible_overloads.erase(std::begin(possible_overloads) + 1, std::end(possible_overloads));
                     assert(possible_overloads.size() == 1);
                     expression.data_type = possible_overloads.front()->return_type;
+                    assert(possible_overloads.front()->definition and
+                           "each overload must have a pointer to its definition");
+                    expression.function_to_call = possible_overloads.front()->definition;
                 } else {
                     // this is a function pointer
-                    assert(false && "not implemented");
+                    assert(false && "not implemented (did you try to call a variable?)");
                 }
             }
         }
@@ -350,7 +373,19 @@ namespace TypeChecker {
             }
         }
 
+        usize claim_stack_space(const usize size_of_type) {
+            assert(size_of_type > 0);
+            const auto old_offset = offset;
+            offset += size_of_type;
+            if (offset > occupied_stack_space) {
+                occupied_stack_space = offset;
+            }
+            return old_offset;
+        }
+
         TypeContainer* type_container;
+        usize offset{ 0 };
+        usize occupied_stack_space{ 0 };
     };
 
     struct TypeCheckerTopLevelVisitor {
@@ -366,10 +401,12 @@ namespace TypeChecker {
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             // the actual signature of the function must have been visited before, we now
             // only visit the body
-            auto visitor = TypeCheckerVisitor{ type_container };
-            for (const auto& statement : function_definition->body.statements) {
-                statement->accept(visitor);
+            usize size_of_parameters = 0;
+            for (const auto& parameter : function_definition->parameters) {
+                size_of_parameters += parameter.type->size();
             }
+            auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters };
+            function_definition->body.accept(visitor);
         }
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
@@ -388,10 +425,13 @@ namespace TypeChecker {
             using std::ranges::find_if;
 
             auto signature = fmt::format("${}", function_definition->name.location.view());
+            usize offset = 0;
             for (auto& parameter : function_definition->parameters) {
                 assert(parameter.type_definition and "type definition must have been set before");
                 parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
                 signature += parameter.type->mangled_name();
+                parameter.variable_symbol->offset = offset;
+                offset += parameter.type->size();
             }
 
             const auto identifier = function_definition->name.location.view();

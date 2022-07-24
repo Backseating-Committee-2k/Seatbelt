@@ -8,11 +8,13 @@
 #include "lexer.hpp"
 #include <span>
 
+struct VariableSymbol;
 
 struct Parameter {
     Lexer::Tokens::Identifier name;
     std::unique_ptr<DataType> type_definition;
     const DataType* type{ nullptr };
+    VariableSymbol* variable_symbol{ nullptr };
 };
 
 using ParameterList = std::vector<Parameter>;

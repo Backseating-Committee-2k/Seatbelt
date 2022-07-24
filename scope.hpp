@@ -22,7 +22,7 @@ namespace Parser {
 }// namespace Parser
 
 struct VariableSymbol {
-    usize offset{ 0 };
+    std::optional<usize> offset{};
     std::variant<std::monostate, const Parser::Statements::VariableDefinition*, const Parameter*> definition{};
 };
 
@@ -31,6 +31,7 @@ struct FunctionOverload {
     const ParameterList* parameters{ nullptr };
     const DataType* return_type{ nullptr };
     std::string_view namespace_name{};
+    Parser::FunctionDefinition* definition{ nullptr };
 };
 
 struct FunctionSymbol {

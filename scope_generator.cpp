@@ -294,7 +294,8 @@ namespace ScopeGenerator {
             auto identifier = function_definition->name.location.view();
             auto find_iterator = find_if(*global_scope, [&](const auto& pair) { return pair.first == identifier; });
             const auto found = find_iterator != std::end(*global_scope);
-            auto function_overload = FunctionOverload{ .namespace_name{ function_definition->namespace_name } };
+            auto function_overload = FunctionOverload{ .namespace_name{ function_definition->namespace_name },
+                                                       .definition{ function_definition.get() } };
 
             if (found) {
                 assert(std::holds_alternative<FunctionSymbol>(find_iterator->second) &&
