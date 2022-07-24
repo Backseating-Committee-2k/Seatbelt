@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "types.hpp"
 #include <cassert>
 #include <fmt/core.h>
 #include <memory>
@@ -45,6 +46,8 @@ public:
 
     [[nodiscard]] virtual std::string mangled_name() const = 0;
 
+    [[nodiscard]] virtual usize size() const = 0;
+
     bool is_mutable;
 };
 
@@ -68,6 +71,15 @@ struct ConcreteType : public DataType {
 
     [[nodiscard]] std::unique_ptr<DataType> clone() const final {
         return std::make_unique<ConcreteType>(name, is_mutable);
+    }
+
+    [[nodiscard]] usize size() const override {
+        if (name == U32Identifier or name == BoolIdentifier or name == CharIdentifier) {
+            return 4;
+        } else {
+            assert(false and "unknown data type");
+            return 0;
+        }
     }
 
     std::string_view name;
@@ -100,6 +112,10 @@ struct PointerType : public DataType {
         return std::make_unique<PointerType>(contained->clone(), is_mutable);
     }
 
+    [[nodiscard]] usize size() const override {
+        return 4;
+    }
+
     std::unique_ptr<DataType> contained;
 };
 
@@ -125,6 +141,10 @@ struct FunctionPointerType : public DataType {
 
     [[nodiscard]] std::unique_ptr<DataType> clone() const final {
         return std::make_unique<FunctionPointerType>(signature, is_mutable);
+    }
+
+    [[nodiscard]] usize size() const override {
+        return 4;
     }
 
     std::string signature;
