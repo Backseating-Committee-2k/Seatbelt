@@ -13,10 +13,6 @@
 #include <variant>
 
 namespace TypeChecker {
-    static constexpr std::string_view U32Identifier{ "U32" };
-    static constexpr std::string_view CharIdentifier{ "Char" };
-    static constexpr std::string_view BoolIdentifier{ "Bool" };
-
     using Lexer::Tokens::Token;
 
     [[nodiscard]] std::optional<std::string_view> concrete_type(const DataType* data_type) {

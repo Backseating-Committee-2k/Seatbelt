@@ -10,6 +10,10 @@
 #include <string>
 #include <string_view>
 
+static constexpr std::string_view U32Identifier{ "U32" };
+static constexpr std::string_view CharIdentifier{ "Char" };
+static constexpr std::string_view BoolIdentifier{ "Bool" };
+
 struct DataType {
 protected:
     explicit DataType(bool is_mutable) : is_mutable{ is_mutable } { }
