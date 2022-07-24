@@ -16,9 +16,8 @@
 namespace ScopeGenerator {
 
     struct ScopeGenerator : public Parser::Statements::StatementVisitor, public Parser::Expressions::ExpressionVisitor {
-        ScopeGenerator(Scope* scope, usize offset, TypeContainer* type_container)
+        ScopeGenerator(Scope* scope, TypeContainer* type_container)
             : scope{ scope },
-              offset{ offset },
               type_container{ type_container } { }
 
         void visit(Parser::Statements::Block& statement) override {
@@ -27,9 +26,8 @@ namespace ScopeGenerator {
                 if (const auto sub_block = dynamic_cast<Parser::Statements::Block*>(sub_statement.get())) {
                     sub_block->scope =
                             std::make_unique<Scope>(scope, statement.surrounding_scope->surrounding_namespace);
-                    auto sub_visitor = ScopeGenerator{ sub_block->scope.get(), offset, type_container };
+                    auto sub_visitor = ScopeGenerator{ sub_block->scope.get(), type_container };
                     sub_block->accept(sub_visitor);
-                    offset = sub_visitor.offset;
                 } else {
                     sub_statement->accept(*this);
                 }
@@ -42,47 +40,42 @@ namespace ScopeGenerator {
 
             statement.then_block.scope =
                     std::make_unique<Scope>(scope, statement.surrounding_scope->surrounding_namespace);
-            auto then_visitor = ScopeGenerator{ statement.then_block.scope.get(), offset, type_container };
+            auto then_visitor = ScopeGenerator{ statement.then_block.scope.get(), type_container };
             statement.then_block.accept(then_visitor);
-            offset = then_visitor.offset;
 
             statement.else_block.scope =
                     std::make_unique<Scope>(scope, statement.surrounding_scope->surrounding_namespace);
-            auto else_visitor = ScopeGenerator{ statement.else_block.scope.get(), offset, type_container };
+            auto else_visitor = ScopeGenerator{ statement.else_block.scope.get(), type_container };
             statement.else_block.accept(else_visitor);
-            offset = else_visitor.offset;
         }
 
         void visit(Parser::Statements::LoopStatement& statement) override {
             statement.surrounding_scope = scope;
             statement.body.scope = scope->create_child_scope();
-            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), type_container };
             statement.body.accept(body_visitor);
-            offset = body_visitor.offset;
         }
 
         void visit(Parser::Statements::WhileStatement& statement) override {
             statement.surrounding_scope = scope;
             statement.condition->accept(*this);
             statement.body.scope = scope->create_child_scope();
-            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), type_container };
             statement.body.accept(body_visitor);
-            offset = body_visitor.offset;
         }
 
         void visit(Parser::Statements::DoWhileStatement& statement) override {
             statement.surrounding_scope = scope;
             statement.body.scope = scope->create_child_scope();
-            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), type_container };
             statement.body.accept(body_visitor);
-            offset = body_visitor.offset;
             statement.condition->accept(*this);
         }
 
         void visit(Parser::Statements::ForStatement& statement) override {
             statement.surrounding_scope = scope;
             statement.body.scope = scope->create_child_scope();
-            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), offset, type_container };
+            auto body_visitor = ScopeGenerator{ statement.body.scope.get(), type_container };
             if (statement.initializer) {
                 statement.initializer->accept(body_visitor);
             }
@@ -93,8 +86,6 @@ namespace ScopeGenerator {
                 statement.increment->accept(body_visitor);
             }
             statement.body.accept(body_visitor);
-            // we do not set the offset to body_visitor.offset, because the stack is restored
-            // to the previous state after leaving the loop
         }
 
         void visit(Parser::Statements::BreakStatement&) override { }
@@ -108,8 +99,9 @@ namespace ScopeGenerator {
                 );
             }
             statement.initial_value->accept(*this);
-            (*scope)[statement.name.location.view()] = VariableSymbol{ .offset{ offset }, .definition{ &statement } };
-            offset += 4;// TODO: different data types
+            (*scope)[statement.name.location.view()] = VariableSymbol{ .definition{ &statement } };
+            statement.variable_symbol = &std::get<VariableSymbol>(scope->at(statement.name.location.view()));
+            assert(statement.variable_symbol != nullptr);
             statement.surrounding_scope = scope;
         }
 
@@ -254,7 +246,6 @@ namespace ScopeGenerator {
         }
 
         Scope* scope;
-        usize offset;
         TypeContainer* type_container;
     };
 
@@ -266,7 +257,6 @@ namespace ScopeGenerator {
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             auto function_scope = std::make_unique<Scope>(global_scope, function_definition->namespace_name);
-            usize offset = 0;
             for (auto& parameter : function_definition->parameters) {
                 if (function_scope->contains(parameter.name.location.view())) {
                     Error::error(
@@ -274,12 +264,12 @@ namespace ScopeGenerator {
                             fmt::format("duplicate parameter name \"{}\"", parameter.name.location.view())
                     );
                 }
-                (*function_scope)[parameter.name.location.view()] =
-                        VariableSymbol{ .offset{ offset }, .definition{ &parameter } };
-                offset += 4;// TODO: different data types
+                (*function_scope)[parameter.name.location.view()] = VariableSymbol{ .definition{ &parameter } };
+                parameter.variable_symbol =
+                        &std::get<VariableSymbol>(function_scope->at(parameter.name.location.view()));
             }
 
-            auto visitor = ScopeGenerator{ function_scope.get(), offset, type_container };
+            auto visitor = ScopeGenerator{ function_scope.get(), type_container };
             function_definition->body.scope = std::move(function_scope);
             function_definition->body.accept(visitor);
         }

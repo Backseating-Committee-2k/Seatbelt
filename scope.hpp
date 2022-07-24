@@ -13,9 +13,13 @@
 #include <unordered_map>
 #include <variant>
 
-namespace Parser::Statements {
-    struct VariableDefinition;
-}
+namespace Parser {
+    struct FunctionDefinition;
+
+    namespace Statements {
+        struct VariableDefinition;
+    }
+}// namespace Parser
 
 struct VariableSymbol {
     usize offset{ 0 };
