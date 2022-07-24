@@ -5,13 +5,11 @@
 #include "emitter.hpp"
 #include "error.hpp"
 #include "lexer.hpp"
-#include "namespace.hpp"
 #include "parser.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
-#include <optional>
 #include <stack>
 #include <string_view>
 
