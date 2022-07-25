@@ -64,7 +64,7 @@ namespace Emitter {
             }
 
             void operator()(const Minus&) const {
-                assert(false && "not implemented");
+                visitor->emit("sub R1, R2, R3", "subtract values");
             }
 
             void operator()(const Asterisk&) const {
