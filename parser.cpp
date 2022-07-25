@@ -379,7 +379,7 @@ namespace Parser {
             return std::make_unique<ConcreteType>(identifier.location.view(), is_mutable);
         }
 
-        std::unique_ptr<Statements::VariableDefinition> variable_definition() {
+        [[nodiscard]] std::unique_ptr<Statements::VariableDefinition> variable_definition() {
             const auto let_token = consume<Let>();
             const auto identifier = consume<Identifier>("expected variable name");
             consume<Colon>("expected \":\"");
