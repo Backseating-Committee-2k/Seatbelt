@@ -313,6 +313,7 @@ private:
             KEYWORD("for", For)
             KEYWORD("mutable", Mutable)
             KEYWORD("const", Const)
+            KEYWORD("return", Return)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

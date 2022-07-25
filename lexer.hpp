@@ -64,7 +64,9 @@
     x(GreaterThan) \
     x(LessThan) \
     x(GreaterOrEquals) \
-    x(LessOrEquals)
+    x(LessOrEquals)\
+    x(Return)
+
 // clang-format on
 
 
