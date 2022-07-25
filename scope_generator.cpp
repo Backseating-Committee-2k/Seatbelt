@@ -88,6 +88,13 @@ namespace ScopeGenerator {
             statement.body.accept(body_visitor);
         }
 
+        void visit(Parser::Statements::ReturnStatement& statement) override {
+            statement.surrounding_scope = scope;
+            if (statement.return_value) {
+                statement.return_value->accept(*this);
+            }
+        }
+
         void visit(Parser::Statements::BreakStatement&) override { }
 
         void visit(Parser::Statements::ContinueStatement&) override { }

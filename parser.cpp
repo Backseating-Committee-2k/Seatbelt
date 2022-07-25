@@ -333,6 +333,8 @@ namespace Parser {
                     statements.push_back(for_statement());
                 } else if (current_is<Let>()) {
                     statements.push_back(variable_definition());
+                } else if (current_is<Return>()) {
+                    statements.push_back(return_statement());
                 } else if (current_is<LeftCurlyBracket>()) {
                     statements.push_back(std::make_unique<Statements::Block>(block()));
                 } else if (current_is<InlineAssembly>()) {
@@ -390,6 +392,16 @@ namespace Parser {
             return std::make_unique<Statements::VariableDefinition>(
                     let_token, identifier, equals_token, std::move(type_definition), std::move(initial_value)
             );
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::ReturnStatement> return_statement() {
+            const auto return_token = consume<Return>();
+            auto return_value = std::unique_ptr<Expression>{};
+            if (not current_is<Semicolon>()) {
+                return_value = expression();
+            }
+            consume<Semicolon>("expected \";\"");
+            return std::make_unique<Statements::ReturnStatement>(return_token, std::move(return_value));
         }
 
         template<typename T>

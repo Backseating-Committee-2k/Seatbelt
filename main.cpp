@@ -238,8 +238,9 @@ int main(int argc, char** argv) {
 
     std::string assembly = "jump $main\n";
 
+    auto label_generator = Emitter::LabelGenerator{};
     for (const auto& item : program) {
-        assembly += std::visit(Emitter::Emitter{ &program }, item);
+        assembly += std::visit(Emitter::Emitter{ &program, &label_generator }, item);
     }
 
     auto out_filename = std::string{};

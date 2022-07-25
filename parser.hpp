@@ -48,6 +48,7 @@ namespace Parser {
         struct WhileStatement;
         struct DoWhileStatement;
         struct ForStatement;
+        struct ReturnStatement;
         struct VariableDefinition;
         struct InlineAssembly;
         struct ExpressionStatement;
@@ -61,6 +62,7 @@ namespace Parser {
             virtual void visit(WhileStatement& statement) = 0;
             virtual void visit(DoWhileStatement& statement) = 0;
             virtual void visit(ForStatement& statement) = 0;
+            virtual void visit(ReturnStatement& statement) = 0;
             virtual void visit(VariableDefinition& statement) = 0;
             virtual void visit(InlineAssembly& statement) = 0;
             virtual void visit(ExpressionStatement& statement) = 0;
@@ -178,6 +180,15 @@ namespace Parser {
             std::unique_ptr<Expression> condition;
             std::unique_ptr<Expression> increment;
             Block body;
+        };
+
+        struct ReturnStatement : public StatementAcceptor<ReturnStatement> {
+            ReturnStatement(Return return_token, std::unique_ptr<Expression> return_value)
+                : return_token{ return_token },
+                  return_value{ std::move(return_value) } { }
+
+            Return return_token;
+            std::unique_ptr<Expression> return_value;
         };
 
         struct VariableDefinition : public StatementAcceptor<VariableDefinition> {

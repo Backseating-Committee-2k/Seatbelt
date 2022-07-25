@@ -86,7 +86,13 @@ namespace TypeChecker {
 
     struct TypeCheckerVisitor : public Parser::Statements::StatementVisitor,
                                 public Parser::Expressions::ExpressionVisitor {
-        TypeCheckerVisitor(TypeContainer* type_container, usize starting_offset) : type_container{ type_container } {
+        TypeCheckerVisitor(
+                TypeContainer* type_container,
+                usize starting_offset,
+                const Parser::FunctionDefinition* surrounding_function
+        )
+            : type_container{ type_container },
+              surrounding_function{ surrounding_function } {
             if (starting_offset > 0) {
                 claim_stack_space(starting_offset);
             }
@@ -179,6 +185,32 @@ namespace TypeChecker {
             }
             statement.body.accept(*this);
             offset = old_offset;
+        }
+
+        void visit(Parser::Statements::ReturnStatement& statement) override {
+            assert(surrounding_function);
+            assert(surrounding_function->return_type and "return type must be known at this point");
+            if (statement.return_value) {
+                statement.return_value->accept(*this);
+            }
+            const auto return_value_type =
+                    statement.return_value
+                            ? statement.return_value->data_type
+                            : type_container->from_type_definition(std::make_unique<ConcreteType>(VoidIdentifier, true)
+                              );
+            const auto return_value_type_mutable =
+                    type_container->from_type_definition(return_value_type->as_mutable());
+            const auto function_return_type_mutable =
+                    type_container->from_type_definition(surrounding_function->return_type->as_mutable());
+            if (return_value_type_mutable != function_return_type_mutable) {
+                Error::error(
+                        statement.return_token,
+                        fmt::format(
+                                R"(type of return value "{}" is incompatible with function return type "{}")",
+                                return_value_type->to_string(), surrounding_function->return_type->to_string()
+                        )
+                );
+            }
         }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
@@ -386,6 +418,7 @@ namespace TypeChecker {
         TypeContainer* type_container;
         usize offset{ 0 };
         usize occupied_stack_space{ 0 };
+        const Parser::FunctionDefinition* surrounding_function;
     };
 
     struct TypeCheckerTopLevelVisitor {
@@ -405,7 +438,7 @@ namespace TypeChecker {
             for (const auto& parameter : function_definition->parameters) {
                 size_of_parameters += parameter.type->size();
             }
-            auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters };
+            auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters, function_definition.get() };
             function_definition->body.accept(visitor);
         }
 

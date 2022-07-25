@@ -114,7 +114,10 @@ namespace Emitter {
             EmitterVisitor* visitor;
         };
 
-        EmitterVisitor(const Parser::Program* program) : program{ program } { }
+        EmitterVisitor(const Parser::Program* program, LabelGenerator* label_generator, std::string_view return_label)
+            : program{ program },
+              label_generator{ label_generator },
+              return_label{ return_label } { }
 
         std::string assembly;
         const Parser::Program* program;
@@ -190,7 +193,7 @@ namespace Emitter {
                                        R"(store lhs for {}-operator in R1)",
                                        Error::token_location(expression.operator_token).view()
                                ));
-                const auto end_of_evaluation = next_label("end_of_short_circuiting");
+                const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
                 emit(fmt::format("jump_eq R1, {}", end_of_evaluation), "skip rest of evaluation if value is false");
                 expression.rhs->accept(*this);
                 emit("pop R2", fmt::format(
@@ -198,7 +201,7 @@ namespace Emitter {
                                        Error::token_location(expression.operator_token).view()
                                ));
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
-                const auto after_push = next_label("after_push");
+                const auto after_push = label_generator->next_label("after_push");
                 emit(fmt::format("jump {}", after_push));
                 emit_label(end_of_evaluation);
                 emit("copy R1, R3", "store \"false\" as result");
@@ -208,7 +211,7 @@ namespace Emitter {
                                        R"(store lhs for {}-operator in R1)",
                                        Error::token_location(expression.operator_token).view()
                                ));
-                const auto end_of_evaluation = next_label("end_of_short_circuiting");
+                const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
                 emit(fmt::format("jump_gt R1, {}", end_of_evaluation), "skip rest of evaluation if value is true");
                 expression.rhs->accept(*this);
                 emit("pop R2", fmt::format(
@@ -216,7 +219,7 @@ namespace Emitter {
                                        Error::token_location(expression.operator_token).view()
                                ));
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
-                const auto after_push = next_label("after_push");
+                const auto after_push = label_generator->next_label("after_push");
                 emit(fmt::format("jump {}", after_push));
                 emit_label(end_of_evaluation);
                 emit("copy R1, R3", "store \"true\" as result");
@@ -307,8 +310,8 @@ namespace Emitter {
             emit("pop R1", "get result of condition");
             emit("copy 0, R2", "get constant zero");
             emit("comp R1, R2, R3", "evaluate if condition is true");
-            const auto else_label = next_label("else");
-            const auto endif_label = next_label("endif");
+            const auto else_label = label_generator->next_label("else");
+            const auto endif_label = label_generator->next_label("endif");
             emit(fmt::format("jump_eq R3, {}", else_label), "jump to else-block");
             emit("", "begin of then-block");
             statement.then_block.accept(*this);
@@ -319,8 +322,8 @@ namespace Emitter {
         }
 
         void visit(LoopStatement& statement) override {
-            const auto loop_start_label = next_label("loop_start");
-            const auto loop_end_label = next_label("loop_end");
+            const auto loop_start_label = label_generator->next_label("loop_start");
+            const auto loop_end_label = label_generator->next_label("loop_end");
             loop_stack.push(LoopLabels{ .continue_to_label{ loop_start_label }, .break_to_label{ loop_end_label } });
             emit_label(loop_start_label, "brrrrr");
             statement.body.accept(*this);
@@ -330,9 +333,9 @@ namespace Emitter {
         }
 
         void visit(WhileStatement& statement) override {
-            const auto while_start_label = next_label("while_start");
-            const auto while_condition_label = next_label("while_condition");
-            const auto while_end_label = next_label("while_end");
+            const auto while_start_label = label_generator->next_label("while_start");
+            const auto while_condition_label = label_generator->next_label("while_condition");
+            const auto while_end_label = label_generator->next_label("while_end");
             loop_stack.push(LoopLabels{ .continue_to_label{ while_condition_label },
                                         .break_to_label{ while_end_label } });
             emit(fmt::format("jump {}", while_condition_label), "jump to condition of while-loop");
@@ -351,9 +354,9 @@ namespace Emitter {
         }
 
         void visit(DoWhileStatement& statement) override {
-            const auto do_while_start_label = next_label("do_while_start");
-            const auto do_while_condition_label = next_label("do_while_condition");
-            const auto do_while_end_label = next_label("do_while_end");
+            const auto do_while_start_label = label_generator->next_label("do_while_start");
+            const auto do_while_condition_label = label_generator->next_label("do_while_condition");
+            const auto do_while_end_label = label_generator->next_label("do_while_end");
             loop_stack.push(LoopLabels{ .continue_to_label{ do_while_condition_label },
                                         .break_to_label{ do_while_end_label } });
 
@@ -372,9 +375,9 @@ namespace Emitter {
         }
 
         void visit(ForStatement& statement) override {
-            const auto for_start_label = next_label("for_start");
-            const auto for_condition_label = next_label("for_condition");
-            const auto for_end_label = next_label("for_end");
+            const auto for_start_label = label_generator->next_label("for_start");
+            const auto for_condition_label = label_generator->next_label("for_condition");
+            const auto for_end_label = label_generator->next_label("for_end");
 
             loop_stack.push(LoopLabels{ .continue_to_label{ for_condition_label }, .break_to_label{ for_end_label } });
 
@@ -407,18 +410,26 @@ namespace Emitter {
             loop_stack.pop();
         }
 
-        void visit(Parser::Statements::BreakStatement& statement) override {
+        void visit(BreakStatement& statement) override {
             if (loop_stack.empty()) {
                 Error::error(statement.break_token, "break statement not allowed here");
             }
             emit(fmt::format("jump {}", loop_stack.top().break_to_label), "break out of loop");
         }
 
-        void visit(Parser::Statements::ContinueStatement& statement) override {
+        void visit(ContinueStatement& statement) override {
             if (loop_stack.empty()) {
                 Error::error(statement.continue_token, "continue statement not allowed here");
             }
             emit(fmt::format("jump {}", loop_stack.top().continue_to_label), "continue to top of loop");
+        }
+
+        void visit(ReturnStatement& statement) override {
+            if (statement.return_value) {
+                statement.return_value->accept(*this);// evaluate return value => result is pushed
+                emit("pop R1", "put return value into R1");
+            }
+            emit(fmt::format("jump {}", return_label), "immediately exit the current function");
         }
 
         void visit(VariableDefinition& statement) override {
@@ -450,22 +461,23 @@ namespace Emitter {
             emit("pop R1", "discard value of expression statement");
         }
 
-        [[nodiscard]] std::string next_label(const std::string_view tag) {
-            return fmt::format("${}${}", label_counter++, tag);
-        }
-
-        usize label_counter{ 0 };
-
+        LabelGenerator* label_generator;
         std::stack<LoopLabels> loop_stack{};
+        std::string_view return_label;
     };
 
-    std::string emit_statement(const Parser::Program& program, Statement& statement) {
-        auto visitor = EmitterVisitor{ &program };
+    std::string emit_statement(
+            const Parser::Program& program,
+            Statement& statement,
+            LabelGenerator* label_generator,
+            const std::string_view return_label
+    ) {
+        auto visitor = EmitterVisitor{ &program, label_generator, return_label };
         statement.accept(visitor);
         return visitor.assembly;
     }
 
-    std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) const {
+    std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
         const auto mangled_name =
                 function_definition->namespace_name + function_definition->corresponding_symbol->signature;
         auto result = fmt::format("\n{}:\n", mangled_name);
@@ -477,6 +489,8 @@ namespace Emitter {
             }
             result += "\n";
         };
+        const auto emit_label = [&result](const std::string_view label) { result += fmt::format("{}:\n", label); };
+
         if (function_definition->is_entry_point) {
             emit("copy sp, R0", "save stack frame base pointer for main function into R0");
             assert(function_definition->body.occupied_stack_space.has_value() and
@@ -484,7 +498,12 @@ namespace Emitter {
             emit(fmt::format("add sp, {}, sp", function_definition->body.occupied_stack_space.value()),
                  "reserve stack space for main function");
         }
-        result += emit_statement(*program, function_definition->body);
+        const auto function_return_label = label_generator->next_label("function_return");
+
+        result += emit_statement(*program, function_definition->body, label_generator, function_return_label);
+
+        emit_label(function_return_label);
+
         if (function_definition->is_entry_point) {
             emit("halt");
         } else {
@@ -495,7 +514,7 @@ namespace Emitter {
         return result;
     }
 
-    std::string Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) const {
+    std::string Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) {
         return "";
     }
 

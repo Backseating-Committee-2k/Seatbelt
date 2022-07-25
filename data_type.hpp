@@ -14,6 +14,7 @@
 static constexpr std::string_view U32Identifier{ "U32" };
 static constexpr std::string_view CharIdentifier{ "Char" };
 static constexpr std::string_view BoolIdentifier{ "Bool" };
+static constexpr std::string_view VoidIdentifier{ "Void" };
 
 struct DataType {
 protected:
