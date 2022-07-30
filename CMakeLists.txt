@@ -19,7 +19,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         Arguably
         GIT_REPOSITORY https://github.com/mgerhold/arguably
-        GIT_TAG v0.1.7
+        GIT_TAG v0.1.8
 )
 
 FetchContent_Declare(
