@@ -17,9 +17,9 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
-        argh
-        GIT_REPOSITORY https://github.com/adishavit/argh.git
-        GIT_TAG d17062c870b5919f6d1eae7fe12879869a893b32
+        Arguably
+        GIT_REPOSITORY https://github.com/mgerhold/arguably
+        GIT_TAG v0.1.7
 )
 
 FetchContent_Declare(
@@ -28,7 +28,7 @@ FetchContent_Declare(
         GIT_TAG 58d77fa8070e8cec2dc1ed015d66b454c8d78850
 )
 
-FetchContent_MakeAvailable(fmt ctre argh googletest)
+FetchContent_MakeAvailable(fmt ctre Arguably googletest)
 
 if (MSVC)
     # enable code analysis
@@ -70,7 +70,7 @@ add_executable(Seatbelt
         namespace.cpp
         )
 
-target_link_libraries(Seatbelt fmt ctre argh)
+target_link_libraries(Seatbelt fmt ctre Arguably)
 
 foreach (target ${TARGET_LIST})
     # set warning levels

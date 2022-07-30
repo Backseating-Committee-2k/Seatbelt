@@ -6,7 +6,7 @@
 #include "type_checker.hpp"
 #include "type_container.hpp"
 #include <algorithm>
-#include <argh.h>
+#include <arguably.hpp>
 #include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
@@ -17,25 +17,24 @@
 #include <unordered_set>
 #include <variant>
 
+#define VERSION "0.1.0"
+
 [[nodiscard]] std::string read_whole_stream(std::istream& stream) {
     return { std::istreambuf_iterator<char>(stream), {} };
 }
 
-[[nodiscard]] std::pair<std::string, std::string> read_source_code(argh::parser& command_line_parser) {
-    const usize num_arguments = command_line_parser.size();
-    if (num_arguments < 2) {
+[[nodiscard]] std::pair<std::string, std::string> read_source_code(auto& command_line_parser) {
+    if (not command_line_parser.template was_provided<'i'>()) {
         return { "<stdin>", read_whole_stream(std::cin) };
-    } else if (num_arguments == 2) {
-        if (!std::filesystem::exists(command_line_parser[1])) {
-            std::cerr << "file does not exist (" << command_line_parser[1] << ")\n";
+    } else {
+        auto input_filename = command_line_parser.template get<'i'>();
+        if (!std::filesystem::exists(input_filename)) {
+            std::cerr << "file does not exist (" << input_filename << ")\n";
             std::exit(EXIT_FAILURE);
         }
-        std::ifstream stream{ command_line_parser[1], std::ios::in };
-        const auto absolute_path = std::filesystem::current_path() / command_line_parser[1];
+        std::ifstream stream{ input_filename, std::ios::in };
+        const auto absolute_path = std::filesystem::current_path() / input_filename;
         return { absolute_path.string(), read_whole_stream(stream) };
-    } else {
-        std::cerr << "more than one argument is not supported as of yet\n";
-        std::exit(EXIT_FAILURE);
     }
 }
 
@@ -125,11 +124,8 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
     return imports;
 }
 
-[[nodiscard]] Parser::Program resolve_imports(
-        argh::parser& command_line_parser,
-        SourceFileContainer& source_files,
-        TokenListsContainer& token_lists
-) {
+[[nodiscard]] Parser::Program
+resolve_imports(auto& command_line_parser, SourceFileContainer& source_files, TokenListsContainer& token_lists) {
     using Parser::concatenate_programs;
     using std::ranges::find_if;
 
@@ -211,12 +207,28 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
     return program;
 }
 
-int main(int argc, char** argv) {
+int main(int, char** argv) {
     using namespace Lexer::Tokens;
 
-    auto command_line_parser = argh::parser{};
-    command_line_parser.add_params({ "-o", "--output" });
-    command_line_parser.parse(argc, argv);
+    auto command_line_parser =
+            arguably::create_parser()
+                    .info<"Seatbelt v" VERSION " - official compiler for the Backseat-Safe System 2k">()
+                    .help<"usage:">()
+                    .named<'o', "output", "set the output filename", std::string>("-")
+                    .optionally_named<'i', "input", "set the input filename", std::string>("-")
+                    .create();
+
+    command_line_parser.parse(argv);
+    if (not command_line_parser) {
+        fmt::print(stderr, "error: erroneous command line arguments\n");
+        fmt::print(stderr, "use --help to get information on the usage of the program\n");
+        std::exit(EXIT_FAILURE);
+    }
+
+    if (command_line_parser.get<'h'>()) {
+        command_line_parser.print_help(stdout);
+        std::exit(EXIT_SUCCESS);
+    }
 
     auto source_files = SourceFileContainer{};
     auto token_lists = TokenListsContainer{};
@@ -243,9 +255,9 @@ int main(int argc, char** argv) {
         assembly += std::visit(Emitter::Emitter{ &program, &label_generator }, item);
     }
 
-    auto out_filename = std::string{};
-    if (command_line_parser({ "-o", "--output" }) >> out_filename) {
-        write_to_file(assembly, out_filename);
+    if (command_line_parser.was_provided<'o'>()) {
+        auto out_filename = command_line_parser.get<'o'>();
+        write_to_file(assembly, std::move(out_filename));
     } else {
         fmt::print("{}", assembly);
     }
