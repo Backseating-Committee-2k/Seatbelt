@@ -461,6 +461,17 @@ namespace Emitter {
             emit("pop R1", "discard value of expression statement");
         }
 
+        void visit(LabelDefinition& statement) override {
+            assert(not statement.emitted_label.empty() and "emitted label must have been generated before");
+            emit_label(statement.emitted_label);
+        }
+
+        void visit(GotoStatement& statement) override {
+            assert(statement.target_label != nullptr and "target label must have been set before");
+            const auto& label = statement.target_label->emitted_label;
+            emit(fmt::format("jump {}", label), fmt::format("goto {}", statement.label_identifier.location.view()));
+        }
+
         LabelGenerator* label_generator;
         std::stack<LoopLabels> loop_stack{};
         std::string_view return_label;
@@ -478,6 +489,12 @@ namespace Emitter {
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
+        // generate labels for all label definitions in the current function
+        for (auto& label : function_definition->contained_labels) {
+            label->emitted_label = label_generator->next_label(label->identifier.location.view());
+        }
+
+
         const auto mangled_name =
                 function_definition->namespace_name + function_definition->corresponding_symbol->signature;
         auto result = fmt::format("\n{}:\n", mangled_name);
@@ -511,6 +528,7 @@ namespace Emitter {
             emit("pop R0", "restore previous stack frame");
             emit("return");
         }
+
         return result;
     }
 

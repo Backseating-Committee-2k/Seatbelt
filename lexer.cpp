@@ -314,6 +314,8 @@ private:
             KEYWORD("mutable", Mutable)
             KEYWORD("const", Const)
             KEYWORD("return", Return)
+            KEYWORD("label", Label)
+            KEYWORD("goto", Goto)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

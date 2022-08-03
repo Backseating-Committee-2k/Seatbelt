@@ -215,7 +215,7 @@ namespace Parser {
                 consume<Identifier>("expected identifier");
             }
             const usize path_end = m_index;
-            consume<Semicolon>("expected \";\"");
+            consume_semicolon();
             return std::make_unique<ImportStatement>(ImportStatement{
                     .import_token{ import_token },
                     .import_path_tokens{ std::span{
@@ -250,13 +250,13 @@ namespace Parser {
 
         [[nodiscard]] std::unique_ptr<Statements::BreakStatement> break_statement() {
             const auto loop_token = consume<Break>();
-            consume<Semicolon>("expected \";\"");
+            consume_semicolon();
             return std::make_unique<Parser::Statements::BreakStatement>(loop_token);
         }
 
         [[nodiscard]] std::unique_ptr<Statements::ContinueStatement> continue_statement() {
             const auto continue_token = consume<Continue>();
-            consume<Semicolon>("expected \";\"");
+            consume_semicolon();
             return std::make_unique<Parser::Statements::ContinueStatement>(continue_token);
         }
 
@@ -272,7 +272,7 @@ namespace Parser {
             auto body = block();
             const auto while_token = consume<While>("expected \"while\"");
             auto condition = expression();
-            consume<Semicolon>("expected \";\"");
+            consume_semicolon();
             return std::make_unique<Statements::DoWhileStatement>(
                     do_token, std::move(body), while_token, std::move(condition)
             );
@@ -286,7 +286,7 @@ namespace Parser {
                 initializer = variable_definition();
             } else if (not current_is<Semicolon>()) {
                 initializer = std::make_unique<Statements::ExpressionStatement>(expression());
-                consume<Semicolon>("expected \";\"");
+                consume_semicolon();
             } else {
                 consume<Semicolon>();
             }
@@ -295,7 +295,7 @@ namespace Parser {
             if (not current_is<Semicolon>()) {
                 condition = expression();
             }
-            consume<Semicolon>("expected \";\"");
+            consume_semicolon();
 
             auto increment = std::unique_ptr<Expression>{};
             if ((uses_parentheses and not current_is<RightParenthesis>()) or
@@ -337,6 +337,10 @@ namespace Parser {
                     statements.push_back(return_statement());
                 } else if (current_is<LeftCurlyBracket>()) {
                     statements.push_back(std::make_unique<Statements::Block>(block()));
+                } else if (current_is<Label>()) {
+                    statements.push_back(label_definition());
+                } else if (current_is<Goto>()) {
+                    statements.push_back(goto_statement());
                 } else if (current_is<InlineAssembly>()) {
                     statements.push_back(
                             std::make_unique<Statements::InlineAssembly>(&std::get<InlineAssembly>(current()))
@@ -350,6 +354,20 @@ namespace Parser {
             }
             consume<RightCurlyBracket>("expected \"}\"");
             return Statements::Block{ std::move(statements) };
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::LabelDefinition> label_definition() {
+            const auto label_token = consume<Label>();
+            const auto identifier = consume<Identifier>("expected label identifier");
+            consume_semicolon();
+            return std::make_unique<Statements::LabelDefinition>(label_token, identifier);
+        }
+
+        [[nodiscard]] std::unique_ptr<Statements::GotoStatement> goto_statement() {
+            const auto goto_token = consume<Goto>();
+            const auto identifier = consume<Identifier>("expected identifier of jump target label");
+            consume_semicolon();
+            return std::make_unique<Statements::GotoStatement>(goto_token, identifier);
         }
 
         [[nodiscard]] std::unique_ptr<DataType> data_type() {
@@ -388,7 +406,7 @@ namespace Parser {
             auto type_definition = data_type();
             auto equals_token = consume<Equals>("expected variable initialization");
             auto initial_value = expression();
-            consume<Semicolon>("expected \";\"");
+            consume_semicolon();
             return std::make_unique<Statements::VariableDefinition>(
                     let_token, identifier, equals_token, std::move(type_definition), std::move(initial_value)
             );
@@ -400,8 +418,12 @@ namespace Parser {
             if (not current_is<Semicolon>()) {
                 return_value = expression();
             }
-            consume<Semicolon>("expected \";\"");
+            consume_semicolon();
             return std::make_unique<Statements::ReturnStatement>(return_token, std::move(return_value));
+        }
+
+        void consume_semicolon() {
+            consume<Semicolon>("expected \";\"");
         }
 
         template<typename T>

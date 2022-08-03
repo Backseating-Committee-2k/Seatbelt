@@ -64,8 +64,10 @@
     x(GreaterThan) \
     x(LessThan) \
     x(GreaterOrEquals) \
-    x(LessOrEquals)\
-    x(Return)
+    x(LessOrEquals) \
+    x(Return) \
+    x(Label) \
+    x(Goto)
 
 // clang-format on
 

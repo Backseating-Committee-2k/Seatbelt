@@ -250,6 +250,10 @@ namespace TypeChecker {
             statement.expression->accept(*this);
         }
 
+        void visit(Parser::Statements::LabelDefinition&) override { }
+
+        void visit(Parser::Statements::GotoStatement&) override { }
+
         void visit(Parser::Expressions::Integer& expression) override {
             expression.data_type =
                     type_container->from_type_definition(std::make_unique<ConcreteType>(U32Identifier, false));

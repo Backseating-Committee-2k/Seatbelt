@@ -121,6 +121,33 @@ namespace ScopeGenerator {
             statement.expression->accept(*this);
         }
 
+        void visit(Parser::Statements::LabelDefinition& statement) override {
+            statement.surrounding_scope = scope;
+        }
+
+        void visit(Parser::Statements::GotoStatement& statement) override {
+            statement.surrounding_scope = scope;
+            const auto function = statement.surrounding_function;
+            assert(function != nullptr and "surrounding function must have been set before");
+            const auto find_iterator = std::find_if(
+                    std::cbegin(function->contained_labels), std::cend(function->contained_labels),
+                    [&](const auto label_definition) {
+                        return label_definition->identifier.location.view() ==
+                               statement.label_identifier.location.view();
+                    }
+            );
+            const auto found = find_iterator != std::cend(function->contained_labels);
+            if (not found) {
+                Error::error(
+                        statement.goto_token, fmt::format(
+                                                      "no label named \"{}\" found within the surrounding function",
+                                                      statement.label_identifier.location.view()
+                                              )
+                );
+            }
+            statement.target_label = *find_iterator;
+        }
+
         void visit(Parser::Expressions::Integer& expression) override {
             expression.surrounding_scope = scope;
         }
@@ -288,6 +315,74 @@ namespace ScopeGenerator {
         Scope* global_scope;
     };
 
+    struct ScopeGeneratorLabelVisitor : public Parser::Statements::StatementVisitor,
+                                        public Parser::Expressions::ExpressionVisitor {
+        explicit ScopeGeneratorLabelVisitor(Parser::FunctionDefinition* surrounding_function)
+            : surrounding_function{ surrounding_function } { }
+
+        void visit(Parser::Statements::Block& statement) override {
+            for (const auto& sub_statement : statement.statements) {
+                sub_statement->accept(*this);
+            }
+        }
+
+        void visit(Parser::Statements::LabelDefinition& statement) override {
+            using std::ranges::find_if;
+            const auto find_iterator = find_if(surrounding_function->contained_labels, [&](const auto label) {
+                return label->identifier.location.view() == statement.identifier.location.view();
+            });
+            const auto found = find_iterator != std::cend(surrounding_function->contained_labels);
+            if (found) {
+                Error::error(
+                        statement.label_token,
+                        fmt::format("duplicate label identifier \"{}\"", statement.identifier.location.view())
+                );
+            }
+            surrounding_function->contained_labels.push_back(&statement);
+        }
+
+        void visit(Parser::Statements::GotoStatement& statement) override {
+            statement.surrounding_function = surrounding_function;
+        }
+
+        void visit(Parser::Statements::IfStatement& statement) override {
+            statement.then_block.accept(*this);
+            statement.else_block.accept(*this);
+        }
+
+        void visit(Parser::Statements::LoopStatement& statement) override {
+            statement.body.accept(*this);
+        }
+
+        void visit(Parser::Statements::WhileStatement& statement) override {
+            statement.body.accept(*this);
+        }
+
+        void visit(Parser::Statements::DoWhileStatement& statement) override {
+            statement.body.accept(*this);
+        }
+
+        void visit(Parser::Statements::ForStatement& statement) override {
+            statement.body.accept(*this);
+        }
+
+        void visit(Parser::Statements::BreakStatement&) override { }
+        void visit(Parser::Statements::ContinueStatement&) override { }
+        void visit(Parser::Statements::ReturnStatement&) override { }
+        void visit(Parser::Statements::VariableDefinition&) override { }
+        void visit(Parser::Statements::InlineAssembly&) override { }
+        void visit(Parser::Statements::ExpressionStatement&) override { }
+        void visit(Parser::Expressions::Integer&) override { }
+        void visit(Parser::Expressions::Char&) override { }
+        void visit(Parser::Expressions::Bool&) override { }
+        void visit(Parser::Expressions::Name&) override { }
+        void visit(Parser::Expressions::BinaryOperator&) override { }
+        void visit(Parser::Expressions::FunctionCall&) override { }
+        void visit(Parser::Expressions::Assignment&) override { }
+
+        Parser::FunctionDefinition* surrounding_function;
+    };
+
     struct ScopeGeneratorTopLevelVisitor {
         ScopeGeneratorTopLevelVisitor(Parser::Program* program, TypeContainer* type_container, Scope* global_scope)
             : program{ program },
@@ -316,6 +411,9 @@ namespace ScopeGenerator {
                 function_definition->corresponding_symbol = &new_symbol.overloads.back();
                 (*global_scope)[identifier] = std::move(new_symbol);
             }
+
+            auto label_visitor = ScopeGeneratorLabelVisitor{ function_definition.get() };
+            function_definition->body.accept(label_visitor);
         }
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }

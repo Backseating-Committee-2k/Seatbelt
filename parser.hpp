@@ -52,6 +52,8 @@ namespace Parser {
         struct VariableDefinition;
         struct InlineAssembly;
         struct ExpressionStatement;
+        struct LabelDefinition;
+        struct GotoStatement;
 
         struct StatementVisitor {
             virtual void visit(Block& statement) = 0;
@@ -66,6 +68,8 @@ namespace Parser {
             virtual void visit(VariableDefinition& statement) = 0;
             virtual void visit(InlineAssembly& statement) = 0;
             virtual void visit(ExpressionStatement& statement) = 0;
+            virtual void visit(LabelDefinition& statement) = 0;
+            virtual void visit(GotoStatement& statement) = 0;
 
             virtual ~StatementVisitor() = default;
         };
@@ -227,6 +231,26 @@ namespace Parser {
             std::unique_ptr<Expression> expression;
         };
 
+        struct LabelDefinition : public StatementAcceptor<LabelDefinition> {
+            LabelDefinition(Label label_token, Identifier identifier)
+                : label_token{ label_token },
+                  identifier{ identifier } { }
+
+            Label label_token;
+            Identifier identifier;
+            std::string emitted_label{};
+        };
+
+        struct GotoStatement : public StatementAcceptor<GotoStatement> {
+            GotoStatement(Goto goto_token, Identifier label_identifier)
+                : goto_token{ goto_token },
+                  label_identifier{ label_identifier } { }
+
+            Goto goto_token;
+            Identifier label_identifier;
+            const FunctionDefinition* surrounding_function{ nullptr };
+            const LabelDefinition* target_label{ nullptr };
+        };
     }// namespace Statements
 
     namespace Expressions {
@@ -337,6 +361,7 @@ namespace Parser {
         FunctionOverload* corresponding_symbol{ nullptr };
         std::string namespace_name{};
         bool is_entry_point{ false };
+        std::vector<Statements::LabelDefinition*> contained_labels{};
     };
 
     struct ImportStatement {
