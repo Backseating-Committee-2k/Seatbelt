@@ -11,7 +11,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 
 static constexpr std::string_view U32Identifier{ "U32" };
 static constexpr std::string_view CharIdentifier{ "Char" };
@@ -63,7 +62,8 @@ public:
             case Mutability::Const:
                 return "const";
         }
-        std::unreachable();
+        assert(false and "unreachable");// todo: replace with std::unreachable
+        return "";
     }
 
     [[nodiscard]] virtual std::string mangled_name() const = 0;
