@@ -18,7 +18,7 @@ the [Backseat-Safe System 2k](https://github.com/Backseating-Committee-2k/Backse
 
 ## How to build
 
-The project uses [CMake](https://cmake.org/) as build system. All dependencies are automatically fetched. Build the
+The project uses [CMake](https://cmake.org/) as build system. All dependencies are fetched automatically. Build the
 software like so:
 
 ```
