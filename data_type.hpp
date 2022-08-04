@@ -17,44 +17,64 @@ static constexpr std::string_view CharIdentifier{ "Char" };
 static constexpr std::string_view BoolIdentifier{ "Bool" };
 static constexpr std::string_view NothingIdentifier{ "Nothing" };
 
+enum class Mutability {
+    Mutable,
+    Const,
+};
+
 struct DataType {
 protected:
-    explicit DataType(bool is_mutable) : is_mutable{ is_mutable } { }
+    explicit DataType(Mutability mutability) : mutability{ mutability } { }
 
 public:
     virtual ~DataType() = default;
 
     virtual bool operator==(const DataType& other) const {
-        return is_mutable == other.is_mutable;
+        return mutability == other.mutability;
+    }
+
+    [[nodiscard]] bool is_const() const {
+        return mutability == Mutability::Const;
+    }
+
+    [[nodiscard]] bool is_mutable() const {
+        return not is_const();
     }
 
     [[nodiscard]] std::unique_ptr<DataType> as_mutable() const {
         auto copy = clone();
-        copy->is_mutable = true;
+        copy->mutability = Mutability::Mutable;
         return copy;
     }
 
     [[nodiscard]] std::unique_ptr<DataType> as_const() const {
         auto copy = clone();
-        copy->is_mutable = false;
+        copy->mutability = Mutability::Const;
         return copy;
     }
 
     [[nodiscard]] virtual std::unique_ptr<DataType> clone() const = 0;
 
     [[nodiscard]] virtual std::string to_string() const {
-        return is_mutable ? "mutable " : "const ";
+        switch (mutability) {
+            case Mutability::Mutable:
+                return "mutable";
+            case Mutability::Const:
+                return "const";
+        }
+        assert(false and "unreachable");// todo: replace with std::unreachable
+        return "";
     }
 
     [[nodiscard]] virtual std::string mangled_name() const = 0;
 
     [[nodiscard]] virtual usize size() const = 0;
 
-    bool is_mutable;
+    Mutability mutability;
 };
 
 struct ConcreteType : public DataType {
-    ConcreteType(std::string_view name, bool is_mutable) : DataType{ is_mutable }, name{ std::move(name) } { }
+    ConcreteType(std::string_view name, Mutability mutability) : DataType{ mutability }, name{ std::move(name) } { }
 
     bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const ConcreteType*>(&other)) {
@@ -72,7 +92,7 @@ struct ConcreteType : public DataType {
     }
 
     [[nodiscard]] std::unique_ptr<DataType> clone() const final {
-        return std::make_unique<ConcreteType>(name, is_mutable);
+        return std::make_unique<ConcreteType>(name, mutability);
     }
 
     [[nodiscard]] usize size() const override {
@@ -89,8 +109,8 @@ struct ConcreteType : public DataType {
 };
 
 struct PointerType : public DataType {
-    PointerType(std::unique_ptr<DataType> contained, bool is_mutable)
-        : DataType{ is_mutable },
+    PointerType(std::unique_ptr<DataType> contained, Mutability mutability)
+        : DataType{ mutability },
           contained{ std::move(contained) } { }
 
     bool operator==(const DataType& other) const override {
@@ -112,7 +132,7 @@ struct PointerType : public DataType {
     }
 
     [[nodiscard]] std::unique_ptr<DataType> clone() const final {
-        return std::make_unique<PointerType>(contained->clone(), is_mutable);
+        return std::make_unique<PointerType>(contained->clone(), mutability);
     }
 
     [[nodiscard]] usize size() const override {
@@ -123,8 +143,8 @@ struct PointerType : public DataType {
 };
 
 struct FunctionPointerType : public DataType {
-    explicit FunctionPointerType(std::string signature, bool is_mutable)
-        : DataType{ is_mutable },
+    explicit FunctionPointerType(std::string signature, Mutability mutability)
+        : DataType{ mutability },
           signature{ std::move(signature) } { }
 
     bool operator==(const DataType& other) const override {
@@ -143,7 +163,7 @@ struct FunctionPointerType : public DataType {
     }
 
     [[nodiscard]] std::unique_ptr<DataType> clone() const final {
-        return std::make_unique<FunctionPointerType>(signature, is_mutable);
+        return std::make_unique<FunctionPointerType>(signature, mutability);
     }
 
     [[nodiscard]] usize size() const override {

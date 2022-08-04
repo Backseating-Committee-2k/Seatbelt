@@ -9,14 +9,14 @@
 #include <ranges>
 
 TypeContainer::TypeContainer() {
-    register_type(std::make_unique<ConcreteType>(U32Identifier, true));
-    m_const_u32 = from_type_definition(std::make_unique<ConcreteType>(U32Identifier, false));
-    register_type(std::make_unique<ConcreteType>(CharIdentifier, true));
-    m_const_char = from_type_definition(std::make_unique<ConcreteType>(CharIdentifier, false));
-    register_type(std::make_unique<ConcreteType>(BoolIdentifier, true));
-    m_const_bool = from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
-    m_mutable_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, true));
-    m_const_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, false));
+    register_type(std::make_unique<ConcreteType>(U32Identifier, Mutability::Mutable));
+    m_const_u32 = from_type_definition(std::make_unique<ConcreteType>(U32Identifier, Mutability::Const));
+    register_type(std::make_unique<ConcreteType>(CharIdentifier, Mutability::Mutable));
+    m_const_char = from_type_definition(std::make_unique<ConcreteType>(CharIdentifier, Mutability::Const));
+    register_type(std::make_unique<ConcreteType>(BoolIdentifier, Mutability::Mutable));
+    m_const_bool = from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, Mutability::Const));
+    m_mutable_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, Mutability::Mutable));
+    m_const_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, Mutability::Const));
 }
 
 [[nodiscard]] static bool are_types_equal(const std::unique_ptr<DataType>& lhs, const std::unique_ptr<DataType>& rhs) {
