@@ -161,6 +161,9 @@ namespace Parser {
             if (const auto bool_literal_token = maybe_consume<BoolLiteral>()) {
                 return std::make_unique<Bool>(bool_literal_token.value());
             }
+            if (const auto nothing_literal_token = maybe_consume<NothingLiteral>()) {
+                return std::make_unique<Nothing>(nothing_literal_token.value());
+            }
             if (current_is<Identifier>()) {
                 const usize name_start = m_index;
                 advance();

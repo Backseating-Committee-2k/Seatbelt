@@ -299,6 +299,13 @@ namespace Emitter {
             emit("push R2", "push value of assignment expression");
         }
 
+        void visit(Nothing&) override {
+            // every expression must have a value, and therefore we have to push something
+            // onto the stack, even though a "Nothing"-expression doesn't *really* have a
+            // value
+            emit("push 42", "push some value for the \"Nothing\"-literal");
+        }
+
         void visit(Block& statement) override {
             for (auto& sub_statement : statement.statements) {
                 sub_statement->accept(*this);

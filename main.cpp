@@ -63,12 +63,12 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
         error("main function must not be overloaded");
     }
     const auto expected_main_function_return_type =
-            type_container.from_type_definition(std::make_unique<ConcreteType>("Void", false));
+            type_container.from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, false));
     const auto main_function_has_correct_signature =
             (main_symbol->overloads.front().signature == "$main" and
              main_symbol->overloads.front().return_type == expected_main_function_return_type);
     if (not main_function_has_correct_signature) {
-        error("main function must not take any parameters and must return Void");
+        error(fmt::format("main function must not take any parameters and must return {}", NothingIdentifier));
     }
     main_symbol->overloads.front().definition->is_entry_point = true;
 }

@@ -279,6 +279,10 @@ namespace ScopeGenerator {
             expression.value->accept(*this);
         }
 
+        void visit(Parser::Expressions::Nothing& expression) override {
+            expression.surrounding_scope = scope;
+        }
+
         Scope* scope;
         TypeContainer* type_container;
     };
@@ -379,6 +383,7 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::BinaryOperator&) override { }
         void visit(Parser::Expressions::FunctionCall&) override { }
         void visit(Parser::Expressions::Assignment&) override { }
+        void visit(Parser::Expressions::Nothing&) override { }
 
         Parser::FunctionDefinition* surrounding_function;
     };

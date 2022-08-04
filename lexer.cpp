@@ -316,6 +316,7 @@ private:
             KEYWORD("return", Return)
             KEYWORD("label", Label)
             KEYWORD("goto", Goto)
+            KEYWORD("nothing", NothingLiteral)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }
