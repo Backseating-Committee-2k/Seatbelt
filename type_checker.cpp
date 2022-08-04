@@ -40,14 +40,14 @@ namespace TypeChecker {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
                 return nullptr;
             }
-            return type_container.from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
+            return type_container.const_bool();
         }
         if (is_one_of<GreaterThan, GreaterOrEquals, LessThan, LessOrEquals>(token)) {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or
                 concrete_types[0].value() != U32Identifier) {
                 return nullptr;
             }
-            return type_container.from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
+            return type_container.const_bool();
         }
         if (is<Equals>(token)) {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or not lhs->is_mutable) {
@@ -59,9 +59,7 @@ namespace TypeChecker {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
                 return nullptr;
             }
-            return concrete_types[0].value() == U32Identifier
-                           ? type_container.from_type_definition(std::make_unique<ConcreteType>(U32Identifier, false))
-                           : nullptr;
+            return concrete_types[0].value() == U32Identifier ? type_container.const_u32() : nullptr;
         }
         if (is_one_of<And, Or, Xor>(token)) {
             if (not same_type or not both_concrete) {
@@ -193,11 +191,8 @@ namespace TypeChecker {
             if (statement.return_value) {
                 statement.return_value->accept(*this);
             }
-            const auto return_value_type = statement.return_value
-                                                   ? statement.return_value->data_type
-                                                   : type_container->from_type_definition(
-                                                             std::make_unique<ConcreteType>(NothingIdentifier, true)
-                                                     );
+            const auto return_value_type =
+                    statement.return_value ? statement.return_value->data_type : type_container->mutable_nothing();
             const auto return_value_type_mutable =
                     type_container->from_type_definition(return_value_type->as_mutable());
             const auto function_return_type_mutable =
@@ -259,18 +254,15 @@ namespace TypeChecker {
         void visit(Parser::Statements::GotoStatement&) override { }
 
         void visit(Parser::Expressions::Integer& expression) override {
-            expression.data_type =
-                    type_container->from_type_definition(std::make_unique<ConcreteType>(U32Identifier, false));
+            expression.data_type = type_container->const_u32();
         }
 
         void visit(Parser::Expressions::Char& expression) override {
-            expression.data_type =
-                    type_container->from_type_definition(std::make_unique<ConcreteType>(CharIdentifier, false));
+            expression.data_type = type_container->const_char();
         }
 
         void visit(Parser::Expressions::Bool& expression) override {
-            expression.data_type =
-                    type_container->from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
+            expression.data_type = type_container->const_bool();
         }
 
         void visit(Parser::Expressions::Name& expression) override {
@@ -416,8 +408,7 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Nothing& expression) override {
-            expression.data_type =
-                    type_container->from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, false));
+            expression.data_type = type_container->const_nothing();
         }
 
         usize claim_stack_space(const usize size_of_type) {
