@@ -10,13 +10,13 @@
 
 TypeContainer::TypeContainer() {
     register_type(std::make_unique<ConcreteType>(U32Identifier, true));
-    register_type(std::make_unique<ConcreteType>(U32Identifier, false));
+    m_const_u32 = from_type_definition(std::make_unique<ConcreteType>(U32Identifier, false));
     register_type(std::make_unique<ConcreteType>(CharIdentifier, true));
-    register_type(std::make_unique<ConcreteType>(CharIdentifier, false));
+    m_const_char = from_type_definition(std::make_unique<ConcreteType>(CharIdentifier, false));
     register_type(std::make_unique<ConcreteType>(BoolIdentifier, true));
-    register_type(std::make_unique<ConcreteType>(BoolIdentifier, false));
-    register_type(std::make_unique<ConcreteType>(NothingIdentifier, true));
-    register_type(std::make_unique<ConcreteType>(NothingIdentifier, false));
+    m_const_bool = from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, false));
+    m_mutable_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, true));
+    m_const_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, false));
 }
 
 [[nodiscard]] static bool are_types_equal(const std::unique_ptr<DataType>& lhs, const std::unique_ptr<DataType>& rhs) {
@@ -56,4 +56,23 @@ const DataType* TypeContainer::find(const std::unique_ptr<DataType>& data_type) 
             find_if(m_data_types, [&](const auto& other) { return are_types_equal(data_type, other); });
     const auto data_type_found = (find_iterator != std::cend(m_data_types));
     return data_type_found ? find_iterator->get() : nullptr;
+}
+
+const DataType* TypeContainer::const_u32() const {
+    return m_const_u32;
+}
+
+const DataType* TypeContainer::const_bool() const {
+    return m_const_bool;
+}
+
+const DataType* TypeContainer::const_char() const {
+    return m_const_char;
+}
+
+const DataType* TypeContainer::const_nothing() const {
+    return m_const_nothing;
+}
+const DataType* TypeContainer::mutable_nothing() const {
+    return m_mutable_nothing;
 }
