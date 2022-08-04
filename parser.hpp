@@ -262,6 +262,7 @@ namespace Parser {
         struct BinaryOperator;
         struct FunctionCall;
         struct Assignment;
+        struct Nothing;
 
         struct ExpressionVisitor {
             virtual void visit(Integer& expression) = 0;
@@ -271,6 +272,7 @@ namespace Parser {
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
             virtual void visit(Assignment& expression) = 0;
+            virtual void visit(Nothing& expression) = 0;
 
             virtual ~ExpressionVisitor() = default;
         };
@@ -348,6 +350,12 @@ namespace Parser {
             std::unique_ptr<Expression> assignee;
             Equals equals_token;
             std::unique_ptr<Expression> value;
+        };
+
+        struct Nothing : public ExpressionAcceptor<Nothing> {
+            explicit Nothing(NothingLiteral nothing_token) : nothing_token{ nothing_token } { }
+
+            NothingLiteral nothing_token;
         };
 
     }// namespace Expressions

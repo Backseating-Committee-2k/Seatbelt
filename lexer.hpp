@@ -67,7 +67,8 @@
     x(LessOrEquals) \
     x(Return) \
     x(Label) \
-    x(Goto)
+    x(Goto) \
+    x(NothingLiteral)
 
 // clang-format on
 

@@ -8,13 +8,14 @@
 #include <cassert>
 #include <fmt/core.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
 static constexpr std::string_view U32Identifier{ "U32" };
 static constexpr std::string_view CharIdentifier{ "Char" };
 static constexpr std::string_view BoolIdentifier{ "Bool" };
-static constexpr std::string_view VoidIdentifier{ "Void" };
+static constexpr std::string_view NothingIdentifier{ "Nothing" };
 
 struct DataType {
 protected:
@@ -77,9 +78,10 @@ struct ConcreteType : public DataType {
     [[nodiscard]] usize size() const override {
         if (name == U32Identifier or name == BoolIdentifier or name == CharIdentifier) {
             return 4;
-        } else {
-            assert(false and "unknown data type");
+        } else if (name == NothingIdentifier) {
             return 0;
+        } else {
+            return {};
         }
     }
 

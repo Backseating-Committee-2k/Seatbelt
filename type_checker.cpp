@@ -193,11 +193,11 @@ namespace TypeChecker {
             if (statement.return_value) {
                 statement.return_value->accept(*this);
             }
-            const auto return_value_type =
-                    statement.return_value
-                            ? statement.return_value->data_type
-                            : type_container->from_type_definition(std::make_unique<ConcreteType>(VoidIdentifier, true)
-                              );
+            const auto return_value_type = statement.return_value
+                                                   ? statement.return_value->data_type
+                                                   : type_container->from_type_definition(
+                                                             std::make_unique<ConcreteType>(NothingIdentifier, true)
+                                                     );
             const auto return_value_type_mutable =
                     type_container->from_type_definition(return_value_type->as_mutable());
             const auto function_return_type_mutable =
@@ -215,6 +215,10 @@ namespace TypeChecker {
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
             assert(statement.type_definition and "type definition must have been set before");// TODO: type deduction
+            auto& type = statement.type_definition;
+            if (not type_container->is_defined(type)) {
+                Error::error(statement.name, fmt::format("use of undeclared type \"{}\"", type->to_string()));
+            }
             statement.type = type_container->from_type_definition(std::move(statement.type_definition));
 
             assert(statement.variable_symbol != nullptr);
@@ -379,6 +383,8 @@ namespace TypeChecker {
                     // this is a function pointer
                     assert(false && "not implemented (did you try to call a variable?)");
                 }
+            } else {
+                expression.callee->accept(*this);
             }
         }
 
@@ -409,8 +415,12 @@ namespace TypeChecker {
             }
         }
 
+        void visit(Parser::Expressions::Nothing& expression) override {
+            expression.data_type =
+                    type_container->from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, false));
+        }
+
         usize claim_stack_space(const usize size_of_type) {
-            assert(size_of_type > 0);
             const auto old_offset = offset;
             offset += size_of_type;
             if (offset > occupied_stack_space) {

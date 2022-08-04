@@ -11,9 +11,14 @@
 
 class TypeContainer {
 public:
-    [[nodiscard]] const DataType* from_type_definition(std::unique_ptr<DataType> data_type);
+    TypeContainer();
 
-    [[nodiscard]] const DataType* remove_const(const DataType* data_type);
+    [[nodiscard]] const DataType* from_type_definition(std::unique_ptr<DataType> data_type);
+    void register_type(std::unique_ptr<DataType> data_type);
+    [[nodiscard]] bool is_defined(const std::unique_ptr<DataType>& data_type) const;
+
+private:
+    [[nodiscard]] const DataType* find(const std::unique_ptr<DataType>& data_type) const;
 
 private:
     std::vector<std::unique_ptr<DataType>> m_data_types;
