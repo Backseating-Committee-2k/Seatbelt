@@ -24,9 +24,7 @@ software like so:
 ```
 git clone https://github.com/Backseating-Committee-2k/Seatbelt.git
 cd Seatbelt
-mkdir build && cd build
-cmake ..
-cd ..
+cmake -B build
 make -C build
 ./build/Seatbelt --output output_filename.bsm my_input_file.bs
 ```
