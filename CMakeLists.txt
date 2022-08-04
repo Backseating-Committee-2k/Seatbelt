@@ -44,30 +44,30 @@ endif ()
 set(TARGET_LIST Seatbelt fmt gmock gmock_main gtest gtest_main)
 
 add_executable(Seatbelt
-        main.cpp
-        lexer.cpp
-        lexer.hpp
-        types.hpp
-        parser.cpp
-        parser.hpp
-        location.hpp
-        source_code.hpp
-        emitter.cpp
-        emitter.hpp
-        error.cpp
-        error.hpp
-        type_checker.cpp
-        type_checker.hpp
-        scope_generator.hpp
-        scope.hpp
-        scope_generator.cpp
-        data_type.hpp
-        type_container.cpp
-        type_container.hpp
-        parameter_list.hpp
-        scope.cpp
-        namespace.hpp
-        namespace.cpp
+        src/main.cpp
+        src/lexer.cpp
+        src/lexer.hpp
+        src/types.hpp
+        src/parser.cpp
+        src/parser.hpp
+        src/location.hpp
+        src/source_code.hpp
+        src/emitter.cpp
+        src/emitter.hpp
+        src/error.cpp
+        src/error.hpp
+        src/type_checker.cpp
+        src/type_checker.hpp
+        src/scope_generator.hpp
+        src/scope.hpp
+        src/scope_generator.cpp
+        src/data_type.hpp
+        src/type_container.cpp
+        src/type_container.hpp
+        src/parameter_list.hpp
+        src/scope.cpp
+        src/namespace.hpp
+        src/namespace.cpp
         )
 
 target_link_libraries(Seatbelt fmt ctre Arguably)
