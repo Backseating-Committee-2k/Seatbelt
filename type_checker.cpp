@@ -50,7 +50,7 @@ namespace TypeChecker {
             return type_container.const_bool();
         }
         if (is<Equals>(token)) {
-            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or not lhs->is_mutable) {
+            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or lhs->is_const()) {
                 return nullptr;
             }
             return rhs;
@@ -224,8 +224,8 @@ namespace TypeChecker {
 
             // get the mutable version of the assignee type (if it is not mutable already)
             DataType const* const assignee_type =
-                    statement.type->is_mutable ? statement.type
-                                               : type_container->from_type_definition(statement.type->as_mutable());
+                    statement.type->is_mutable() ? statement.type
+                                                 : type_container->from_type_definition(statement.type->as_mutable());
 
             // type checking rules are the same as if we would do type checking during an assignment
             const auto resulting_type = get_resulting_data_type(
@@ -301,7 +301,7 @@ namespace TypeChecker {
                     assert(overloads.size() == 1);
                     fmt::print(stderr, "setting type of name {}\n", identifier);
                     expression.data_type = type_container->from_type_definition(
-                            std::make_unique<FunctionPointerType>(overloads.front().signature, false)
+                            std::make_unique<FunctionPointerType>(overloads.front().signature, Mutability::Const)
                     );
                 } else {
                     assert(false && "unreachable");
@@ -348,7 +348,7 @@ namespace TypeChecker {
                         if (overload->signature == signature) {
                             assert(overload->return_type != nullptr && "return type has to be set before");
                             name->data_type = type_container->from_type_definition(
-                                    std::make_unique<FunctionPointerType>(signature, false)
+                                    std::make_unique<FunctionPointerType>(signature, Mutability::Const)
                             );
                             overload_found = true;
                         }

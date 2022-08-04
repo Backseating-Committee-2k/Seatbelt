@@ -388,7 +388,9 @@ namespace Parser {
                 }
                 advance();
                 auto pointee_type = data_type();
-                return std::make_unique<PointerType>(std::move(pointee_type), is_mutable);
+                return std::make_unique<PointerType>(
+                        std::move(pointee_type), is_mutable ? Mutability::Mutable : Mutability::Const
+                );
             }
             return primitive_type();
         }
@@ -399,7 +401,9 @@ namespace Parser {
                 maybe_consume<Const>();
             }
             auto identifier = consume<Identifier>("type identifier expected");
-            return std::make_unique<ConcreteType>(identifier.location.view(), is_mutable);
+            return std::make_unique<ConcreteType>(
+                    identifier.location.view(), is_mutable ? Mutability::Mutable : Mutability::Const
+            );
         }
 
         [[nodiscard]] std::unique_ptr<Statements::VariableDefinition> variable_definition() {
