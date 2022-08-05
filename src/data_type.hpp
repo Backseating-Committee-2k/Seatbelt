@@ -84,7 +84,7 @@ struct ConcreteType : public DataType {
     }
 
     [[nodiscard]] std::string to_string() const override {
-        return DataType::to_string() + std::string{ name };
+        return fmt::format("{} {}", DataType::to_string(), std::string{ name });
     }
 
     [[nodiscard]] std::string mangled_name() const override {

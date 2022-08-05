@@ -454,7 +454,7 @@ namespace Emitter {
         }
 
         void visit(Parser::Statements::InlineAssembly& statement) override {
-            const auto assembly_block = statement.token->location.view();
+            const auto assembly_block = statement.token.location.view();
             const auto start_iterator = std::find(assembly_block.cbegin(), assembly_block.cend(), '{');
             assert(start_iterator != assembly_block.cend());
             const auto inner = std::string_view{ start_iterator + 1, assembly_block.cend() - 1 };
