@@ -1,6 +1,6 @@
 namespace std {
 
-    function put_char(char: Char): Void {
+    function put_char(char: Char): Nothing {
         bsm {
             copy *R0, R1 // put the value of char into R1
             copy *CURSOR_POINTER, R2 // get the current cursor pointer value
