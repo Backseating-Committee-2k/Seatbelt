@@ -3,6 +3,7 @@
 //
 
 #include "return_type_checker.hpp"
+#include "error.hpp"
 #include <fmt/core.h>
 
 void ReturnTypeChecker::visit(Parser::Statements::Block& statement) {
@@ -23,8 +24,7 @@ void ReturnTypeChecker::visit(Parser::Statements::Block& statement) {
         }
     }
     if ((all_code_paths_return_a_value or ended_because_of_break_or_continue) and i < statement.statements.size() - 1) {
-        // we found unreachable code!
-        fmt::print(stderr, "unreachable code detected!\n");
+        Error::warning(*statement.statements[i + 1], "unreachable code detected");
     }
 }
 

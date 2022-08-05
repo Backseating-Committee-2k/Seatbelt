@@ -92,8 +92,11 @@ namespace Parser {
         using StatementList = std::vector<std::unique_ptr<Statement>>;
 
         struct Block : public StatementAcceptor<Block> {
-            explicit Block(StatementList statements) : statements{ std::move(statements) } { }
+            Block(LeftCurlyBracket opening_bracket_token, StatementList statements)
+                : opening_bracket_token{ opening_bracket_token },
+                  statements{ std::move(statements) } { }
 
+            LeftCurlyBracket opening_bracket_token;
             StatementList statements;
             std::unique_ptr<Scope> scope;
             std::optional<usize> occupied_stack_space{};
@@ -219,9 +222,9 @@ namespace Parser {
         };
 
         struct InlineAssembly : public StatementAcceptor<InlineAssembly> {
-            explicit InlineAssembly(const Lexer::Tokens::InlineAssembly* token) : token{ token } { }
+            explicit InlineAssembly(Lexer::Tokens::InlineAssembly token) : token{ token } { }
 
-            const Lexer::Tokens::InlineAssembly* token;
+            Lexer::Tokens::InlineAssembly token;
         };
 
         struct ExpressionStatement : public StatementAcceptor<ExpressionStatement> {

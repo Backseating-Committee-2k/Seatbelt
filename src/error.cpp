@@ -3,11 +3,106 @@
 //
 
 #include "error.hpp"
+#include "parser.hpp"
 #include <algorithm>
 #include <fmt/core.h>
 #include <iostream>
 #include <ranges>
 #include <stdexcept>
+
+struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
+                              public Parser::Expressions::ExpressionVisitor {
+    void visit(Parser::Statements::Block& statement) override {
+        token = statement.opening_bracket_token;
+    }
+
+    void visit(Parser::Statements::IfStatement& statement) override {
+        token = statement.if_token;
+    }
+
+    void visit(Parser::Statements::LoopStatement& statement) override {
+        token = statement.loop_token;
+    }
+
+    void visit(Parser::Statements::BreakStatement& statement) override {
+        token = statement.break_token;
+    }
+
+    void visit(Parser::Statements::ContinueStatement& statement) override {
+        token = statement.continue_token;
+    }
+
+    void visit(Parser::Statements::WhileStatement& statement) override {
+        token = statement.while_token;
+    }
+
+    void visit(Parser::Statements::DoWhileStatement& statement) override {
+        token = statement.do_token;
+    }
+
+    void visit(Parser::Statements::ForStatement& statement) override {
+        token = statement.for_token;
+    }
+
+    void visit(Parser::Statements::ReturnStatement& statement) override {
+        token = statement.return_token;
+    }
+
+    void visit(Parser::Statements::VariableDefinition& statement) override {
+        token = statement.let_token;
+    }
+
+    void visit(Parser::Statements::InlineAssembly& statement) override {
+        token = statement.token;
+    }
+
+    void visit(Parser::Statements::ExpressionStatement& statement) override {
+        statement.expression->accept(*this);
+    }
+
+    void visit(Parser::Statements::LabelDefinition& statement) override {
+        token = statement.label_token;
+    }
+
+    void visit(Parser::Statements::GotoStatement& statement) override {
+        token = statement.goto_token;
+    }
+
+    void visit(Parser::Expressions::Integer& expression) override {
+        token = expression.value;
+    }
+
+    void visit(Parser::Expressions::Char& expression) override {
+        token = expression.value;
+    }
+
+    void visit(Parser::Expressions::Bool& expression) override {
+        token = expression.value;
+    }
+
+    void visit(Parser::Expressions::Name& expression) override {
+        assert(not expression.name_tokens.empty() and "a name cannot consist of zero tokens");
+        token = expression.name_tokens.front();
+    }
+
+    void visit(Parser::Expressions::BinaryOperator& expression) override {
+        expression.lhs->accept(*this);
+    }
+
+    void visit(Parser::Expressions::FunctionCall& expression) override {
+        expression.callee->accept(*this);
+    }
+
+    void visit(Parser::Expressions::Assignment& expression) override {
+        expression.assignee->accept(*this);
+    }
+
+    void visit(Parser::Expressions::Nothing& expression) override {
+        token = expression.nothing_token;
+    }
+
+    Lexer::Tokens::Token token;
+};
 
 void print_message(const Lexer::Tokens::Token& token, const std::string_view message) {
     using namespace std::ranges::views;
@@ -45,4 +140,22 @@ void Error::error(const Lexer::Tokens::Token& token, const std::string_view mess
 void Error::warning(const Lexer::Tokens::Token& token, const std::string_view message) {
     print_message(token, fmt::format("warning: {}", message));
     std::cerr << " see here\n";
+}
+
+[[nodiscard]] Lexer::Tokens::Token get_first_token(const Parser::Statements::Statement& statement) {
+    auto visitor = GetFirstTokenVisitor{};
+
+    // We cast away the const of the statement because StatementVisitor-instances require the argument
+    // to be mutable. However, our visitor does not mutate anything and thus this is safe (don't quote me on
+    // that, though).
+    const_cast<Parser::Statements::Statement&>(statement).accept(visitor);
+    return visitor.token;
+}
+
+void Error::error(const Parser::Statements::Statement& statement, std::string_view message) {
+    Error::error(get_first_token(statement), message);
+}
+
+void Error::warning(const Parser::Statements::Statement& statement, std::string_view message) {
+    Error::warning(get_first_token(statement), message);
 }
