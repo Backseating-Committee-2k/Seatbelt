@@ -68,6 +68,8 @@ add_executable(Seatbelt
         src/scope.cpp
         src/namespace.hpp
         src/namespace.cpp
+        src/return_type_checker.hpp
+        src/return_type_checker.cpp
         )
 
 target_link_libraries(Seatbelt fmt ctre Arguably)
