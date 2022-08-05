@@ -61,6 +61,7 @@ void ReturnTypeChecker::visit(Parser::Statements::ContinueStatement&) {
 
 void ReturnTypeChecker::visit(Parser::Statements::WhileStatement& statement) {
     statement.body.accept(*this);
+    all_code_paths_return_a_value = false;
     ending_reason = EndingReason::DidNotEnd;
 }
 
@@ -71,6 +72,7 @@ void ReturnTypeChecker::visit(Parser::Statements::DoWhileStatement& statement) {
 
 void ReturnTypeChecker::visit(Parser::Statements::ForStatement& statement) {
     statement.body.accept(*this);
+    all_code_paths_return_a_value = false;
     ending_reason = EndingReason::DidNotEnd;
 }
 
