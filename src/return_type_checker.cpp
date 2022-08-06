@@ -72,7 +72,11 @@ void ReturnTypeChecker::visit(Parser::Statements::DoWhileStatement& statement) {
 
 void ReturnTypeChecker::visit(Parser::Statements::ForStatement& statement) {
     statement.body.accept(*this);
-    all_code_paths_return_a_value = false;
+
+    // If the loop never terminates, we can pretend to give anything back because nobody can prove otherwise.
+    // (see loop-statement)
+    all_code_paths_return_a_value = not statement.condition;
+
     ending_reason = EndingReason::DidNotEnd;
 }
 
