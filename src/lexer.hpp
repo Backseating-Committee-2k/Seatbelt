@@ -24,6 +24,7 @@
     x(Colon) \
     x(Comma) \
     x(Arrow) \
+    x(TildeArrow) \
     x(EndOfFile) \
     x(Semicolon) \
     x(Plus) \
