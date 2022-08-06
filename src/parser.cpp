@@ -232,7 +232,7 @@ namespace Parser {
             const auto if_token = consume<If>();
             auto condition = expression();
             auto then_block = block();
-            auto else_block = Statements::Block{ Statements::StatementList{} };
+            auto else_block = Statements::Block{ then_block.opening_bracket_token, Statements::StatementList{} };
             auto else_token = std::optional<Else>{};
             if ((else_token = maybe_consume<Else>())) {
                 if (current_is<If>()) {
@@ -318,7 +318,7 @@ namespace Parser {
 
         [[nodiscard]] Statements::Block block() {
             Statements::StatementList statements;
-            consume<LeftCurlyBracket>("expected \"{\"");
+            const auto opening_bracket_token = consume<LeftCurlyBracket>("expected \"{\"");
             while (not end_of_file() and not current_is<RightCurlyBracket>()) {
                 if (current_is<If>()) {
                     statements.push_back(if_statement());
@@ -346,7 +346,7 @@ namespace Parser {
                     statements.push_back(goto_statement());
                 } else if (current_is<InlineAssembly>()) {
                     statements.push_back(
-                            std::make_unique<Statements::InlineAssembly>(&std::get<InlineAssembly>(current()))
+                            std::make_unique<Statements::InlineAssembly>(std::get<InlineAssembly>(current()))
                     );
                     advance();
                 } else {
@@ -356,7 +356,7 @@ namespace Parser {
                 }
             }
             consume<RightCurlyBracket>("expected \"}\"");
-            return Statements::Block{ std::move(statements) };
+            return Statements::Block{ opening_bracket_token, std::move(statements) };
         }
 
         [[nodiscard]] std::unique_ptr<Statements::LabelDefinition> label_definition() {

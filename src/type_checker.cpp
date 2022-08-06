@@ -4,6 +4,7 @@
 
 #include "type_checker.hpp"
 #include "error.hpp"
+#include "return_type_checker.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -521,11 +522,31 @@ namespace TypeChecker {
     }
 
     void check(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
+        // first we check the types of the actual function definitions
         visit_function_definitions(program, type_container, global_scope);
 
+        // then we have to check the bodies of the functions
         auto visitor = TypeCheckerTopLevelVisitor{ &program, &type_container, &global_scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);
+        }
+
+        // For functions that return a value (different from nothing) we have to check if all code paths
+        // actually do return a value. We run the check for all functions, though, because it also throws a warning
+        // on unreachable code (which could be interesting for functions that return nothing).
+        for (auto& top_level_statement : program) {
+            std::visit(
+                    overloaded{ [&](const std::unique_ptr<Parser::FunctionDefinition>& function) {
+                                   auto return_type_checker = ReturnTypeChecker{};
+                                   function->body.accept(return_type_checker);
+                                   if (function->return_type != type_container.const_nothing() and
+                                       not return_type_checker.all_code_paths_return_a_value) {
+                                       Error::error(function->name, "not all code paths return a value\n");
+                                   }
+                               },
+                                [](const auto&) {} },
+                    top_level_statement
+            );
         }
     }
 }// namespace TypeChecker
