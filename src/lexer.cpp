@@ -300,6 +300,9 @@ private:
         if (remaining_source.starts_with("!=")) {
             emit_token<ExclamationEquals>(tokens, 2);
             return 2;
+        } else if (remaining_source.starts_with("~>")) {
+            emit_token<TildeArrow>(tokens, 2);
+            return 2;
         }
 
         static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";

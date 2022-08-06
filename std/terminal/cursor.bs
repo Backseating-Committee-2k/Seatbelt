@@ -1,6 +1,6 @@
 namespace std {
 
-    function set_cursor_mode(mode: U32): Nothing {
+    function set_cursor_mode(mode: U32) ~> Nothing {
         bsm {
             copy *R0, R1 // get parameter
             copy R1, *CURSOR_MODE // set mode

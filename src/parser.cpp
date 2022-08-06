@@ -183,6 +183,8 @@ namespace Parser {
             advance();
             const auto name = consume<Identifier>("expected function name");
             consume<LeftParenthesis>("expected \"(\"");
+
+            // parameter list
             auto parameters = ParameterList{};
             while (not end_of_file() and not current_is<RightParenthesis>()) {
                 const auto parameter_name = consume<Identifier>("expected parameter name");
@@ -196,7 +198,7 @@ namespace Parser {
                 }
             }
             consume<RightParenthesis>("expected \")\"");
-            consume<Colon>("expected \":\"");
+            consume<TildeArrow>("expected \"~>\"");
             auto return_type_definition = data_type();
             auto body = block();
             auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
