@@ -303,7 +303,8 @@ namespace Emitter {
             // every expression must have a value, and therefore we have to push something
             // onto the stack, even though a "Nothing"-expression doesn't *really* have a
             // value
-            emit("push 42", "push some value for the \"Nothing\"-literal");
+            emit("copy 42, R1");
+            emit("push R1", "push some value for the \"Nothing\"-literal");
         }
 
         void visit(Block& statement) override {
