@@ -27,6 +27,10 @@
         emit_single_char_token<token_type>(tokens); \
         break;
 
+[[nodiscard]] static bool is_escape_sequence_char(char const c) {
+    return c == '"' || c == '\\' || c == 't' || c == 'n' || c == 'v' || c == 'f' || c == 'r';
+}
+
 class LexerState {
 public:
     explicit LexerState(SourceCode source_code) : m_source_code{ source_code } { }
@@ -134,18 +138,37 @@ private:
                 advance(1);
                 if (not end_of_file() and current() == '/') {
                     // we are inside a comment
-                    // loop until end of line
+                    // => loop until end of line
                     advance(1);
                     while (not end_of_file() and current() != '\n') {
                         advance(1);
                     }
                 }
+            } else if (not end_of_file() and current() == '"') {
+                // we are inside a string literal
+                // => loop until the end of the string literal
+                advance(1); // consume '"'
+                while (not end_of_file() and current() != '"') {
+                    if (current() == '\n') {
+                        std::cerr << "newlines are disallowed in string literals of inline bssembly\n";
+                        std::exit(EXIT_FAILURE);
+                    }
+                    if (current() == '\\') {
+                        if (not is_escape_sequence_char(peek())) {
+                            std::cerr << "invalid escape sequence in string literal of inline bssembly\n";
+                            std::exit(EXIT_FAILURE);
+                        }
+                        advance(1);
+                    }
+                    advance(1);
+                }
+                advance(1);
             } else {
                 advance(1);
             }
         }
         if (end_of_file()) {
-            std::cerr << "unterminated inline assembly block\n";
+            std::cerr << "unterminated inline bssembly block\n";
             std::exit(EXIT_FAILURE);
         }
 
