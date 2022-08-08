@@ -184,7 +184,7 @@ namespace ScopeGenerator {
                                         // We *did* find a function symbol with the correct function name (even though we
                                         // do not know the function signature), but the function can only be a valid choice
                                         // if it is within the correct namespace
-                                        auto remaining_namespaces = remaining.empty() ? 0 : count(remaining, '%') + 1;
+                                        auto remaining_namespaces = remaining.empty() ? 0 : count(remaining, ':') / 2;
                                         const auto was_qualified_name = (expression.name_tokens.size() > 1);
                                         auto possible_overloads = std::vector<const FunctionOverload*>{};
                                         while (true) {
@@ -199,7 +199,8 @@ namespace ScopeGenerator {
                                             }
 
                                             // if the name is a qualified name (i.e. with specified namespace) it is
-                                            // not valid to make a lookup in the outer namespaces
+                                            // not valid to make a lookup in the outer namespaces (except for the
+                                            // global namespace, but that case is handled separately later on)
                                             if (was_qualified_name) {
                                                 break;
                                             }
@@ -207,13 +208,11 @@ namespace ScopeGenerator {
                                             if (remaining_namespaces == 0) {
                                                 break;
                                             }
-                                            if (remaining_namespaces == 1) {
-                                                remaining = "";
-                                            } else {
-                                                const auto end_index = remaining.rfind('%');
-                                                assert(end_index != decltype(remaining)::npos);
-                                                remaining = remaining.substr(0, end_index);
-                                            }
+                                            const auto max_pos = remaining.length() >= 3 ? remaining.length() - 3
+                                                                                         : decltype(remaining)::npos;
+                                            const auto end_index = remaining.rfind(':', max_pos);
+                                            assert(end_index != decltype(remaining)::npos);
+                                            remaining = remaining.substr(0, end_index + 1);
                                             --remaining_namespaces;
                                         }
 
@@ -223,7 +222,7 @@ namespace ScopeGenerator {
                                         const auto is_global_lookup_fallback = possible_overloads.empty();
 
                                         const auto inside_global_namespace =
-                                                expression.surrounding_scope->surrounding_namespace.empty();
+                                                expression.surrounding_scope->surrounding_namespace == "::";
 
                                         if (was_qualified_name) {
                                             const auto global_name_qualifier =

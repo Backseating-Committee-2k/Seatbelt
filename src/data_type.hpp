@@ -88,7 +88,7 @@ struct ConcreteType : public DataType {
     }
 
     [[nodiscard]] std::string mangled_name() const override {
-        return fmt::format("${}", name);
+        return std::string{ name };
     }
 
     [[nodiscard]] std::unique_ptr<DataType> clone() const final {
@@ -128,7 +128,7 @@ struct PointerType : public DataType {
 
     [[nodiscard]] std::string mangled_name() const override {
         assert(contained);
-        return fmt::format("$pointer${}", contained->mangled_name());
+        return fmt::format("->{}", contained->mangled_name());
     }
 
     [[nodiscard]] std::unique_ptr<DataType> clone() const final {

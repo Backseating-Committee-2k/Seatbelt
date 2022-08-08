@@ -340,10 +340,11 @@ namespace TypeChecker {
                     auto& possible_overloads = name->possible_overloads.value();
                     const auto& name_token = name->name_tokens.back();
                     const auto identifier = Error::token_location(name_token).view();
-                    auto signature = fmt::format("${}", identifier);
+                    auto signature = fmt::format("{}(", identifier);
                     for (const auto& argument : expression.arguments) {
-                        signature += argument->data_type->mangled_name();
+                        signature += argument->data_type->mangled_name() + ", ";
                     }
+                    signature += ")";
                     bool overload_found = false;
                     for (const auto& overload : possible_overloads) {
                         if (overload->signature == signature) {
@@ -463,15 +464,16 @@ namespace TypeChecker {
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using std::ranges::find_if;
 
-            auto signature = fmt::format("${}", function_definition->name.location.view());
+            auto signature = fmt::format("{}(", function_definition->name.location.view());
             usize offset = 0;
             for (auto& parameter : function_definition->parameters) {
                 assert(parameter.type_definition and "type definition must have been set before");
                 parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
-                signature += parameter.type->mangled_name();
+                signature += parameter.type->mangled_name() + ", ";
                 parameter.variable_symbol->offset = offset;
                 offset += parameter.type->size();
             }
+            signature += ")";
 
             const auto identifier = function_definition->name.location.view();
 
