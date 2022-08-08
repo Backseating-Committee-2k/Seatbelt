@@ -168,7 +168,7 @@ namespace Emitter {
                 assert(expression.possible_overloads.value().size() == 1);
                 const auto& overload = expression.possible_overloads.value().front();
                 const auto mangled_name = fmt::format("{}{}", overload->namespace_name, overload->signature);
-                emit(fmt::format("copy {}, R1", mangled_name), "get address of label");
+                emit(fmt::format("copy $\"{}\", R1", mangled_name), "get address of label");
                 emit("push R1", "push address of label onto stack");
                 return;
             }
@@ -502,10 +502,9 @@ namespace Emitter {
             label->emitted_label = label_generator->next_label(label->identifier.location.view());
         }
 
-
         const auto mangled_name =
                 function_definition->namespace_name + function_definition->corresponding_symbol->signature;
-        auto result = fmt::format("\n{}:\n", mangled_name);
+        auto result = fmt::format("\n$\"{}\":\n", mangled_name);
 
         const auto emit = [&result](const std::string_view instruction, const std::string_view comment = "") {
             result += fmt::format("\t{}", instruction);

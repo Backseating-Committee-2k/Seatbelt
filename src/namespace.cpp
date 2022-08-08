@@ -3,31 +3,42 @@
 //
 
 #include "namespace.hpp"
+#include "error.hpp"
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <ranges>
 
 using Parser::Expressions::Name;
 
 [[nodiscard]] std::string get_namespace_qualifier(const Name& expression) {
-    auto qualified_name = std::string{ expression.surrounding_scope->surrounding_namespace };
-    const auto inside_global_namespace = qualified_name.empty();
-    return qualified_name + (not inside_global_namespace ? "%" : "") + get_absolute_namespace_qualifier(expression);
+    using std::ranges::views::transform, std::ranges::views::take;
+    assert(expression.surrounding_scope->surrounding_namespace.ends_with("::"));
+    auto result = fmt::format(
+            "{}{}", expression.surrounding_scope->surrounding_namespace,
+            fmt::join(
+                    expression.name_tokens | take(expression.name_tokens.size() - 1) |
+                            transform([](auto token) { return Error::token_location(token).view(); }),
+                    ""
+            )
+    );
+    return result;
 }
 
 [[nodiscard]] std::string get_absolute_namespace_qualifier(const Name& expression) {
-    using Lexer::Tokens::Identifier;
-    auto qualified_name = std::string{};
-    assert(not expression.name_tokens.empty());
-    for (usize i = 0; i < expression.name_tokens.size() - 1; i += 2) {
-        const auto& name = std::get<Identifier>(expression.name_tokens[i]);
-        if (i > 0) {
-            qualified_name += "%";
-        }
-        qualified_name += name.location.view();
-    }
-    return qualified_name;
+    using std::ranges::views::transform, std::ranges::views::take;
+    return fmt::format(
+            "::{}", fmt::join(
+                            expression.name_tokens | take(expression.name_tokens.size() - 1) |
+                                    transform([](auto token) { return Error::token_location(token).view(); }),
+                            ""
+                    )
+    );
 }
 
 [[nodiscard]] std::string get_namespace_qualifier(const NamespacesStack& namespaces_stack) {
-    return fmt::format("{}", fmt::join(namespaces_stack, "%"));
+    auto result = std::string{ "::" };
+    for (const auto& space : namespaces_stack) {
+        result += space + "::";
+    }
+    return result;
 }
