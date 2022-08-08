@@ -9,6 +9,7 @@
 #include <array>
 #include <cassert>
 #include <fmt/core.h>
+#include <fmt/format.h>
 #include <ranges>
 #include <string_view>
 #include <variant>
@@ -340,11 +341,17 @@ namespace TypeChecker {
                     auto& possible_overloads = name->possible_overloads.value();
                     const auto& name_token = name->name_tokens.back();
                     const auto identifier = Error::token_location(name_token).view();
-                    auto signature = fmt::format("{}(", identifier);
-                    for (const auto& argument : expression.arguments) {
-                        signature += argument->data_type->mangled_name() + ", ";
-                    }
-                    signature += ")";
+
+                    using std::ranges::views::transform;
+                    const auto signature = fmt::format(
+                            "{}({})", identifier,
+                            fmt::join(
+                                    expression.arguments | transform([](const auto& argument) {
+                                        return argument->data_type->mangled_name();
+                                    }),
+                                    ", "
+                            )
+                    );
                     bool overload_found = false;
                     for (const auto& overload : possible_overloads) {
                         if (overload->signature == signature) {
@@ -462,18 +469,24 @@ namespace TypeChecker {
               global_scope{ global_scope } { }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
-            using std::ranges::find_if;
-
-            auto signature = fmt::format("{}(", function_definition->name.location.view());
+            using std::ranges::find_if, std::ranges::views::transform;
             usize offset = 0;
+
             for (auto& parameter : function_definition->parameters) {
                 assert(parameter.type_definition and "type definition must have been set before");
                 parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
-                signature += parameter.type->mangled_name() + ", ";
                 parameter.variable_symbol->offset = offset;
                 offset += parameter.type->size();
             }
-            signature += ")";
+
+            const auto signature = fmt::format(
+                    "{}({})", function_definition->name.location.view(),
+                    fmt::join(
+                            function_definition->parameters |
+                                    transform([](const auto& parameter) { return parameter.type->mangled_name(); }),
+                            ", "
+                    )
+            );
 
             const auto identifier = function_definition->name.location.view();
 
