@@ -4,10 +4,12 @@
 
 #pragma once
 
-#include "data_type.hpp"
 #include "lexer.hpp"
+#include <memory>
 #include <span>
 #include <vector>
+
+struct DataType;
 
 class TypeContainer {
 public:

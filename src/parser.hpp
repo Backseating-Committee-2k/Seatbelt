@@ -387,6 +387,6 @@ namespace Parser {
 
     void concatenate_programs(Program& first, Program&& second);
 
-    [[nodiscard]] Program parse(const Lexer::TokenList& tokens);
+    [[nodiscard]] Program parse(const Lexer::TokenList& tokens, TypeContainer& type_container);
 
 }// namespace Parser
