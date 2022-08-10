@@ -5,6 +5,7 @@
 #include "parser.hpp"
 #include "error.hpp"
 #include "namespace.hpp"
+#include "type_container.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <cassert>
@@ -24,7 +25,9 @@ namespace Parser {
 
     class ParserState {
     public:
-        explicit ParserState(const Lexer::TokenList& tokens) : m_tokens{ &tokens } { }
+        explicit ParserState(const Lexer::TokenList& tokens, TypeContainer* type_container)
+            : m_tokens{ &tokens },
+              m_type_container{ type_container } { }
 
         [[nodiscard]] Program parse() {
             auto program = parse_header();
@@ -347,9 +350,8 @@ namespace Parser {
                 } else if (current_is<Goto>()) {
                     statements.push_back(goto_statement());
                 } else if (current_is<InlineAssembly>()) {
-                    statements.push_back(
-                            std::make_unique<Statements::InlineAssembly>(std::get<InlineAssembly>(current()))
-                    );
+                    statements.push_back(std::make_unique<Statements::InlineAssembly>(std::get<InlineAssembly>(current()
+                    )));
                     advance();
                 } else {
                     auto expression = this->expression();
@@ -391,7 +393,8 @@ namespace Parser {
                 advance();
                 auto pointee_type = data_type();
                 return std::make_unique<PointerType>(
-                        std::move(pointee_type), is_mutable ? Mutability::Mutable : Mutability::Const
+                        m_type_container->from_type_definition(std::move(pointee_type)),
+                        is_mutable ? Mutability::Mutable : Mutability::Const
                 );
             }
             return primitive_type();
@@ -521,6 +524,7 @@ namespace Parser {
         usize m_index{ 0 };
         const Lexer::TokenList* m_tokens;
         NamespacesStack m_namespaces_stack{};
+        TypeContainer* m_type_container;
     };
 
     void concatenate_programs(Program& first, Program&& second) {
@@ -530,8 +534,8 @@ namespace Parser {
         }
     }
 
-    [[nodiscard]] Program parse(const Lexer::TokenList& tokens) {
-        auto parser_state = ParserState{ tokens };
+    [[nodiscard]] Program parse(const Lexer::TokenList& tokens, TypeContainer& type_container) {
+        auto parser_state = ParserState{ tokens, &type_container };
         return parser_state.parse();
     }
 

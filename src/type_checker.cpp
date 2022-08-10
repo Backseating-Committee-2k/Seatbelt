@@ -195,10 +195,8 @@ namespace TypeChecker {
             }
             const auto return_value_type =
                     statement.return_value ? statement.return_value->data_type : type_container->mutable_nothing();
-            const auto return_value_type_mutable =
-                    type_container->from_type_definition(return_value_type->as_mutable());
-            const auto function_return_type_mutable =
-                    type_container->from_type_definition(surrounding_function->return_type->as_mutable());
+            const auto return_value_type_mutable = return_value_type->as_mutable(*type_container);
+            const auto function_return_type_mutable = surrounding_function->return_type->as_mutable(*type_container);
             if (return_value_type_mutable != function_return_type_mutable) {
                 Error::error(
                         statement.return_token,
@@ -226,8 +224,7 @@ namespace TypeChecker {
 
             // get the mutable version of the assignee type (if it is not mutable already)
             DataType const* const assignee_type =
-                    statement.type->is_mutable() ? statement.type
-                                                 : type_container->from_type_definition(statement.type->as_mutable());
+                    statement.type->is_mutable() ? statement.type : statement.type->as_mutable(*type_container);
 
             // type checking rules are the same as if we would do type checking during an assignment
             const auto resulting_type = get_resulting_data_type(

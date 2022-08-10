@@ -38,16 +38,7 @@ void TypeContainer::register_type(std::unique_ptr<DataType> data_type) {
 }
 
 bool TypeContainer::is_defined(const std::unique_ptr<DataType>& data_type) const {
-    using std::ranges::find_if;
-
-    if (const auto pointer = dynamic_cast<const PointerType*>(data_type.get())) {
-        return is_defined(pointer->contained->clone());
-    }
-    const auto concrete_type = dynamic_cast<const ConcreteType*>(data_type.get());
-    assert(concrete_type and "not implemented");
-
-    const auto found = find(data_type);
-    return found != nullptr;
+    return find(data_type) != nullptr;
 }
 
 const DataType* TypeContainer::find(const std::unique_ptr<DataType>& data_type) const {

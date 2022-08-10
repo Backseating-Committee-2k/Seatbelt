@@ -123,8 +123,12 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
     return imports;
 }
 
-[[nodiscard]] Parser::Program
-resolve_imports(auto& command_line_parser, SourceFileContainer& source_files, TokenListsContainer& token_lists) {
+[[nodiscard]] Parser::Program resolve_imports(
+        auto& command_line_parser,
+        SourceFileContainer& source_files,
+        TokenListsContainer& token_lists,
+        TypeContainer& type_container
+) {
     using Parser::concatenate_programs;
     using std::ranges::find_if;
 
@@ -176,7 +180,7 @@ resolve_imports(auto& command_line_parser, SourceFileContainer& source_files, To
                 .filename{ current_source_file.first },
                 .text{ current_source_file.second },
         }));
-        auto current_program = Parser::parse(current_token_list);
+        auto current_program = Parser::parse(current_token_list, type_container);
 
         if (is_main_file) {
             imports.erase("");
@@ -231,11 +235,11 @@ int main(int, char** argv) {
 
     auto source_files = SourceFileContainer{};
     auto token_lists = TokenListsContainer{};
+    auto type_container = TypeContainer{};
 
-    auto program = resolve_imports(command_line_parser, source_files, token_lists);
+    auto program = resolve_imports(command_line_parser, source_files, token_lists, type_container);
 
     auto global_scope = Scope{ nullptr, "" };
-    auto type_container = TypeContainer{};
     ScopeGenerator::generate(program, type_container, global_scope);
     TypeChecker::check(program, type_container, global_scope);
 

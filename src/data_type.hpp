@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "type_container.hpp"
 #include "types.hpp"
 #include <cassert>
 #include <fmt/core.h>
@@ -41,19 +42,9 @@ public:
         return not is_const();
     }
 
-    [[nodiscard]] std::unique_ptr<DataType> as_mutable() const {
-        auto copy = clone();
-        copy->mutability = Mutability::Mutable;
-        return copy;
-    }
+    [[nodiscard]] virtual const DataType* as_mutable(TypeContainer& type_container) const = 0;
 
-    [[nodiscard]] std::unique_ptr<DataType> as_const() const {
-        auto copy = clone();
-        copy->mutability = Mutability::Const;
-        return copy;
-    }
-
-    [[nodiscard]] virtual std::unique_ptr<DataType> clone() const = 0;
+    [[nodiscard]] virtual const DataType* as_const(TypeContainer& type_container) const = 0;
 
     [[nodiscard]] virtual std::string to_string() const {
         switch (mutability) {
@@ -73,8 +64,8 @@ public:
     Mutability mutability;
 };
 
-struct ConcreteType : public DataType {
-    ConcreteType(std::string_view name, Mutability mutability) : DataType{ mutability }, name{ std::move(name) } { }
+struct ConcreteType final : public DataType {
+    ConcreteType(std::string_view name, Mutability mutability) : DataType{ mutability }, name{ name } { }
 
     bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const ConcreteType*>(&other)) {
@@ -91,10 +82,6 @@ struct ConcreteType : public DataType {
         return std::string{ name };
     }
 
-    [[nodiscard]] std::unique_ptr<DataType> clone() const final {
-        return std::make_unique<ConcreteType>(name, mutability);
-    }
-
     [[nodiscard]] usize size() const override {
         if (name == U32Identifier or name == BoolIdentifier or name == CharIdentifier) {
             return 4;
@@ -105,13 +92,25 @@ struct ConcreteType : public DataType {
         }
     }
 
+    const DataType* as_mutable(TypeContainer& type_container) const override {
+        if (is_mutable()) {
+            return this;
+        }
+        return type_container.from_type_definition(std::make_unique<ConcreteType>(name, Mutability::Mutable));
+    }
+
+    const DataType* as_const(TypeContainer& type_container) const override {
+        if (is_const()) {
+            return this;
+        }
+        return type_container.from_type_definition(std::make_unique<ConcreteType>(name, Mutability::Const));
+    }
+
     std::string_view name;
 };
 
-struct PointerType : public DataType {
-    PointerType(std::unique_ptr<DataType> contained, Mutability mutability)
-        : DataType{ mutability },
-          contained{ std::move(contained) } { }
+struct PointerType final : public DataType {
+    PointerType(const DataType* contained, Mutability mutability) : DataType{ mutability }, contained{ contained } { }
 
     bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const PointerType*>(&other)) {
@@ -131,18 +130,28 @@ struct PointerType : public DataType {
         return fmt::format("->{}", contained->mangled_name());
     }
 
-    [[nodiscard]] std::unique_ptr<DataType> clone() const final {
-        return std::make_unique<PointerType>(contained->clone(), mutability);
-    }
-
     [[nodiscard]] usize size() const override {
         return 4;
     }
 
-    std::unique_ptr<DataType> contained;
+    const DataType* as_mutable(TypeContainer& type_container) const override {
+        if (is_mutable()) {
+            return this;
+        }
+        return type_container.from_type_definition(std::make_unique<PointerType>(contained, Mutability::Mutable));
+    }
+
+    const DataType* as_const(TypeContainer& type_container) const override {
+        if (is_const()) {
+            return this;
+        }
+        return type_container.from_type_definition(std::make_unique<PointerType>(contained, Mutability::Const));
+    }
+
+    const DataType* contained;
 };
 
-struct FunctionPointerType : public DataType {
+struct FunctionPointerType final : public DataType {
     explicit FunctionPointerType(std::string signature, Mutability mutability)
         : DataType{ mutability },
           signature{ std::move(signature) } { }
@@ -162,12 +171,23 @@ struct FunctionPointerType : public DataType {
         return fmt::format("$function_pointer${}", signature);
     }
 
-    [[nodiscard]] std::unique_ptr<DataType> clone() const final {
-        return std::make_unique<FunctionPointerType>(signature, mutability);
-    }
-
     [[nodiscard]] usize size() const override {
         return 4;
+    }
+
+    const DataType* as_mutable(TypeContainer& type_container) const override {
+        if (is_mutable()) {
+            return this;
+        }
+        return type_container.from_type_definition(std::make_unique<FunctionPointerType>(signature, Mutability::Mutable)
+        );
+    }
+
+    const DataType* as_const(TypeContainer& type_container) const override {
+        if (is_const()) {
+            return this;
+        }
+        return type_container.from_type_definition(std::make_unique<FunctionPointerType>(signature, Mutability::Const));
     }
 
     std::string signature;
