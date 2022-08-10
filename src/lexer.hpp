@@ -69,7 +69,8 @@
     x(Return) \
     x(Label) \
     x(Goto) \
-    x(NothingLiteral)
+    x(NothingLiteral) \
+    x(CapitalizedFunction)
 
 // clang-format on
 

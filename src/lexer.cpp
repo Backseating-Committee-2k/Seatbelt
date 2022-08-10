@@ -343,6 +343,7 @@ private:
             KEYWORD("label", Label)
             KEYWORD("goto", Goto)
             KEYWORD("nothing", NothingLiteral)
+            KEYWORD("Function", CapitalizedFunction)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

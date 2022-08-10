@@ -28,6 +28,8 @@ struct VariableSymbol {
 
 struct FunctionOverload {
     std::string signature{};
+    // TODO: remove members parameters and return_type, since this information can be obtained by following
+    //       the definition-pointer
     const ParameterList* parameters{ nullptr };
     const DataType* return_type{ nullptr };
     std::string_view namespace_name{};

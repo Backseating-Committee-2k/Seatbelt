@@ -378,37 +378,47 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<DataType> data_type() {
-            return pointer_type();
-        }
-
-        [[nodiscard]] std::unique_ptr<DataType> pointer_type() {
-            const auto is_mutable = current_is<Mutable>();
-            if (not is_mutable and next_is<Arrow>()) {
+            const auto mutability =
+                    static_cast<bool>(maybe_consume<Mutable>()) ? Mutability::Mutable : Mutability::Const;
+            if (mutability == Mutability::Const) {
                 maybe_consume<Const>();
             }
-            if ((not is_mutable and current_is<Arrow>()) or (is_mutable and peek_is<Arrow>())) {
-                if (is_mutable) {
-                    advance();
+            if (current_is<Arrow>()) {
+                return pointer_type(mutability);
+            } else if (current_is<CapitalizedFunction>()) {
+                return function_pointer_type(mutability);
+            } else {
+                return primitive_type(mutability);
+            }
+        }
+
+        [[nodiscard]] std::unique_ptr<DataType> pointer_type(const Mutability mutability) {
+            consume<Arrow>();
+            auto pointee_type = data_type();
+            return std::make_unique<PointerType>(std::move(pointee_type), mutability);
+        }
+
+        [[nodiscard]] std::unique_ptr<DataType> function_pointer_type(const Mutability mutability) {
+            consume<CapitalizedFunction>();
+            consume<LeftParenthesis>("expected \"(\"");
+            auto parameter_types = std::vector<std::unique_ptr<DataType>>{};
+            while (not end_of_file() and not current_is<RightParenthesis>()) {
+                parameter_types.push_back(data_type());
+                if (not maybe_consume<Comma>()) {
+                    break;
                 }
-                advance();
-                auto pointee_type = data_type();
-                return std::make_unique<PointerType>(
-                        m_type_container->from_type_definition(std::move(pointee_type)),
-                        is_mutable ? Mutability::Mutable : Mutability::Const
-                );
             }
-            return primitive_type();
+            consume<RightParenthesis>("expected \")\" to terminate parameter list of function pointer type");
+            consume<TildeArrow>("expected \"~>\"");
+            auto return_type = data_type();
+            return std::make_unique<FunctionPointerType>(
+                    std::move(parameter_types), std::move(return_type), mutability
+            );
         }
 
-        [[nodiscard]] std::unique_ptr<DataType> primitive_type() {
-            const auto is_mutable = static_cast<bool>(maybe_consume<Mutable>());
-            if (not is_mutable) {
-                maybe_consume<Const>();
-            }
+        [[nodiscard]] std::unique_ptr<DataType> primitive_type(const Mutability mutability) {
             auto identifier = consume<Identifier>("type identifier expected");
-            return std::make_unique<ConcreteType>(
-                    identifier.location.view(), is_mutable ? Mutability::Mutable : Mutability::Const
-            );
+            return std::make_unique<ConcreteType>(identifier.location.view(), mutability);
         }
 
         [[nodiscard]] std::unique_ptr<Statements::VariableDefinition> variable_definition() {

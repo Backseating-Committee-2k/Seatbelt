@@ -299,6 +299,8 @@ namespace TypeChecker {
                     }
                     assert(overloads.size() == 1);
                     fmt::print(stderr, "setting type of name {}\n", identifier);
+                    const auto function_definition = overloads.front().definition;
+                    // TODO: use function_definition to build up type list of parameters
                     expression.data_type = type_container->from_type_definition(
                             std::make_unique<FunctionPointerType>(overloads.front().signature, Mutability::Const)
                     );
