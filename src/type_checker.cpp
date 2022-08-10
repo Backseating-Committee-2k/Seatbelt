@@ -24,6 +24,34 @@ namespace TypeChecker {
         return {};
     }
 
+    [[nodiscard]] const DataType* get_resulting_data_type_for_function_pointers(
+            const FunctionPointerType* lhs,
+            const Token& token,
+            const FunctionPointerType* rhs,
+            TypeContainer& type_container
+    ) {
+        using namespace Lexer::Tokens;
+        if (lhs->parameter_types.size() != rhs->parameter_types.size()) {
+            return nullptr;
+        }
+        for (usize i = 0; i < lhs->parameter_types.size(); ++i) {
+            if (lhs->parameter_types[i] != rhs->parameter_types[i]) {
+                return nullptr;
+            }
+        }
+        if (lhs->return_type != rhs->return_type) {
+            return nullptr;
+        }
+
+        if (is_one_of<EqualsEquals, ExclamationEquals>(token)) {
+            return type_container.const_bool();
+        }
+        if (is<Equals>(token) and lhs->is_mutable()) {
+            return lhs;
+        }
+        return nullptr;
+    }
+
     [[nodiscard]] const DataType* get_resulting_data_type(
             const DataType* lhs,
             const Token& token,
@@ -33,6 +61,19 @@ namespace TypeChecker {
         using namespace Lexer::Tokens;
         assert(lhs != nullptr);
         assert(rhs != nullptr);
+
+        const auto first_function_pointer = dynamic_cast<const FunctionPointerType*>(lhs); // maybe nullptr
+        const auto second_function_pointer = dynamic_cast<const FunctionPointerType*>(rhs);// maybe nullptr
+
+        if (first_function_pointer != nullptr and second_function_pointer != nullptr) {
+            return get_resulting_data_type_for_function_pointers(
+                    first_function_pointer, token, second_function_pointer, type_container
+            );
+        } else if (first_function_pointer != nullptr or second_function_pointer != nullptr) {
+            return nullptr;
+        }
+        // if neither operand is a function pointers, we evaluate the actual types
+
         const auto same_type = (lhs == rhs);
 
         // the following array represents the concrete data types ignoring their mutability
@@ -211,7 +252,7 @@ namespace TypeChecker {
         void visit(Parser::Statements::VariableDefinition& statement) override {
             assert(statement.type_definition and "type definition must have been set before");// TODO: type deduction
             auto& type = statement.type_definition;
-            if (not type_container->is_defined(type)) {
+            if (not type_container->is_defined(*type)) {
                 Error::error(statement.name, fmt::format("use of undeclared type \"{}\"", type->to_string()));
             }
             statement.type = type_container->from_type_definition(std::move(statement.type_definition));
@@ -298,12 +339,15 @@ namespace TypeChecker {
                         Error::error(name_token, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
                     }
                     assert(overloads.size() == 1);
-                    fmt::print(stderr, "setting type of name {}\n", identifier);
                     const auto function_definition = overloads.front().definition;
-                    // TODO: use function_definition to build up type list of parameters
-                    expression.data_type = type_container->from_type_definition(
-                            std::make_unique<FunctionPointerType>(overloads.front().signature, Mutability::Const)
-                    );
+                    auto parameter_types = std::vector<const DataType*>{};
+                    parameter_types.reserve(function_definition->parameters.size());
+                    for (const auto& parameter : function_definition->parameters) {
+                        parameter_types.push_back(parameter.type);
+                    }
+                    expression.data_type = type_container->from_type_definition(std::make_unique<FunctionPointerType>(
+                            std::move(parameter_types), function_definition->return_type, Mutability::Const
+                    ));
                 } else {
                     assert(false && "unreachable");
                 }
@@ -354,10 +398,23 @@ namespace TypeChecker {
                     bool overload_found = false;
                     for (const auto& overload : possible_overloads) {
                         if (overload->signature == signature) {
-                            assert(overload->return_type != nullptr && "return type has to be set before");
-                            name->data_type = type_container->from_type_definition(
-                                    std::make_unique<FunctionPointerType>(signature, Mutability::Const)
-                            );
+                            assert(overload->definition->return_type != nullptr and "return type has to be set before");
+                            for (const auto& parameter : overload->definition->parameters) {
+                                assert(parameter.type != nullptr and "parameter type has to be set before");
+                            }
+
+                            using std::ranges::views::transform;
+                            const auto range = overload->definition->parameters |
+                                               transform([](const auto& parameter) { return parameter.type; });
+                            auto parameter_types = std::vector(
+                                    cbegin(range), cend(range)
+                            );// no curly braces because of constructor ambiguity
+
+                            name->data_type =
+                                    type_container->from_type_definition(std::make_unique<FunctionPointerType>(
+                                            std::move(parameter_types), overload->definition->return_type,
+                                            Mutability::Const
+                                    ));
                             overload_found = true;
                         }
                     }
@@ -375,7 +432,7 @@ namespace TypeChecker {
                     // erase all overloads except for the first one (which is the "inner" one)
                     possible_overloads.erase(std::begin(possible_overloads) + 1, std::end(possible_overloads));
                     assert(possible_overloads.size() == 1);
-                    expression.data_type = possible_overloads.front()->return_type;
+                    expression.data_type = possible_overloads.front()->definition->return_type;
                     assert(possible_overloads.front()->definition and
                            "each overload must have a pointer to its definition");
                     expression.function_to_call = possible_overloads.front()->definition;
@@ -478,7 +535,7 @@ namespace TypeChecker {
                 offset += parameter.type->size();
             }
 
-            const auto signature = fmt::format(
+            auto signature = fmt::format(
                     "{}({})", function_definition->name.location.view(),
                     fmt::join(
                             function_definition->parameters |
@@ -515,7 +572,7 @@ namespace TypeChecker {
             assert(function_definition->return_type_definition and "function return type must have been set before");
             function_definition->return_type =
                     type_container->from_type_definition(std::move(function_definition->return_type_definition));
-            function_definition->corresponding_symbol->return_type = function_definition->return_type;
+            function_definition->corresponding_symbol->definition->return_type = function_definition->return_type;
 
             // the body of the function is not recursively visited here since we have to first visit
             // all function signatures before visiting the bodies

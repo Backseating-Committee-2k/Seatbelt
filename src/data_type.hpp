@@ -27,11 +27,11 @@ enum class Mutability {
     Const,
 };
 
-[[nodiscard]] bool is_const(const Mutability mutability) {
+[[nodiscard]] inline bool is_const(const Mutability mutability) {
     return mutability == Mutability::Const;
 }
 
-[[nodiscard]] bool is_mutable(const Mutability mutability) {
+[[nodiscard]] inline bool is_mutable(const Mutability mutability) {
     return mutability == Mutability::Mutable;
 }
 
@@ -165,13 +165,13 @@ struct PointerType final : public DataType {
 
 struct FunctionPointerType : public DataType {
     explicit FunctionPointerType(
-            std::vector<std::unique_ptr<DataType>> parameter_types,
-            std::unique_ptr<DataType> return_type,
+            std::vector<const DataType*> parameter_types,
+            const DataType* return_type,
             Mutability mutability
     )
         : DataType{ mutability },
-          parameter_types{ std::move(parameter_types) },
-          return_type{ std::move(return_type) } { }
+          parameter_types{ parameter_types },
+          return_type{ return_type } { }
 
     bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const FunctionPointerType*>(&other)) {
@@ -209,14 +209,6 @@ struct FunctionPointerType : public DataType {
         );
     }
 
-    [[nodiscard]] std::unique_ptr<DataType> clone() const final {
-        auto parameter_copy = std::vector<std::unique_ptr<DataType>>{ parameter_types.size() };
-        for (const auto& type : parameter_types) {
-            parameter_copy.push_back(type->clone());
-        }
-        return std::make_unique<FunctionPointerType>(std::move(parameter_copy), return_type->clone(), mutability);
-    }
-
     [[nodiscard]] usize size() const override {
         return 4;
     }
@@ -225,7 +217,8 @@ struct FunctionPointerType : public DataType {
         if (is_mutable()) {
             return this;
         }
-        return type_container.from_type_definition(std::make_unique<FunctionPointerType>(signature, Mutability::Mutable)
+        return type_container.from_type_definition(
+                std::make_unique<FunctionPointerType>(parameter_types, return_type, Mutability::Mutable)
         );
     }
 
@@ -233,9 +226,11 @@ struct FunctionPointerType : public DataType {
         if (is_const()) {
             return this;
         }
-        return type_container.from_type_definition(std::make_unique<FunctionPointerType>(signature, Mutability::Const));
+        return type_container.from_type_definition(
+                std::make_unique<FunctionPointerType>(parameter_types, return_type, Mutability::Const)
+        );
     }
 
-    std::vector<std::unique_ptr<DataType>> parameter_types;
-    std::unique_ptr<DataType> return_type;
+    std::vector<const DataType*> parameter_types;
+    const DataType* return_type;
 };

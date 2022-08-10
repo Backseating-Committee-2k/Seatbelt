@@ -395,15 +395,17 @@ namespace Parser {
         [[nodiscard]] std::unique_ptr<DataType> pointer_type(const Mutability mutability) {
             consume<Arrow>();
             auto pointee_type = data_type();
-            return std::make_unique<PointerType>(std::move(pointee_type), mutability);
+            return std::make_unique<PointerType>(
+                    m_type_container->from_type_definition(std::move(pointee_type)), mutability
+            );
         }
 
         [[nodiscard]] std::unique_ptr<DataType> function_pointer_type(const Mutability mutability) {
             consume<CapitalizedFunction>();
             consume<LeftParenthesis>("expected \"(\"");
-            auto parameter_types = std::vector<std::unique_ptr<DataType>>{};
+            auto parameter_types = std::vector<const DataType*>{};
             while (not end_of_file() and not current_is<RightParenthesis>()) {
-                parameter_types.push_back(data_type());
+                parameter_types.push_back(m_type_container->from_type_definition(data_type()));
                 if (not maybe_consume<Comma>()) {
                     break;
                 }
@@ -412,7 +414,8 @@ namespace Parser {
             consume<TildeArrow>("expected \"~>\"");
             auto return_type = data_type();
             return std::make_unique<FunctionPointerType>(
-                    std::move(parameter_types), std::move(return_type), mutability
+                    std::move(parameter_types), m_type_container->from_type_definition(std::move(return_type)),
+                    mutability
             );
         }
 

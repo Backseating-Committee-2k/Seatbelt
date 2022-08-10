@@ -205,7 +205,7 @@ namespace ScopeGenerator {
                                                 break;
                                             }
 
-                                            if (remaining_namespaces == 0) {
+                                            if (remaining_namespaces == 1) {
                                                 break;
                                             }
                                             const auto max_pos = remaining.length() >= 3 ? remaining.length() - 3
