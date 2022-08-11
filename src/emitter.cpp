@@ -244,8 +244,17 @@ namespace Emitter {
         void visit(FunctionCall& expression) override {
             emit("\n", "evaluate function call");
 
-            emit("add sp, 12, sp",
-                 "reserve stack space for jump address, return address, and old stack frame base pointer");
+            /*
+             * Structure of stack before call-instruction:
+             *
+             * <arguments>
+             * old stack frame base pointer
+             * return address
+             * jump address
+             */
+            expression.callee->accept(*this);// evaluate callee => jump address is pushed
+            emit("add sp, 4, sp", "reserve stack space for the return address");
+            emit("push R0", "push the current stack frame base pointer");
 
             usize arguments_size = 0;
             for (const auto& argument : expression.arguments) {
@@ -253,42 +262,16 @@ namespace Emitter {
                 arguments_size += argument->data_type->size();
             }
 
-            expression.callee->accept(*this);// evaluate callee => jump address is pushed
-            emit("pop R1", "get jump address");
-            emit(fmt::format("sub sp, {}, R2", arguments_size + 12), "calculate address of jump address placeholder");
-            emit("copy R1, *R2", "store jump address in stack");
-            emit("add R2, 8, R2", "calculate address of old stack frame base pointer placeholder");
-            emit("copy R0, *R2", "save old stack frame base pointer in stack");
+            emit(fmt::format("sub sp, {}, R0", arguments_size), "set stack frame base pointer for callee");
+            emit("sub R0, 8, R1", "calculate address of placeholder for return address");
 
-            assert(not std::holds_alternative<std::monostate>(expression.function_to_call) and
-                   "function must have been set before");
-            assert(not std::holds_alternative<const Parser::FunctionDefinition*>(expression.function_to_call) or
-                   std::get<const Parser::FunctionDefinition*>(expression.function_to_call)
-                                   ->body.occupied_stack_space.has_value() and
-                           "stack size of function body must be known");
-            assert(not std::holds_alternative<FunctionPointerMarker>(expression.function_to_call) and "not implemented"
-            );
-            const auto function_stack_frame_size =
-                    std::get<const Parser::FunctionDefinition*>(expression.function_to_call)
-                            ->body.occupied_stack_space.value();
-
-            emit(fmt::format("add sp, {}, sp", function_stack_frame_size - arguments_size),
-                 "reserve stack space for function (excluding arguments)");
-
-            emit(fmt::format("sub sp, {}, R0", function_stack_frame_size), "set new stack frame base pointer");
-
-            emit("add ip, 48, R1", "calculate return address");
-            emit(fmt::format("sub sp, {}, R2", 8 + function_stack_frame_size),
-                 "calculate address of return address placeholder");
-            emit("copy R1, *R2", "fill return address placeholder");
-
-            emit("sub R0, 12, R2", "calculate address of jump address");
-            emit("copy *R2, R2", "get jump address");
-            emit("jump R2", "call function");
-            emit("pop", "pop jump address");
-
-            // after the call the return value is inside R1
-            emit("push R1", "push return value onto stack");
+            const auto call_return_label = label_generator->next_label("return_address");
+            emit(fmt::format("copy {}, *R1", call_return_label), "fill in return address");
+            emit("sub R0, 12, R1", "calculate address of jump address");
+            emit("copy *R1, R1", "dereference the pointer");
+            emit("jump R1", "call the function");
+            emit_label(call_return_label, "this is where the control flow returns to after the function call");
+            emit("pop", "pop the callee address off of the stack");
         }
 
         void visit(Assignment& expression) override {
