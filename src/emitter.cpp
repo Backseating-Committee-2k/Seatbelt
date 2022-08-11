@@ -260,10 +260,17 @@ namespace Emitter {
             emit("add R2, 8, R2", "calculate address of old stack frame base pointer placeholder");
             emit("copy R0, *R2", "save old stack frame base pointer in stack");
 
-            assert(expression.function_to_call and "function must have been set before");
-            assert(expression.function_to_call->body.occupied_stack_space.has_value() and
-                   "stack size of function body must be known");
-            const auto function_stack_frame_size = expression.function_to_call->body.occupied_stack_space.value();
+            assert(not std::holds_alternative<std::monostate>(expression.function_to_call) and
+                   "function must have been set before");
+            assert(not std::holds_alternative<const Parser::FunctionDefinition*>(expression.function_to_call) or
+                   std::get<const Parser::FunctionDefinition*>(expression.function_to_call)
+                                   ->body.occupied_stack_space.has_value() and
+                           "stack size of function body must be known");
+            assert(not std::holds_alternative<FunctionPointerMarker>(expression.function_to_call) and "not implemented"
+            );
+            const auto function_stack_frame_size =
+                    std::get<const Parser::FunctionDefinition*>(expression.function_to_call)
+                            ->body.occupied_stack_space.value();
 
             emit(fmt::format("add sp, {}, sp", function_stack_frame_size - arguments_size),
                  "reserve stack space for function (excluding arguments)");

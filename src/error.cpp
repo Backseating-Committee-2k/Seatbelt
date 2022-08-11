@@ -130,18 +130,6 @@ void print_message(const Lexer::Tokens::Token& token, const std::string_view mes
     }
 }
 
-void Error::error(const Lexer::Tokens::Token& token, const std::string_view message) {
-    print_message(token, message);
-    std::cerr << " error occurred here\n";
-    // throw std::runtime_error{ std::string{ message } };
-    std::exit(EXIT_FAILURE);
-}
-
-void Error::warning(const Lexer::Tokens::Token& token, const std::string_view message) {
-    print_message(token, fmt::format("warning: {}", message));
-    std::cerr << " see here\n";
-}
-
 [[nodiscard]] Lexer::Tokens::Token get_first_token(const Parser::Statements::Statement& statement) {
     auto visitor = GetFirstTokenVisitor{};
 
@@ -152,10 +140,43 @@ void Error::warning(const Lexer::Tokens::Token& token, const std::string_view me
     return visitor.token;
 }
 
-void Error::error(const Parser::Statements::Statement& statement, std::string_view message) {
-    Error::error(get_first_token(statement), message);
+[[nodiscard]] Lexer::Tokens::Token get_first_token(const Parser::Expressions::Expression& statement) {
+    auto visitor = GetFirstTokenVisitor{};
+
+    // We cast away the const of the statement because StatementVisitor-instances require the argument
+    // to be mutable. However, our visitor does not mutate anything and thus this is safe (don't quote me on
+    // that, though).
+    const_cast<Parser::Expressions::Expression&>(statement).accept(visitor);
+    return visitor.token;
 }
 
-void Error::warning(const Parser::Statements::Statement& statement, std::string_view message) {
-    Error::warning(get_first_token(statement), message);
-}
+namespace Error {
+
+    void Error::error(const Lexer::Tokens::Token& token, const std::string_view message) {
+        print_message(token, message);
+        std::cerr << " error occurred here\n";
+        // throw std::runtime_error{ std::string{ message } };
+        std::exit(EXIT_FAILURE);
+    }
+
+    void warning(const Lexer::Tokens::Token& token, const std::string_view message) {
+        print_message(token, fmt::format("warning: {}", message));
+        std::cerr << " see here\n";
+    }
+
+    void error(const Parser::Statements::Statement& statement, std::string_view message) {
+        Error::error(get_first_token(statement), message);
+    }
+
+    void warning(const Parser::Statements::Statement& statement, std::string_view message) {
+        Error::warning(get_first_token(statement), message);
+    }
+
+    void error(const Parser::Expressions::Expression& expression, std::string_view message) {
+        Error::error(get_first_token(expression), message);
+    }
+
+    void warning(const Parser::Expressions::Expression& expression, std::string_view message) {
+        Error::warning(get_first_token(expression), message);
+    }
+}// namespace Error

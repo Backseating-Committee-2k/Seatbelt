@@ -27,6 +27,13 @@ struct overloaded : Ts... {
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
+/**
+ * This type only serves as a marker inside the `function_to_call`-member of
+ * FunctionCall-expressions. If the variant has this type, it means that the
+ * function call has a function pointer as target.
+ */
+struct FunctionPointerMarker{};
+
 namespace Parser {
     using namespace Lexer::Tokens;
 
@@ -341,7 +348,7 @@ namespace Parser {
 
             std::unique_ptr<Expression> callee;
             std::vector<std::unique_ptr<Expression>> arguments;
-            const FunctionDefinition* function_to_call{ nullptr };
+            std::variant<std::monostate, const FunctionDefinition*, FunctionPointerMarker> function_to_call{};
         };
 
         struct Assignment : public ExpressionAcceptor<Assignment> {

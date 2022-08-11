@@ -310,7 +310,12 @@ namespace TypeChecker {
             const auto is_variable = expression.variable_symbol.has_value();
             if (is_variable) {
                 expression.data_type = std::visit(
-                        overloaded{ [](const VariableDefinition* variable_definition) -> const DataType* {
+                        overloaded{ [&](const VariableDefinition* variable_definition) -> const DataType* {
+                                       fmt::print(
+                                               stderr, "{} is a variable of type {}\n",
+                                               Error::token_location(expression.name_tokens.back()).view(),
+                                               variable_definition->type->to_string()
+                                       );
                                        assert(variable_definition->type and "type must be known");
                                        return variable_definition->type;
                                    },
@@ -379,69 +384,98 @@ namespace TypeChecker {
                 argument->accept(*this);
             }
 
-            if (const auto name = dynamic_cast<Parser::Expressions::Name*>(expression.callee.get())) {
-                if (name->possible_overloads.has_value()) {
-                    auto& possible_overloads = name->possible_overloads.value();
-                    const auto& name_token = name->name_tokens.back();
-                    const auto identifier = Error::token_location(name_token).view();
-
-                    using std::ranges::views::transform;
-                    const auto signature = fmt::format(
-                            "{}({})", identifier,
-                            fmt::join(
-                                    expression.arguments | transform([](const auto& argument) {
-                                        return argument->data_type->mangled_name();
-                                    }),
-                                    ", "
+            const auto name = dynamic_cast<Parser::Expressions::Name*>(expression.callee.get());
+            const auto is_name = (name != nullptr);
+            const auto is_function = (is_name and name->possible_overloads.has_value());
+            if (not is_function) {
+                assert(is_name and "not implemented: expressions that are not names cannot be called as of yet");
+                // this must be a function pointer
+                expression.callee->accept(*this);// evaluate the type of the function pointer
+                const auto function_pointer_type =
+                        dynamic_cast<const FunctionPointerType*>(expression.callee->data_type);
+                assert(function_pointer_type != nullptr and "the data type has to be a function pointer type");
+                const auto expected_num_parameters = function_pointer_type->parameter_types.size();
+                const auto actual_num_parameters = expression.arguments.size();
+                if (actual_num_parameters != expected_num_parameters) {
+                    Error::error(
+                            name->name_tokens.back(),
+                            fmt::format(
+                                    "too {} arguments provided for function of type \"{}\" (got {}, expected {})",
+                                    actual_num_parameters < expected_num_parameters ? "few" : "many",
+                                    function_pointer_type->to_string(), actual_num_parameters, expected_num_parameters
                             )
                     );
-                    bool overload_found = false;
-                    for (const auto& overload : possible_overloads) {
-                        if (overload->signature == signature) {
-                            assert(overload->definition->return_type != nullptr and "return type has to be set before");
-                            for (const auto& parameter : overload->definition->parameters) {
-                                assert(parameter.type != nullptr and "parameter type has to be set before");
-                            }
-
-                            using std::ranges::views::transform;
-                            const auto range = overload->definition->parameters |
-                                               transform([](const auto& parameter) { return parameter.type; });
-                            auto parameter_types = std::vector(
-                                    cbegin(range), cend(range)
-                            );// no curly braces because of constructor ambiguity
-
-                            name->data_type =
-                                    type_container->from_type_definition(std::make_unique<FunctionPointerType>(
-                                            std::move(parameter_types), overload->definition->return_type,
-                                            Mutability::Const
-                                    ));
-                            overload_found = true;
-                        }
-                    }
-                    if (not overload_found) {
-                        Error::error(name_token, fmt::format("no matching function overload found", identifier));
-                    }
-                    // erase all possible overloads with the wrong signature
-                    possible_overloads.erase(
-                            std::remove_if(
-                                    std::begin(possible_overloads), std::end(possible_overloads),
-                                    [&](const auto& overload) { return overload->signature != signature; }
-                            ),
-                            std::end(possible_overloads)
-                    );
-                    // erase all overloads except for the first one (which is the "inner" one)
-                    possible_overloads.erase(std::begin(possible_overloads) + 1, std::end(possible_overloads));
-                    assert(possible_overloads.size() == 1);
-                    expression.data_type = possible_overloads.front()->definition->return_type;
-                    assert(possible_overloads.front()->definition and
-                           "each overload must have a pointer to its definition");
-                    expression.function_to_call = possible_overloads.front()->definition;
-                } else {
-                    // this is a function pointer
-                    assert(false && "not implemented (did you try to call a variable?)");
                 }
+                assert(actual_num_parameters == expected_num_parameters and "how should this even go wrong?");
+                for (usize i = 0; i < expected_num_parameters; ++i) {
+                    const auto actual = expression.arguments[i]->data_type;
+                    const auto expected = function_pointer_type->parameter_types[i];
+                    if (actual->as_mutable(*type_container) != expected->as_mutable(*type_container)) {
+                        Error::error(
+                                *(expression.arguments[i]),
+                                fmt::format(
+                                        R"(argument type mismatch: got "{}", expected "{}")", actual->to_string(),
+                                        expected->to_string()
+                                )
+                        );
+                    }
+                }
+                expression.data_type = function_pointer_type->return_type;
+                expression.function_to_call = FunctionPointerMarker{};
             } else {
-                expression.callee->accept(*this);
+                auto& possible_overloads = name->possible_overloads.value();
+                const auto& name_token = name->name_tokens.back();
+                const auto identifier = Error::token_location(name_token).view();
+
+                using std::ranges::views::transform;
+                const auto signature = fmt::format(
+                        "{}({})", identifier,
+                        fmt::join(
+                                expression.arguments | transform([](const auto& argument) {
+                                    return argument->data_type->mangled_name();
+                                }),
+                                ", "
+                        )
+                );
+                bool overload_found = false;
+                for (const auto& overload : possible_overloads) {
+                    if (overload->signature == signature) {
+                        assert(overload->definition->return_type != nullptr and "return type has to be set before");
+                        for (const auto& parameter : overload->definition->parameters) {
+                            assert(parameter.type != nullptr and "parameter type has to be set before");
+                        }
+
+                        using std::ranges::views::transform;
+                        const auto range = overload->definition->parameters |
+                                           transform([](const auto& parameter) { return parameter.type; });
+                        auto parameter_types = std::vector(
+                                cbegin(range), cend(range)
+                        );// no curly braces because of constructor ambiguity
+
+                        name->data_type = type_container->from_type_definition(std::make_unique<FunctionPointerType>(
+                                std::move(parameter_types), overload->definition->return_type, Mutability::Const
+                        ));
+                        overload_found = true;
+                    }
+                }
+                if (not overload_found) {
+                    Error::error(name_token, fmt::format("no matching function overload found", identifier));
+                }
+                // erase all possible overloads with the wrong signature
+                possible_overloads.erase(
+                        std::remove_if(
+                                std::begin(possible_overloads), std::end(possible_overloads),
+                                [&](const auto& overload) { return overload->signature != signature; }
+                        ),
+                        std::end(possible_overloads)
+                );
+                // erase all overloads except for the first one (which is the "inner" one)
+                possible_overloads.erase(std::begin(possible_overloads) + 1, std::end(possible_overloads));
+                assert(possible_overloads.size() == 1);
+                expression.data_type = possible_overloads.front()->definition->return_type;
+                assert(possible_overloads.front()->definition and "each overload must have a pointer to its definition"
+                );
+                expression.function_to_call = possible_overloads.front()->definition;
             }
         }
 
