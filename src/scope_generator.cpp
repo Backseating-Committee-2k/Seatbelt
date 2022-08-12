@@ -15,6 +15,79 @@
 
 namespace ScopeGenerator {
 
+    [[nodiscard]] std::vector<const FunctionOverload*> namespace_based_lookup(
+            std::string_view namespace_qualifier,
+            const Parser::Expressions::Name& name,
+            const FunctionSymbol& function
+    ) {
+        using std::ranges::count;
+        // We *did* find a function symbol with the correct function name (even though we
+        // do not know the function signature), but the function can only be a valid choice
+        // if it is within the correct namespace
+        auto remaining_namespaces = namespace_qualifier.empty() ? 0 : count(namespace_qualifier, ':') / 2;
+        const auto was_qualified_name = (name.name_tokens.size() > 1);
+        auto possible_overloads = std::vector<const FunctionOverload*>{};
+        while (true) {
+            // Function definitions are only allowed in the global scope. That means
+            // that we must be at the top of the scope stack right now.
+            for (const auto& overload : function.overloads) {
+                if (overload.namespace_name == namespace_qualifier) {
+                    // we cannot determine the return type of the function here because
+                    // we cannot do overload resolution as of now
+                    possible_overloads.push_back(&overload);
+                }
+            }
+
+            // if the name is a qualified name (i.e. with specified namespace) it is
+            // not valid to make a lookup in the outer namespaces (except for the
+            // global namespace, but that case is handled separately later on)
+            if (was_qualified_name) {
+                break;
+            }
+
+            if (remaining_namespaces == 1) {
+                break;
+            }
+            const auto max_pos = namespace_qualifier.length() >= 3 ? namespace_qualifier.length() - 3
+                                                                   : decltype(namespace_qualifier)::npos;
+            const auto end_index = namespace_qualifier.rfind(':', max_pos);
+            assert(end_index != decltype(namespace_qualifier)::npos);
+            namespace_qualifier = namespace_qualifier.substr(0, end_index + 1);
+            --remaining_namespaces;
+        }
+
+        // if we couldn't find any overloads yet and this is a qualified name,
+        // then we can also look into the global namespace and try to find an
+        // exact match in there
+        const auto is_global_lookup_fallback = possible_overloads.empty();
+
+        const auto inside_global_namespace = name.surrounding_scope->surrounding_namespace == "::";
+
+        if (was_qualified_name) {
+            const auto global_name_qualifier = get_absolute_namespace_qualifier(name);
+            for (const auto& overload : function.overloads) {
+                if (overload.namespace_name == global_name_qualifier) {
+                    // we cannot determine the return type of the function here because
+                    // we cannot do overload resolution as of now
+                    if (is_global_lookup_fallback) {
+                        possible_overloads.push_back(&overload);
+                    } else if (not inside_global_namespace) {
+                        Error::warning(
+                                name.name_tokens.back(),
+                                "absolute/relative namespace ambiguity can lead to "
+                                "confusion"
+                        );
+                    }
+                }
+            }
+        }
+
+        if (possible_overloads.empty()) {
+            Error::error(name.name_tokens.back(), "no matching function overload found");
+        }
+        return possible_overloads;
+    }
+
     struct ScopeGenerator : public Parser::Statements::StatementVisitor, public Parser::Expressions::ExpressionVisitor {
         ScopeGenerator(Scope* scope, TypeContainer* type_container)
             : scope{ scope },
@@ -176,79 +249,11 @@ namespace ScopeGenerator {
                 const auto identifier_found = find_iterator != std::cend(*current_scope);
                 if (identifier_found) {
                     std::visit(
-                            overloaded{
-                                    [&](const VariableSymbol& variable) { expression.variable_symbol = &variable; },
-                                    [remaining = namespace_qualifier, &identifier_token,
-                                     &expression](const FunctionSymbol& function) mutable {
-                                        using std::ranges::count;
-                                        // We *did* find a function symbol with the correct function name (even though we
-                                        // do not know the function signature), but the function can only be a valid choice
-                                        // if it is within the correct namespace
-                                        auto remaining_namespaces = remaining.empty() ? 0 : count(remaining, ':') / 2;
-                                        const auto was_qualified_name = (expression.name_tokens.size() > 1);
-                                        auto possible_overloads = std::vector<const FunctionOverload*>{};
-                                        while (true) {
-                                            // Function definitions are only allowed in the global scope. That means
-                                            // that we must be at the top of the scope stack right now.
-                                            for (const auto& overload : function.overloads) {
-                                                if (overload.namespace_name == remaining) {
-                                                    // we cannot determine the return type of the function here because
-                                                    // we cannot do overload resolution as of now
-                                                    possible_overloads.push_back(&overload);
-                                                }
-                                            }
-
-                                            // if the name is a qualified name (i.e. with specified namespace) it is
-                                            // not valid to make a lookup in the outer namespaces (except for the
-                                            // global namespace, but that case is handled separately later on)
-                                            if (was_qualified_name) {
-                                                break;
-                                            }
-
-                                            if (remaining_namespaces == 1) {
-                                                break;
-                                            }
-                                            const auto max_pos = remaining.length() >= 3 ? remaining.length() - 3
-                                                                                         : decltype(remaining)::npos;
-                                            const auto end_index = remaining.rfind(':', max_pos);
-                                            assert(end_index != decltype(remaining)::npos);
-                                            remaining = remaining.substr(0, end_index + 1);
-                                            --remaining_namespaces;
-                                        }
-
-                                        // if we couldn't find any overloads yet and this is a qualified name,
-                                        // then we can also look into the global namespace and try to find an
-                                        // exact match in there
-                                        const auto is_global_lookup_fallback = possible_overloads.empty();
-
-                                        const auto inside_global_namespace =
-                                                expression.surrounding_scope->surrounding_namespace == "::";
-
-                                        if (was_qualified_name) {
-                                            const auto global_name_qualifier =
-                                                    get_absolute_namespace_qualifier(expression);
-                                            for (const auto& overload : function.overloads) {
-                                                if (overload.namespace_name == global_name_qualifier) {
-                                                    // we cannot determine the return type of the function here because
-                                                    // we cannot do overload resolution as of now
-                                                    if (is_global_lookup_fallback) {
-                                                        possible_overloads.push_back(&overload);
-                                                    } else if (not inside_global_namespace) {
-                                                        Error::warning(
-                                                                expression.name_tokens.back(),
-                                                                "absolute/relative namespace ambiguity can lead to "
-                                                                "confusion"
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if (possible_overloads.empty()) {
-                                            Error::error(identifier_token, "no matching function overload found");
-                                        }
-                                        expression.possible_overloads = std::move(possible_overloads);
-                                    } },
+                            overloaded{ [&](const VariableSymbol& variable) { expression.variable_symbol = &variable; },
+                                        [&](const FunctionSymbol& function) {
+                                            expression.possible_overloads =
+                                                    namespace_based_lookup(namespace_qualifier, expression, function);
+                                        } },
                             find_iterator->second
                     );
                     return;
