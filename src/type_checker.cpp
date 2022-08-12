@@ -354,7 +354,7 @@ namespace TypeChecker {
                             std::move(parameter_types), function_definition->return_type, Mutability::Const
                     ));
                 } else {
-                    assert(false && "unreachable");
+                    assert(false and "unreachable");
                 }
             }
         }
