@@ -544,6 +544,8 @@ namespace TypeChecker {
             }
             auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters, function_definition.get() };
             function_definition->body.accept(visitor);
+            function_definition->occupied_stack_space = visitor.occupied_stack_space;
+            function_definition->parameters_stack_space = size_of_parameters;
         }
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }

@@ -32,7 +32,7 @@ overloaded(Ts...) -> overloaded<Ts...>;
  * FunctionCall-expressions. If the variant has this type, it means that the
  * function call has a function pointer as target.
  */
-struct FunctionPointerMarker{};
+struct FunctionPointerMarker { };
 
 namespace Parser {
     using namespace Lexer::Tokens;
@@ -380,6 +380,8 @@ namespace Parser {
         std::string namespace_name{};
         bool is_entry_point{ false };
         std::vector<Statements::LabelDefinition*> contained_labels{};
+        std::optional<usize> occupied_stack_space{};  // total size of the needed stack space (in bytes)
+        std::optional<usize> parameters_stack_space{};// size of all parameters (in bytes)
     };
 
     struct ImportStatement {

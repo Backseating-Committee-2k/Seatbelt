@@ -266,12 +266,14 @@ namespace Emitter {
             emit("sub R0, 8, R1", "calculate address of placeholder for return address");
 
             const auto call_return_label = label_generator->next_label("return_address");
-            emit(fmt::format("copy {}, *R1", call_return_label), "fill in return address");
+            emit(fmt::format("copy {}, R2", call_return_label), "get return address");
+            emit("copy R2, *R1", "fill in return address");
             emit("sub R0, 12, R1", "calculate address of jump address");
             emit("copy *R1, R1", "dereference the pointer");
             emit("jump R1", "call the function");
             emit_label(call_return_label, "this is where the control flow returns to after the function call");
             emit("pop", "pop the callee address off of the stack");
+            emit("push R1", "push the return value of the called function");
         }
 
         void visit(Assignment& expression) override {
@@ -439,7 +441,7 @@ namespace Emitter {
             );
             statement.initial_value->accept(*this);// initial value is evaluated and pushed
             emit(fmt::format("add R0, {}, R1", offset),
-                 fmt::format("calculate address for variable {}\n", statement.name.location.view()));
+                 fmt::format("calculate address for variable {}", statement.name.location.view()));
             emit("pop R2", "get initial value of variable");
             emit("copy R2, *R1", "store initial value in stack");
         }
@@ -487,10 +489,8 @@ namespace Emitter {
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
-        // generate labels for all label definitions in the current function
-        for (auto& label : function_definition->contained_labels) {
-            label->emitted_label = label_generator->next_label(label->identifier.location.view());
-        }
+        assert(function_definition->occupied_stack_space.has_value() and "size of stack frame has to be known");
+        assert(function_definition->parameters_stack_space.has_value() and "size of parameters has to be known");
 
         const auto mangled_name =
                 function_definition->namespace_name + function_definition->corresponding_symbol->signature;
@@ -504,6 +504,19 @@ namespace Emitter {
             result += "\n";
         };
         const auto emit_label = [&result](const std::string_view label) { result += fmt::format("{}:\n", label); };
+
+        // get the size needed for the locals of this function (excluding its parameters)
+        const auto locals_size =
+                function_definition->occupied_stack_space.value() - function_definition->parameters_stack_space.value();
+
+        // the caller has already pushed the arguments onto the stack - we only have to reserve stack space for
+        // the locals of this function
+        emit(fmt::format("add sp, {}, sp", locals_size), "reserve stack space for local variables");
+
+        // generate labels for all label definitions in the current function
+        for (auto& label : function_definition->contained_labels) {
+            label->emitted_label = label_generator->next_label(label->identifier.location.view());
+        }
 
         if (function_definition->is_entry_point) {
             emit("copy sp, R0", "save stack frame base pointer for main function into R0");
