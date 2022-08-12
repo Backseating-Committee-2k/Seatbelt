@@ -118,19 +118,17 @@ namespace Emitter {
             EmitterVisitor* visitor;
         };
 
+
         EmitterVisitor(
-                const Parser::Program* program,
+                TypeContainer* type_container,
                 LabelGenerator* label_generator,
                 std::string_view return_label,
-                TypeContainer* type_container
+                const Parser::Program* program
         )
             : type_container{ type_container },
-              program{ program },
               label_generator{ label_generator },
-              return_label{ return_label } { }
-
-        std::string assembly;
-        const Parser::Program* program;
+              return_label{ return_label },
+              program{ program } { }
 
         void emit(const std::string_view instruction) {
             emit(instruction, "");
@@ -506,6 +504,8 @@ namespace Emitter {
         LabelGenerator* label_generator;
         std::stack<LoopLabels> loop_stack{};
         std::string_view return_label;
+        std::string assembly{};
+        const Parser::Program* program;
     };
 
     std::string emit_statement(
@@ -515,7 +515,7 @@ namespace Emitter {
             const std::string_view return_label,
             TypeContainer* type_container
     ) {
-        auto visitor = EmitterVisitor{ &program, label_generator, return_label, type_container };
+        auto visitor = EmitterVisitor{ type_container, label_generator, return_label, &program };
         statement.accept(visitor);
         return visitor.assembly;
     }
