@@ -93,7 +93,7 @@ namespace Parser {
                     PrecedenceGroup<And>{},
                     PrecedenceGroup<EqualsEquals, ExclamationEquals>{},
                     PrecedenceGroup<LessThan, LessOrEquals, GreaterThan, GreaterOrEquals>{},
-                    PrecedenceGroup<Plus, Minus>{},
+                    PrecedenceGroup<Plus, Minus, Mod>{},
                     PrecedenceGroup<Asterisk, ForwardSlash>{}
             );
             // clang-format on
@@ -126,6 +126,15 @@ namespace Parser {
         // When called without any arguments, this overload is chosen. Since there are no precedence groups left over,
         // we just pass on the call to the expression with the next higher precedence.
         [[nodiscard]] std::unique_ptr<Expression> binary_operator() {
+            return unary_not();
+        }
+
+        [[nodiscard]] std::unique_ptr<Expression> unary_not() {
+            if (current_is<Not>()) {
+                const auto not_token = current();
+                advance();
+                return std::make_unique<Expressions::UnaryPrefixOperator>(not_token, expression());
+            }
             return function_call();
         }
 

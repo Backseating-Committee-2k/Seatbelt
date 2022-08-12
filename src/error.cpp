@@ -85,6 +85,14 @@ struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
         token = expression.name_tokens.front();
     }
 
+    void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+        token = expression.operator_token;
+    }
+
+    void visit(Parser::Expressions::UnaryPostfixOperator& expression) override {
+        expression.operand->accept(*this);
+    }
+
     void visit(Parser::Expressions::BinaryOperator& expression) override {
         expression.lhs->accept(*this);
     }
@@ -152,7 +160,7 @@ void print_message(const Lexer::Tokens::Token& token, const std::string_view mes
 
 namespace Error {
 
-    void Error::error(const Lexer::Tokens::Token& token, const std::string_view message) {
+    void error(const Lexer::Tokens::Token& token, const std::string_view message) {
         print_message(token, message);
         std::cerr << " error occurred here\n";
         // throw std::runtime_error{ std::string{ message } };

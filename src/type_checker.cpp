@@ -98,7 +98,7 @@ namespace TypeChecker {
             }
             return rhs;
         }
-        if (is_one_of<Plus, Minus, Asterisk, ForwardSlash>(token)) {
+        if (is_one_of<Plus, Minus, Asterisk, ForwardSlash, Mod>(token)) {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
                 return nullptr;
             }
@@ -311,11 +311,6 @@ namespace TypeChecker {
             if (is_variable) {
                 expression.data_type = std::visit(
                         overloaded{ [&](const VariableDefinition* variable_definition) -> const DataType* {
-                                       fmt::print(
-                                               stderr, "{} is a variable of type {}\n",
-                                               Error::token_location(expression.name_tokens.back()).view(),
-                                               variable_definition->type->to_string()
-                                       );
                                        assert(variable_definition->type and "type must be known");
                                        return variable_definition->type;
                                    },
@@ -360,6 +355,29 @@ namespace TypeChecker {
             }
         }
 
+        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+            expression.operand->accept(*this);
+            const auto operand_type = expression.operand->data_type;
+            if (is<Lexer::Tokens::Not>(expression.operator_token)) {
+                if (operand_type->as_const(*type_container) != type_container->const_bool()) {
+                    Error::error(
+                            expression.operator_token, fmt::format(
+                                                               "logical 'not'-operator can only be applied to boolean "
+                                                               "expressions (found type \"{}\")",
+                                                               operand_type->to_string()
+                                                       )
+                    );
+                }
+                expression.data_type = operand_type;
+            } else {
+                assert(false and "not implemented");
+            }
+        }
+
+        void visit(Parser::Expressions::UnaryPostfixOperator&) override {
+            assert(false and "not implemented");
+        }
+
         void visit(Parser::Expressions::BinaryOperator& expression) override {
             using namespace Lexer::Tokens;
             expression.lhs->accept(*this);
@@ -389,9 +407,12 @@ namespace TypeChecker {
             const auto is_name = (name != nullptr);
             const auto is_function = (is_name and name->possible_overloads.has_value());
             if (not is_function) {
-                assert(is_name and "not implemented: expressions that are not names cannot be called as of yet");
+                // this could either be a function pointer or an expression that evaluates to a function pointer
+
+                // first evaluate the callee - this is needed in either case
+                expression.callee->accept(*this);
+
                 // this must be a function pointer
-                expression.callee->accept(*this);// evaluate the type of the function pointer
                 const auto function_pointer_type =
                         dynamic_cast<const FunctionPointerType*>(expression.callee->data_type);
                 assert(function_pointer_type != nullptr and "the data type has to be a function pointer type");
@@ -491,10 +512,11 @@ namespace TypeChecker {
                 Error::error(expression.equals_token, "left-hand side of assignment is not assignable");
             }
 
-            if (const auto resulting_data_type = get_resulting_data_type(
-                        expression.assignee->data_type, expression.equals_token, expression.value->data_type,
-                        *type_container
-                )) {
+            const auto resulting_data_type = get_resulting_data_type(
+                    expression.assignee->data_type, expression.equals_token, expression.value->data_type,
+                    *type_container
+            );
+            if (resulting_data_type != nullptr) {
                 expression.data_type = resulting_data_type;
             } else {
                 Error::error(

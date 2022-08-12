@@ -255,7 +255,7 @@ int main(int, char** argv) {
 
     auto label_generator = Emitter::LabelGenerator{};
     for (const auto& item : program) {
-        assembly += std::visit(Emitter::Emitter{ &program, &label_generator }, item);
+        assembly += std::visit(Emitter::Emitter{ &program, &label_generator, &type_container }, item);
     }
 
     if (command_line_parser.was_provided<'o'>()) {

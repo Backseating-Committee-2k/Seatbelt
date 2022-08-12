@@ -30,7 +30,7 @@
     x(Plus) \
     x(Minus) \
     x(Asterisk) \
-    x(Percent) \
+    x(Mod) \
     x(ForwardSlash) \
     x(LeftParenthesis) \
     x(RightParenthesis) \

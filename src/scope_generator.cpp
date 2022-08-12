@@ -263,6 +263,16 @@ namespace ScopeGenerator {
             Error::error(identifier_token, "use of undeclared identifier");
         }
 
+        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+            expression.operand->accept(*this);
+            expression.surrounding_scope = scope;
+        }
+
+        void visit(Parser::Expressions::UnaryPostfixOperator& expression) override {
+            expression.operand->accept(*this);
+            expression.surrounding_scope = scope;
+        }
+
         void visit(Parser::Expressions::BinaryOperator& expression) override {
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
@@ -323,6 +333,10 @@ namespace ScopeGenerator {
         Scope* global_scope;
     };
 
+    /**
+     * This visitor only takes care of labels. This is needed for `goto`-statements. For this
+     * reason, this visitor does nothing with the most statements and expressions.
+     */
     struct ScopeGeneratorLabelVisitor : public Parser::Statements::StatementVisitor,
                                         public Parser::Expressions::ExpressionVisitor {
         explicit ScopeGeneratorLabelVisitor(Parser::FunctionDefinition* surrounding_function)
@@ -384,6 +398,8 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::Char&) override { }
         void visit(Parser::Expressions::Bool&) override { }
         void visit(Parser::Expressions::Name&) override { }
+        void visit(Parser::Expressions::UnaryPrefixOperator&) override { }
+        void visit(Parser::Expressions::UnaryPostfixOperator&) override { }
         void visit(Parser::Expressions::BinaryOperator&) override { }
         void visit(Parser::Expressions::FunctionCall&) override { }
         void visit(Parser::Expressions::Assignment&) override { }

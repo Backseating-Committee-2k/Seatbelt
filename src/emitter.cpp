@@ -72,7 +72,11 @@ namespace Emitter {
             }
 
             void operator()(const ForwardSlash&) const {
-                assert(false && "not implemented");
+                visitor->emit("divmod R1, R2, R3, R4", "divmod the values, R4 gets the result of the division");
+            }
+
+            void operator()(const Mod&) const {
+                visitor->emit("divmod R1, R2, R4, R3", "divmod the values, R3 gets the result of 'mod'");
             }
 
             void operator()(const And&) const {
@@ -114,8 +118,14 @@ namespace Emitter {
             EmitterVisitor* visitor;
         };
 
-        EmitterVisitor(const Parser::Program* program, LabelGenerator* label_generator, std::string_view return_label)
-            : program{ program },
+        EmitterVisitor(
+                const Parser::Program* program,
+                LabelGenerator* label_generator,
+                std::string_view return_label,
+                TypeContainer* type_container
+        )
+            : type_container{ type_container },
+              program{ program },
               label_generator{ label_generator },
               return_label{ return_label } { }
 
@@ -182,6 +192,26 @@ namespace Emitter {
                  fmt::format("calculate address of variable \"{}\"", variable_name));
             emit("copy *R1, R2", fmt::format("load value of variable \"{}\" into R2", variable_name));
             emit("push R2", fmt::format("push value of variable \"{}\" onto the stack", variable_name));
+        }
+
+        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+            expression.operand->accept(*this);
+            if (is<Not>(expression.operator_token)) {
+                assert(expression.data_type->as_const(*type_container) == type_container->const_bool() and
+                       "type checker should've caught this");
+                // we can assume that the value on the stack is 0 or 1 (representing false or true)
+                // we have to flip the least significant bit to invert the truth value
+                emit("pop R1", "get value of operand for logical not operation");
+                emit("copy 1, R3", "get constant 1");
+                emit("xor R1, R3, R1", "flip the truth value");
+                emit("push R1", "push the result of the logical not operation");
+            } else {
+                assert(false and "not implemented");
+            }
+        }
+
+        void visit(Parser::Expressions::UnaryPostfixOperator&) override {
+            assert(false and "not implemented");
         }
 
         void visit(BinaryOperator& expression) override {
@@ -472,6 +502,7 @@ namespace Emitter {
             emit(fmt::format("jump {}", label), fmt::format("goto {}", statement.label_identifier.location.view()));
         }
 
+        TypeContainer* type_container;
         LabelGenerator* label_generator;
         std::stack<LoopLabels> loop_stack{};
         std::string_view return_label;
@@ -481,9 +512,10 @@ namespace Emitter {
             const Parser::Program& program,
             Statement& statement,
             LabelGenerator* label_generator,
-            const std::string_view return_label
+            const std::string_view return_label,
+            TypeContainer* type_container
     ) {
-        auto visitor = EmitterVisitor{ &program, label_generator, return_label };
+        auto visitor = EmitterVisitor{ &program, label_generator, return_label, type_container };
         statement.accept(visitor);
         return visitor.assembly;
     }
@@ -527,7 +559,9 @@ namespace Emitter {
         }
         const auto function_return_label = label_generator->next_label("function_return");
 
-        result += emit_statement(*program, function_definition->body, label_generator, function_return_label);
+        result += emit_statement(
+                *program, function_definition->body, label_generator, function_return_label, type_container
+        );
 
         emit_label(function_return_label);
 
