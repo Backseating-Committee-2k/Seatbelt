@@ -337,14 +337,15 @@ namespace TypeChecker {
                 if (symbol == nullptr) {
                     Error::error(name_token, fmt::format("use of undeclared identifier \"{}\"", identifier));
                 }
+                assert(expression.possible_overloads.has_value() and "overloads have to be determined beforehand");
                 if (const auto function_symbol = std::get_if<FunctionSymbol>(symbol)) {
-                    const auto& overloads = function_symbol->overloads;
-                    assert(not overloads.empty() && "there shall never be a function with zero overloads");
+                    const auto& overloads = *expression.possible_overloads;//function_symbol->overloads;
+                    assert(not overloads.empty() and "there shall never be a function with zero overloads");
                     if (overloads.size() > 1) {
                         Error::error(name_token, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
                     }
                     assert(overloads.size() == 1);
-                    const auto function_definition = overloads.front().definition;
+                    const auto function_definition = overloads.front()->definition;
                     auto parameter_types = std::vector<const DataType*>{};
                     parameter_types.reserve(function_definition->parameters.size());
                     for (const auto& parameter : function_definition->parameters) {
