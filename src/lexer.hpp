@@ -30,7 +30,7 @@
     x(Plus) \
     x(Minus) \
     x(Asterisk) \
-    x(Percent) \
+    x(Mod) \
     x(ForwardSlash) \
     x(LeftParenthesis) \
     x(RightParenthesis) \
@@ -69,7 +69,8 @@
     x(Return) \
     x(Label) \
     x(Goto) \
-    x(NothingLiteral)
+    x(NothingLiteral) \
+    x(CapitalizedFunction)
 
 // clang-format on
 

@@ -65,7 +65,7 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
     const auto expected_main_function_return_type = type_container.const_nothing();
     const auto main_function_has_correct_signature =
             (main_symbol->overloads.front().signature == "main()" and
-             main_symbol->overloads.front().return_type == expected_main_function_return_type);
+             main_symbol->overloads.front().definition->return_type == expected_main_function_return_type);
     if (not main_function_has_correct_signature) {
         error(fmt::format("main function must not take any parameters and must return {}", NothingIdentifier));
     }
@@ -255,7 +255,7 @@ int main(int, char** argv) {
 
     auto label_generator = Emitter::LabelGenerator{};
     for (const auto& item : program) {
-        assembly += std::visit(Emitter::Emitter{ &program, &label_generator }, item);
+        assembly += std::visit(Emitter::Emitter{ &program, &label_generator, &type_container }, item);
     }
 
     if (command_line_parser.was_provided<'o'>()) {

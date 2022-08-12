@@ -72,7 +72,11 @@ namespace Emitter {
             }
 
             void operator()(const ForwardSlash&) const {
-                assert(false && "not implemented");
+                visitor->emit("divmod R1, R2, R3, R4", "divmod the values, R4 gets the result of the division");
+            }
+
+            void operator()(const Mod&) const {
+                visitor->emit("divmod R1, R2, R4, R3", "divmod the values, R3 gets the result of 'mod'");
             }
 
             void operator()(const And&) const {
@@ -114,13 +118,17 @@ namespace Emitter {
             EmitterVisitor* visitor;
         };
 
-        EmitterVisitor(const Parser::Program* program, LabelGenerator* label_generator, std::string_view return_label)
-            : program{ program },
-              label_generator{ label_generator },
-              return_label{ return_label } { }
 
-        std::string assembly;
-        const Parser::Program* program;
+        EmitterVisitor(
+                TypeContainer* type_container,
+                LabelGenerator* label_generator,
+                std::string_view return_label,
+                const Parser::Program* program
+        )
+            : type_container{ type_container },
+              label_generator{ label_generator },
+              return_label{ return_label },
+              program{ program } { }
 
         void emit(const std::string_view instruction) {
             emit(instruction, "");
@@ -184,6 +192,26 @@ namespace Emitter {
             emit("push R2", fmt::format("push value of variable \"{}\" onto the stack", variable_name));
         }
 
+        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+            expression.operand->accept(*this);
+            if (is<Not>(expression.operator_token)) {
+                assert(expression.data_type->as_const(*type_container) == type_container->const_bool() and
+                       "type checker should've caught this");
+                // we can assume that the value on the stack is 0 or 1 (representing false or true)
+                // we have to flip the least significant bit to invert the truth value
+                emit("pop R1", "get value of operand for logical not operation");
+                emit("copy 1, R3", "get constant 1");
+                emit("xor R1, R3, R1", "flip the truth value");
+                emit("push R1", "push the result of the logical not operation");
+            } else {
+                assert(false and "not implemented");
+            }
+        }
+
+        void visit(Parser::Expressions::UnaryPostfixOperator&) override {
+            assert(false and "not implemented");
+        }
+
         void visit(BinaryOperator& expression) override {
             using namespace Lexer::Tokens;
 
@@ -244,8 +272,17 @@ namespace Emitter {
         void visit(FunctionCall& expression) override {
             emit("\n", "evaluate function call");
 
-            emit("add sp, 12, sp",
-                 "reserve stack space for jump address, return address, and old stack frame base pointer");
+            /*
+             * Structure of stack before call-instruction:
+             *
+             * <arguments>
+             * old stack frame base pointer
+             * return address
+             * jump address
+             */
+            expression.callee->accept(*this);// evaluate callee => jump address is pushed
+            emit("add sp, 4, sp", "reserve stack space for the return address");
+            emit("push R0", "push the current stack frame base pointer");
 
             usize arguments_size = 0;
             for (const auto& argument : expression.arguments) {
@@ -253,35 +290,18 @@ namespace Emitter {
                 arguments_size += argument->data_type->size();
             }
 
-            expression.callee->accept(*this);// evaluate callee => jump address is pushed
-            emit("pop R1", "get jump address");
-            emit(fmt::format("sub sp, {}, R2", arguments_size + 12), "calculate address of jump address placeholder");
-            emit("copy R1, *R2", "store jump address in stack");
-            emit("add R2, 8, R2", "calculate address of old stack frame base pointer placeholder");
-            emit("copy R0, *R2", "save old stack frame base pointer in stack");
+            emit(fmt::format("sub sp, {}, R0", arguments_size), "set stack frame base pointer for callee");
+            emit("sub R0, 8, R1", "calculate address of placeholder for return address");
 
-            assert(expression.function_to_call and "function must have been set before");
-            assert(expression.function_to_call->body.occupied_stack_space.has_value() and
-                   "stack size of function body must be known");
-            const auto function_stack_frame_size = expression.function_to_call->body.occupied_stack_space.value();
-
-            emit(fmt::format("add sp, {}, sp", function_stack_frame_size - arguments_size),
-                 "reserve stack space for function (excluding arguments)");
-
-            emit(fmt::format("sub sp, {}, R0", function_stack_frame_size), "set new stack frame base pointer");
-
-            emit("add ip, 48, R1", "calculate return address");
-            emit(fmt::format("sub sp, {}, R2", 8 + function_stack_frame_size),
-                 "calculate address of return address placeholder");
-            emit("copy R1, *R2", "fill return address placeholder");
-
-            emit("sub R0, 12, R2", "calculate address of jump address");
-            emit("copy *R2, R2", "get jump address");
-            emit("jump R2", "call function");
-            emit("pop", "pop jump address");
-
-            // after the call the return value is inside R1
-            emit("push R1", "push return value onto stack");
+            const auto call_return_label = label_generator->next_label("return_address");
+            emit(fmt::format("copy {}, R2", call_return_label), "get return address");
+            emit("copy R2, *R1", "fill in return address");
+            emit("sub R0, 12, R1", "calculate address of jump address");
+            emit("copy *R1, R1", "dereference the pointer");
+            emit("jump R1", "call the function");
+            emit_label(call_return_label, "this is where the control flow returns to after the function call");
+            emit("pop", "pop the callee address off of the stack");
+            emit("push R1", "push the return value of the called function");
         }
 
         void visit(Assignment& expression) override {
@@ -449,7 +469,7 @@ namespace Emitter {
             );
             statement.initial_value->accept(*this);// initial value is evaluated and pushed
             emit(fmt::format("add R0, {}, R1", offset),
-                 fmt::format("calculate address for variable {}\n", statement.name.location.view()));
+                 fmt::format("calculate address for variable {}", statement.name.location.view()));
             emit("pop R2", "get initial value of variable");
             emit("copy R2, *R1", "store initial value in stack");
         }
@@ -480,27 +500,29 @@ namespace Emitter {
             emit(fmt::format("jump {}", label), fmt::format("goto {}", statement.label_identifier.location.view()));
         }
 
+        TypeContainer* type_container;
         LabelGenerator* label_generator;
         std::stack<LoopLabels> loop_stack{};
         std::string_view return_label;
+        std::string assembly{};
+        const Parser::Program* program;
     };
 
     std::string emit_statement(
             const Parser::Program& program,
             Statement& statement,
             LabelGenerator* label_generator,
-            const std::string_view return_label
+            const std::string_view return_label,
+            TypeContainer* type_container
     ) {
-        auto visitor = EmitterVisitor{ &program, label_generator, return_label };
+        auto visitor = EmitterVisitor{ type_container, label_generator, return_label, &program };
         statement.accept(visitor);
         return visitor.assembly;
     }
 
     std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
-        // generate labels for all label definitions in the current function
-        for (auto& label : function_definition->contained_labels) {
-            label->emitted_label = label_generator->next_label(label->identifier.location.view());
-        }
+        assert(function_definition->occupied_stack_space.has_value() and "size of stack frame has to be known");
+        assert(function_definition->parameters_stack_space.has_value() and "size of parameters has to be known");
 
         const auto mangled_name =
                 function_definition->namespace_name + function_definition->corresponding_symbol->signature;
@@ -515,6 +537,19 @@ namespace Emitter {
         };
         const auto emit_label = [&result](const std::string_view label) { result += fmt::format("{}:\n", label); };
 
+        // get the size needed for the locals of this function (excluding its parameters)
+        const auto locals_size =
+                function_definition->occupied_stack_space.value() - function_definition->parameters_stack_space.value();
+
+        // the caller has already pushed the arguments onto the stack - we only have to reserve stack space for
+        // the locals of this function
+        emit(fmt::format("add sp, {}, sp", locals_size), "reserve stack space for local variables");
+
+        // generate labels for all label definitions in the current function
+        for (auto& label : function_definition->contained_labels) {
+            label->emitted_label = label_generator->next_label(label->identifier.location.view());
+        }
+
         if (function_definition->is_entry_point) {
             emit("copy sp, R0", "save stack frame base pointer for main function into R0");
             assert(function_definition->body.occupied_stack_space.has_value() and
@@ -524,7 +559,9 @@ namespace Emitter {
         }
         const auto function_return_label = label_generator->next_label("function_return");
 
-        result += emit_statement(*program, function_definition->body, label_generator, function_return_label);
+        result += emit_statement(
+                *program, function_definition->body, label_generator, function_return_label, type_container
+        );
 
         emit_label(function_return_label);
 

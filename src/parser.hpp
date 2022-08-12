@@ -27,6 +27,13 @@ struct overloaded : Ts... {
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
+/**
+ * This type only serves as a marker inside the `function_to_call`-member of
+ * FunctionCall-expressions. If the variant has this type, it means that the
+ * function call has a function pointer as target.
+ */
+struct FunctionPointerMarker { };
+
 namespace Parser {
     using namespace Lexer::Tokens;
 
@@ -262,6 +269,8 @@ namespace Parser {
         struct Char;
         struct Bool;
         struct Name;
+        struct UnaryPrefixOperator;
+        struct UnaryPostfixOperator;
         struct BinaryOperator;
         struct FunctionCall;
         struct Assignment;
@@ -272,6 +281,8 @@ namespace Parser {
             virtual void visit(Char& expression) = 0;
             virtual void visit(Bool& expression) = 0;
             virtual void visit(Name& expression) = 0;
+            virtual void visit(UnaryPrefixOperator& expression) = 0;
+            virtual void visit(UnaryPostfixOperator& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
             virtual void visit(Assignment& expression) = 0;
@@ -323,6 +334,24 @@ namespace Parser {
             std::optional<const VariableSymbol*> variable_symbol{};
         };
 
+        struct UnaryPrefixOperator : public ExpressionAcceptor<UnaryPrefixOperator> {
+            UnaryPrefixOperator(Token operator_token, std::unique_ptr<Expression> operand)
+                : operator_token{ operator_token },
+                  operand{ std::move(operand) } { }
+
+            Token operator_token;
+            std::unique_ptr<Expression> operand;
+        };
+
+        struct UnaryPostfixOperator : public ExpressionAcceptor<UnaryPostfixOperator> {
+            UnaryPostfixOperator(std::unique_ptr<Expression> operand, Token operator_token)
+                : operand{ std::move(operand) },
+                  operator_token{ operator_token } { }
+
+            std::unique_ptr<Expression> operand;
+            Token operator_token;
+        };
+
         struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {
             BinaryOperator(std::unique_ptr<Expression> lhs, std::unique_ptr<Expression> rhs, Token operator_token)
                 : lhs{ std::move(lhs) },
@@ -341,7 +370,7 @@ namespace Parser {
 
             std::unique_ptr<Expression> callee;
             std::vector<std::unique_ptr<Expression>> arguments;
-            const FunctionDefinition* function_to_call{ nullptr };
+            std::variant<std::monostate, const FunctionDefinition*, FunctionPointerMarker> function_to_call{};
         };
 
         struct Assignment : public ExpressionAcceptor<Assignment> {
@@ -373,6 +402,8 @@ namespace Parser {
         std::string namespace_name{};
         bool is_entry_point{ false };
         std::vector<Statements::LabelDefinition*> contained_labels{};
+        std::optional<usize> occupied_stack_space{};  // total size of the needed stack space (in bytes)
+        std::optional<usize> parameters_stack_space{};// size of all parameters (in bytes)
     };
 
     struct ImportStatement {

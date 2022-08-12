@@ -8,20 +8,32 @@
 #include "types.hpp"
 #include <cassert>
 #include <fmt/core.h>
+#include <fmt/format.h>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
+#include <vector>
 
 static constexpr std::string_view U32Identifier{ "U32" };
 static constexpr std::string_view CharIdentifier{ "Char" };
 static constexpr std::string_view BoolIdentifier{ "Bool" };
 static constexpr std::string_view NothingIdentifier{ "Nothing" };
+static constexpr std::string_view FunctionPointerKeyword{ "Function" };
 
 enum class Mutability {
     Mutable,
     Const,
 };
+
+[[nodiscard]] inline bool is_const(const Mutability mutability) {
+    return mutability == Mutability::Const;
+}
+
+[[nodiscard]] inline bool is_mutable(const Mutability mutability) {
+    return mutability == Mutability::Mutable;
+}
 
 struct DataType {
 protected:
@@ -114,7 +126,7 @@ struct PointerType final : public DataType {
 
     bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const PointerType*>(&other)) {
-            return DataType::operator==(other) and contained == other_pointer->contained;
+            return DataType::operator==(other) and *contained == *other_pointer->contained;
         }
         return false;
     }
@@ -151,24 +163,50 @@ struct PointerType final : public DataType {
     const DataType* contained;
 };
 
-struct FunctionPointerType final : public DataType {
-    explicit FunctionPointerType(std::string signature, Mutability mutability)
+struct FunctionPointerType : public DataType {
+    explicit FunctionPointerType(
+            std::vector<const DataType*> parameter_types,
+            const DataType* return_type,
+            Mutability mutability
+    )
         : DataType{ mutability },
-          signature{ std::move(signature) } { }
+          parameter_types{ parameter_types },
+          return_type{ return_type } { }
 
     bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const FunctionPointerType*>(&other)) {
-            return DataType::operator==(other) and signature == other_pointer->signature;
+            if (not DataType::operator==(other)) {
+                return false;
+            }
+            if (parameter_types.size() != other_pointer->parameter_types.size()) {
+                return false;
+            }
+            for (usize i = 0; i < parameter_types.size(); ++i) {
+                if (*parameter_types[i] != *other_pointer->parameter_types[i]) {
+                    return false;
+                }
+            }
+            return *return_type == *other_pointer->return_type;
         }
         return false;
     }
 
     [[nodiscard]] std::string to_string() const override {
-        return fmt::format("{}function pointer with signature \"{}\"", DataType::to_string(), signature);
+        using std::ranges::views::transform;
+        return fmt::format(
+                "{} Function({}) ~> {}", DataType::to_string(),
+                fmt::join(parameter_types | transform([](const auto& type) { return type->to_string(); }), ", "),
+                return_type->to_string()
+        );
     }
 
     [[nodiscard]] std::string mangled_name() const override {
-        return fmt::format("$function_pointer${}", signature);
+        using std::ranges::views::transform;
+        return fmt::format(
+                "Function({}) ~> {}",
+                fmt::join(parameter_types | transform([](const auto& type) { return type->mangled_name(); }), ", "),
+                return_type->mangled_name()
+        );
     }
 
     [[nodiscard]] usize size() const override {
@@ -179,7 +217,8 @@ struct FunctionPointerType final : public DataType {
         if (is_mutable()) {
             return this;
         }
-        return type_container.from_type_definition(std::make_unique<FunctionPointerType>(signature, Mutability::Mutable)
+        return type_container.from_type_definition(
+                std::make_unique<FunctionPointerType>(parameter_types, return_type, Mutability::Mutable)
         );
     }
 
@@ -187,8 +226,11 @@ struct FunctionPointerType final : public DataType {
         if (is_const()) {
             return this;
         }
-        return type_container.from_type_definition(std::make_unique<FunctionPointerType>(signature, Mutability::Const));
+        return type_container.from_type_definition(
+                std::make_unique<FunctionPointerType>(parameter_types, return_type, Mutability::Const)
+        );
     }
 
-    std::string signature;
+    std::vector<const DataType*> parameter_types;
+    const DataType* return_type;
 };

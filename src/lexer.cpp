@@ -47,7 +47,6 @@ public:
                 SINGLE_CHAR_TOKEN('.', Dot)
                 SINGLE_CHAR_TOKEN('+', Plus)
                 SINGLE_CHAR_TOKEN('*', Asterisk)
-                SINGLE_CHAR_TOKEN('%', Percent)
                 SINGLE_CHAR_TOKEN('(', LeftParenthesis)
                 SINGLE_CHAR_TOKEN(')', RightParenthesis)
                 SINGLE_CHAR_TOKEN(';', Semicolon)
@@ -329,6 +328,7 @@ private:
             KEYWORD("or", Or)
             KEYWORD("not", Not)
             KEYWORD("xor", Xor)
+            KEYWORD("mod", Mod)
             KEYWORD("if", If)
             KEYWORD("else", Else)
             KEYWORD("loop", Loop)
@@ -343,6 +343,7 @@ private:
             KEYWORD("label", Label)
             KEYWORD("goto", Goto)
             KEYWORD("nothing", NothingLiteral)
+            KEYWORD("Function", CapitalizedFunction)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

@@ -19,12 +19,8 @@ TypeContainer::TypeContainer() {
     m_const_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, Mutability::Const));
 }
 
-[[nodiscard]] static bool are_types_equal(const std::unique_ptr<DataType>& lhs, const std::unique_ptr<DataType>& rhs) {
-    return static_cast<bool>(lhs) and static_cast<bool>(rhs) and *lhs == *rhs;
-}
-
 [[nodiscard]] const DataType* TypeContainer::from_type_definition(std::unique_ptr<DataType> type_definition) {
-    const auto found = find(type_definition);
+    const auto found = find(*type_definition);
     if (found != nullptr) {
         return found;
     } else {
@@ -37,14 +33,36 @@ void TypeContainer::register_type(std::unique_ptr<DataType> data_type) {
     static_cast<void>(from_type_definition(std::move(data_type)));
 }
 
-bool TypeContainer::is_defined(const std::unique_ptr<DataType>& data_type) const {
-    return find(data_type) != nullptr;
+/**
+ * This function checks if a data type is already defined. A data type is defined if it either
+ * * is a type that is already known.
+ * * is a pointer to a type that is defined.
+ * * is a function pointer type with all its parameter types and return type defined.
+ * @param data_type The data type to check.
+ * @return `true` if the type is defined, `false` otherwise.
+ */
+bool TypeContainer::is_defined(const DataType& data_type) const {
+    if (const auto concrete_type = dynamic_cast<const ConcreteType*>(&data_type)) {
+        return find(data_type) != nullptr;
+    }
+    if (const auto pointer_type = dynamic_cast<const PointerType*>(&data_type)) {
+        return is_defined(*pointer_type->contained);
+    }
+    if (const auto function_pointer_type = dynamic_cast<const FunctionPointerType*>(&data_type)) {
+        for (const auto& parameter_type : function_pointer_type->parameter_types) {
+            if (not is_defined(*parameter_type)) {
+                return false;
+            }
+        }
+        return is_defined(*function_pointer_type->return_type);
+    }
+    assert(false and "not implemented");
+    return false;
 }
 
-const DataType* TypeContainer::find(const std::unique_ptr<DataType>& data_type) const {
+const DataType* TypeContainer::find(const DataType& data_type) const {
     using std::ranges::find_if;
-    const auto find_iterator =
-            find_if(m_data_types, [&](const auto& other) { return are_types_equal(data_type, other); });
+    const auto find_iterator = find_if(m_data_types, [&](const auto& other) { return data_type == *other; });
     const auto data_type_found = (find_iterator != std::cend(m_data_types));
     return data_type_found ? find_iterator->get() : nullptr;
 }

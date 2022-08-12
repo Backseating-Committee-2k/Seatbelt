@@ -17,7 +17,7 @@ public:
 
     [[nodiscard]] const DataType* from_type_definition(std::unique_ptr<DataType> data_type);
     void register_type(std::unique_ptr<DataType> data_type);
-    [[nodiscard]] bool is_defined(const std::unique_ptr<DataType>& data_type) const;
+    [[nodiscard]] bool is_defined(const DataType& data_type) const;
 
     [[nodiscard]] const DataType* const_u32() const;
     [[nodiscard]] const DataType* const_bool() const;
@@ -26,7 +26,7 @@ public:
     [[nodiscard]] const DataType* mutable_nothing() const;
 
 private:
-    [[nodiscard]] const DataType* find(const std::unique_ptr<DataType>& data_type) const;
+    [[nodiscard]] const DataType* find(const DataType& data_type) const;
 
 private:
     std::vector<std::unique_ptr<DataType>> m_data_types;

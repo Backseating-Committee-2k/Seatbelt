@@ -19,4 +19,34 @@ namespace std {
         }
     }
 
+    function digit_to_char(digit: U32) ~> Char {
+        let result: Char = '0';
+        bsm {
+            copy *R0, R1 // get value of digit
+            add R1, 48, R1 // calculate ASCII code
+            add R0, 4, R2 // get address of 'result'
+            copy R1, *R2 // store ASCII code into 'result'
+        }
+        return result;
+    }
+
+    function print(n: mutable U32) ~> Nothing {
+        let factor: mutable U32 = 1000000000; // highest power of 10 representable as a U32
+        let started_output: mutable Bool = false;
+        while factor > 0 {
+            if n >= factor {
+                let digit: U32 = n / factor;
+                std::put_char(digit_to_char(digit));
+                started_output = true;
+                n = n mod factor;
+            } else if started_output {
+                std::put_char('0');
+            }
+            factor = factor / 10;
+        }
+        if not started_output {
+            std::put_char('0');
+        }
+    }
+
 }

@@ -19,9 +19,10 @@ namespace Emitter {
     };
 
     struct Emitter {
-        explicit Emitter(const Parser::Program* program, LabelGenerator* label_generator)
+        explicit Emitter(const Parser::Program* program, LabelGenerator* label_generator, TypeContainer* type_container)
             : program{ program },
-              label_generator{ label_generator } { }
+              label_generator{ label_generator },
+              type_container{ type_container } { }
 
         std::string operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition);
 
@@ -29,6 +30,7 @@ namespace Emitter {
 
         const Parser::Program* program;
         LabelGenerator* label_generator;
+        TypeContainer* type_container;
     };
 
 }// namespace Emitter
