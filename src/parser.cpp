@@ -93,8 +93,8 @@ namespace Parser {
                     PrecedenceGroup<And>{},
                     PrecedenceGroup<EqualsEquals, ExclamationEquals>{},
                     PrecedenceGroup<LessThan, LessOrEquals, GreaterThan, GreaterOrEquals>{},
-                    PrecedenceGroup<Plus, Minus, Mod>{},
-                    PrecedenceGroup<Asterisk, ForwardSlash>{}
+                    PrecedenceGroup<Plus, Minus>{},
+                    PrecedenceGroup<Asterisk, ForwardSlash, Mod>{}
             );
             // clang-format on
 
