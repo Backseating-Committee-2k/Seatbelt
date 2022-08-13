@@ -91,12 +91,6 @@ foreach (target ${TARGET_LIST})
     set_property(TARGET ${target} PROPERTY
             MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-    # set binary filenames
-    set_target_properties(${target} PROPERTIES OUTPUT_NAME_DEBUG ${target}-debug)
-    set_target_properties(${target} PROPERTIES OUTPUT_NAME_RELWITHDEBINFO ${target}-relwithdebinfo)
-    set_target_properties(${target} PROPERTIES OUTPUT_NAME_RELEASE ${target}-release)
-    set_target_properties(${target} PROPERTIES OUTPUT_NAME_MINSIZEREL ${target}-minsizerel)
-
     if (CMAKE_BUILD_TYPE STREQUAL "Release")
         message("Enabling LTO for target ${target}")
         set_property(TARGET ${target} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
