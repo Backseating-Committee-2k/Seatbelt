@@ -364,11 +364,17 @@ namespace Parser {
         };
 
         struct FunctionCall : public ExpressionAcceptor<FunctionCall> {
-            FunctionCall(std::unique_ptr<Expression> callee, std::vector<std::unique_ptr<Expression>> arguments)
+            FunctionCall(
+                    std::unique_ptr<Expression> callee,
+                    LeftParenthesis left_parenthesis,
+                    std::vector<std::unique_ptr<Expression>> arguments
+            )
                 : callee{ std::move(callee) },
+                  left_parenthesis{ left_parenthesis },
                   arguments{ std::move(arguments) } { }
 
             std::unique_ptr<Expression> callee;
+            LeftParenthesis left_parenthesis;
             std::vector<std::unique_ptr<Expression>> arguments;
             std::variant<std::monostate, const FunctionDefinition*, FunctionPointerMarker> function_to_call{};
         };

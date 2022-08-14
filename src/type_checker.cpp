@@ -415,7 +415,14 @@ namespace TypeChecker {
                 // this must be a function pointer
                 const auto function_pointer_type =
                         dynamic_cast<const FunctionPointerType*>(expression.callee->data_type);
-                assert(function_pointer_type != nullptr and "the data type has to be a function pointer type");
+                if (function_pointer_type == nullptr) {
+                    Error::error(
+                            expression.left_parenthesis,
+                            fmt::format(
+                                    "unable to call an expression of type {}", expression.callee->data_type->to_string()
+                            )
+                    );
+                }
                 const auto expected_num_parameters = function_pointer_type->parameter_types.size();
                 const auto actual_num_parameters = expression.arguments.size();
                 if (actual_num_parameters != expected_num_parameters) {
