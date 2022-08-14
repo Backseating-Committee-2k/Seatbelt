@@ -142,7 +142,7 @@ namespace Parser {
             using Expressions::FunctionCall;
 
             auto accumulator = this->primary();
-            while (maybe_consume<LeftParenthesis>()) {
+            while (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
                 std::vector<std::unique_ptr<Expression>> arguments;
                 while (not end_of_file() and not current_is<RightParenthesis>()) {
                     arguments.push_back(expression());
@@ -151,7 +151,8 @@ namespace Parser {
                     }
                 }
                 consume<RightParenthesis>("expected \")\" at end of parameter list");
-                accumulator = std::make_unique<FunctionCall>(std::move(accumulator), std::move(arguments));
+                accumulator =
+                        std::make_unique<FunctionCall>(std::move(accumulator), *left_parenthesis, std::move(arguments));
             }
             return accumulator;
         }
