@@ -81,7 +81,7 @@ foreach (target ${TARGET_LIST})
         target_compile_options(${target} PUBLIC /W4 /WX /permissive- /fsanitize=address)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message("GCC build")
-        target_compile_options(${target} PUBLIC -Wall -Wextra -Werror -pedantic -Wconversion -pthread -fanalyzer -fsanitize=address,undefined)
+        target_compile_options(${target} PUBLIC -Wall -Wextra -Werror -pedantic -Wconversion -pthread -fsanitize=address,undefined)
     endif ()
 
     # define DEBUG_BUILD
