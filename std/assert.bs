@@ -34,4 +34,6 @@
         }
     }
 
+    function assert_equals(lhs: Nothing, rhs: Nothing) ~> Nothing { }
+
  }
