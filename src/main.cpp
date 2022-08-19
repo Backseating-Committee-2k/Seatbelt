@@ -161,10 +161,10 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
         auto& import_task = find_iterator->second;
 
         const auto is_main_file = path_string.empty();
+        auto path = std::filesystem::path{ path_string };
         if (is_main_file) {
             source_files.push_back(read_source_code(command_line_parser));
         } else {
-            auto path = std::filesystem::path{ path_string };
             auto import_path_iterator = import_paths.cbegin();
             const auto relative_path = get_relative_import_path((*import_task.import_statement).import_path_tokens);
             while (not exists(path)) {
@@ -180,6 +180,7 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
                 path = std::filesystem::path{ *import_path_iterator } / relative_path;
                 ++import_path_iterator;
             }
+
             auto input_stream = std::ifstream{ path };
             if (not input_stream) {
                 fmt::print(stderr, "unable to open file \"{}\"\n", path_string);
@@ -192,7 +193,7 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
 
         const auto base_directory = source_files.back().first == "<stdin>"
                                             ? std::filesystem::current_path()
-                                            : std::filesystem::path{ current_source_file.first }.remove_filename();
+                                            : path.remove_filename();
 
         const auto& current_token_list = token_lists.emplace_back(Lexer::tokenize(SourceCode{
                 .filename{ current_source_file.first },
