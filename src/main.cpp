@@ -79,7 +79,7 @@ enum class ImportStatus {
 
 struct ImportTask {
     ImportStatus status;
-    std::optional<Lexer::Tokens::Token> token;
+    std::optional<Parser::ImportStatement> import_statement;
 };
 
 using ImportsMap = std::unordered_map<std::string, ImportTask>;
@@ -89,30 +89,35 @@ using TokenListsContainer = std::vector<Lexer::TokenList>;
 template<typename T>
 struct PrintType;
 
-std::unordered_map<std::string, Lexer::Tokens::Token>
+[[nodiscard]] std::filesystem::path get_relative_import_path(const std::span<const Lexer::Tokens::Token> tokens) {
+    auto path = std::filesystem::path{};
+    for (const auto& token : tokens) {
+        if (const auto& identifier = std::get_if<Lexer::Tokens::Identifier>(&token)) {
+            path = path / identifier->location.view();
+        } else if (not std::holds_alternative<Lexer::Tokens::Dot>(token)) {
+            assert(false and "unreachable");
+        }
+    }
+    path += ".bs";
+    return path;
+}
+
+std::unordered_map<std::string, Parser::ImportStatement>
 collect_imports(const Parser::Program& program, const std::filesystem::path& base_directory) {
     using std::ranges::for_each;
-    auto imports = std::unordered_map<std::string, Lexer::Tokens::Token>{};
+    auto imports = std::unordered_map<std::string, Parser::ImportStatement>{};
     for_each(program, [&](const auto& top_level_statement) {
         std::visit(
                 overloaded{
                         [&](const std::unique_ptr<Parser::ImportStatement>& import_statement) {
-                            auto path = base_directory;
-                            for (const auto& token : import_statement->import_path_tokens) {
-                                if (const auto& identifier = std::get_if<Lexer::Tokens::Identifier>(&token)) {
-                                    path = path / identifier->location.view();
-                                } else if (not std::holds_alternative<Lexer::Tokens::Dot>(token)) {
-                                    assert(false and "unreachable");
-                                }
-                            }
-                            path += ".bs";
+                            auto path = base_directory / get_relative_import_path(import_statement->import_path_tokens);
 
                             const auto path_string = path.string();
                             const auto last_token = import_statement->import_path_tokens.back();
                             if (imports.contains(path_string)) {
                                 Error::warning(last_token, "duplicate import");
                             } else {
-                                imports[path_string] = last_token;
+                                imports[path_string] = *import_statement;
                             }
                         },
                         [&](auto&&) {},
@@ -127,7 +132,8 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
         auto& command_line_parser,
         SourceFileContainer& source_files,
         TokenListsContainer& token_lists,
-        TypeContainer& type_container
+        TypeContainer& type_container,
+        const std::vector<std::string>& import_paths
 ) {
     using Parser::concatenate_programs;
     using std::ranges::find_if;
@@ -137,7 +143,7 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
         {"",
          ImportTask{
          .status{ ImportStatus::NotImported },
-         .token{},
+         .import_statement{},
          }},
     };
 
@@ -158,9 +164,21 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
         if (is_main_file) {
             source_files.push_back(read_source_code(command_line_parser));
         } else {
-            const auto path = std::filesystem::path{ path_string };
-            if (not exists(path)) {
-                Error::error(import_task.token.value(), fmt::format("imported file not found: \"{}\"", path_string));
+            auto path = std::filesystem::path{ path_string };
+            auto import_path_iterator = import_paths.cbegin();
+            const auto relative_path = get_relative_import_path((*import_task.import_statement).import_path_tokens);
+            while (not exists(path)) {
+                // we now try to fall back to the passed additional import paths
+
+                if (import_path_iterator == import_paths.cend()) {
+                    // even with fallback we couldn't find the file to import
+                    Error::error(
+                            import_task.import_statement.value().import_token,
+                            fmt::format("imported file not found: \"{}\"", path_string)
+                    );
+                }
+                path = std::filesystem::path{ *import_path_iterator } / relative_path;
+                ++import_path_iterator;
             }
             auto input_stream = std::ifstream{ path };
             if (not input_stream) {
@@ -184,20 +202,20 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
 
         if (is_main_file) {
             imports.erase("");
-            imports[current_source_file.first] = ImportTask{ .status = ImportStatus::Imported, .token{} };
+            imports[current_source_file.first] = ImportTask{ .status = ImportStatus::Imported, .import_statement{} };
         }
 
         const auto current_imports = collect_imports(current_program, base_directory);
         for (const auto& current_import : current_imports) {
             if (imports.contains(current_import.first)) {
                 if (current_import.first == current_source_file.first) {
-                    Error::warning(current_import.second, "self-import has no effect");
+                    Error::warning(current_import.second.import_token, "self-import has no effect");
                 }
                 continue;
             }
             imports[current_import.first] = ImportTask{
                 .status{ ImportStatus::NotImported },
-                .token{ current_import.second },
+                .import_statement{ current_import.second },
             };
         }
 
@@ -210,6 +228,29 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
     return program;
 }
 
+[[nodiscard]] std::string_view trim(const std::string_view view) {
+    bool found = false;
+    usize left_index = 0;
+    for (usize i = 0; i < view.length(); ++i) {
+        if (not std::isspace(view[i])) {
+            found = true;
+            left_index = i;
+            break;
+        }
+    }
+    if (not found) {
+        return "";
+    }
+    // the string_view MUST contain a character that is not a whitespace
+    for (usize i = view.length() - 1;; --i) {
+        if (not std::isspace(view[i])) {
+            const usize right_index = i;
+            return std::string_view{ &view[left_index], right_index - left_index + 1 };
+        }
+    }
+    // unreachable
+}
+
 int main(int, char** argv) {
     using namespace Lexer::Tokens;
 
@@ -219,6 +260,9 @@ int main(int, char** argv) {
                     .help<"usage:">()
                     .named<'o', "output", "set the output filename", std::string>("-")
                     .optionally_named<'i', "input", "set the input filename", std::string>("-")
+                    .optionally_named<
+                            'l', "lib", "pass a comma-separated list of paths to use for import-lookup", std::string>(""
+                    )
                     .create();
 
     command_line_parser.parse(argv);
@@ -233,11 +277,22 @@ int main(int, char** argv) {
         std::exit(EXIT_SUCCESS);
     }
 
+    std::vector<std::string> import_paths;
+    if (command_line_parser.was_provided<'l'>()) {
+        using std::ranges::views::split, std::ranges::views::transform;
+        using namespace std::string_view_literals;
+        const auto import_paths_string = command_line_parser.get<'l'>();
+        const auto paths_view = std::string_view{ import_paths_string };
+        for (const auto path_view : split(paths_view, ";"sv) | transform([](auto view) { return trim(view); })) {
+            import_paths.emplace_back(path_view);
+        }
+    }
+
     auto source_files = SourceFileContainer{};
     auto token_lists = TokenListsContainer{};
     auto type_container = TypeContainer{};
 
-    auto program = resolve_imports(command_line_parser, source_files, token_lists, type_container);
+    auto program = resolve_imports(command_line_parser, source_files, token_lists, type_container, import_paths);
 
     auto global_scope = Scope{ nullptr, "" };
     ScopeGenerator::generate(program, type_container, global_scope);
