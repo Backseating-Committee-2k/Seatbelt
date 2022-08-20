@@ -729,6 +729,15 @@ namespace TypeChecker {
             function_definition->corresponding_symbol->signature = std::move(signature);
 
             assert(function_definition->return_type_definition and "function return type must have been set before");
+            if (not type_container->is_defined(*(function_definition->return_type_definition))) {
+                Error::error(
+                        function_definition->name, fmt::format(
+                                                           "use of undeclared type \"{}\"",
+                                                           function_definition->return_type_definition->to_string()
+                                                   )
+                );
+            }
+
             function_definition->return_type =
                     type_container->from_type_definition(std::move(function_definition->return_type_definition));
             function_definition->corresponding_symbol->definition->return_type = function_definition->return_type;
