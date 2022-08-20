@@ -191,9 +191,11 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
 
         const auto& current_source_file = source_files.back();
 
-        const auto base_directory = source_files.back().first == "<stdin>"
-                                            ? std::filesystem::current_path()
-                                            : path.remove_filename();
+        const auto base_directory =
+                source_files.back().first == "<stdin>"
+                        ? std::filesystem::current_path()
+                        : (is_main_file ? std::filesystem::path{ current_source_file.first }.remove_filename()
+                                        : absolute(path).remove_filename());
 
         const auto& current_token_list = token_lists.emplace_back(Lexer::tokenize(SourceCode{
                 .filename{ current_source_file.first },
