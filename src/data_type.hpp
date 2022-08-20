@@ -84,7 +84,9 @@ struct PointerType final : public DataType {
     }
 
     [[nodiscard]] std::string to_string() const override {
-        return fmt::format("->{}", contained->to_string());
+        return fmt::format(
+                "->{} {}", binding_mutability == Mutability::Mutable ? "mutable" : "const", contained->to_string()
+        );
     }
 
     [[nodiscard]] usize size() const override {
