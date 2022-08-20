@@ -13,6 +13,7 @@ struct VariableSymbol;
 struct Parameter {
     Lexer::Tokens::Identifier name;
     std::unique_ptr<DataType> type_definition;
+    Mutability binding_mutability;
     const DataType* type{ nullptr };
     VariableSymbol* variable_symbol{ nullptr };
 };
