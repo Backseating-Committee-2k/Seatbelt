@@ -46,6 +46,9 @@ namespace TypeChecker {
         if (is_one_of<EqualsEquals, ExclamationEquals>(token)) {
             return type_container.get_bool();
         }
+        if (is<Equals>(token)) {
+            return lhs;
+        }
         return nullptr;
     }
 
@@ -69,7 +72,7 @@ namespace TypeChecker {
         } else if (first_function_pointer != nullptr or second_function_pointer != nullptr) {
             return nullptr;
         }
-        // if neither operand is a function pointers, we evaluate the actual types
+        // if neither operand is a function pointer, we evaluate the actual types
 
         const auto same_type = (lhs == rhs);
 
