@@ -133,7 +133,7 @@ namespace Parser {
             if (current_is<Not>()) {
                 const auto not_token = current();
                 advance();
-                return std::make_unique<Expressions::UnaryPrefixOperator>(not_token, expression());
+                return std::make_unique<Expressions::UnaryPrefixOperator>(not_token, unary_not());
             }
             return function_call();
         }

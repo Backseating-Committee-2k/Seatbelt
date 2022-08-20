@@ -217,9 +217,17 @@ namespace Emitter {
                                ));
                 const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
                 emit(fmt::format("jump_eq R1, {}", end_of_evaluation), "skip rest of evaluation if value is false");
+                emit("push R1", fmt::format(
+                                        "push left operand for {}-operator onto the stack",
+                                        Error::token_location(expression.operator_token).view()
+                                ));
                 expression.rhs->accept(*this);
                 emit("pop R2", fmt::format(
                                        R"(store rhs for {}-operator in R2)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
+                emit("pop R1", fmt::format(
+                                       R"(store lhs for {}-operator in R2)",
                                        Error::token_location(expression.operator_token).view()
                                ));
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
@@ -235,9 +243,17 @@ namespace Emitter {
                                ));
                 const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
                 emit(fmt::format("jump_gt R1, {}", end_of_evaluation), "skip rest of evaluation if value is true");
+                emit("push R1", fmt::format(
+                                        "push left operand for {}-operator onto the stack",
+                                        Error::token_location(expression.operator_token).view()
+                                ));
                 expression.rhs->accept(*this);
                 emit("pop R2", fmt::format(
                                        R"(store rhs for {}-operator in R2)",
+                                       Error::token_location(expression.operator_token).view()
+                               ));
+                emit("pop R1", fmt::format(
+                                       R"(store lhs for {}-operator in R2)",
                                        Error::token_location(expression.operator_token).view()
                                ));
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
