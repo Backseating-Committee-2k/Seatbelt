@@ -441,7 +441,7 @@ namespace TypeChecker {
                 for (usize i = 0; i < expected_num_parameters; ++i) {
                     const auto actual = expression.arguments[i]->data_type;
                     const auto expected = function_pointer_type->parameter_types[i];
-                    if (actual->as_mutable(*type_container) != expected->as_mutable(*type_container)) {
+                    if (actual->as_const(*type_container) != expected->as_const(*type_container)) {
                         Error::error(
                                 *(expression.arguments[i]),
                                 fmt::format(
