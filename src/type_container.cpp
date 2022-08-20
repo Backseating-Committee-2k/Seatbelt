@@ -9,14 +9,10 @@
 #include <ranges>
 
 TypeContainer::TypeContainer() {
-    register_type(std::make_unique<ConcreteType>(U32Identifier, Mutability::Mutable));
-    m_const_u32 = from_type_definition(std::make_unique<ConcreteType>(U32Identifier, Mutability::Const));
-    register_type(std::make_unique<ConcreteType>(CharIdentifier, Mutability::Mutable));
-    m_const_char = from_type_definition(std::make_unique<ConcreteType>(CharIdentifier, Mutability::Const));
-    register_type(std::make_unique<ConcreteType>(BoolIdentifier, Mutability::Mutable));
-    m_const_bool = from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, Mutability::Const));
-    m_mutable_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, Mutability::Mutable));
-    m_const_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, Mutability::Const));
+    m_u32 = from_type_definition(std::make_unique<ConcreteType>(U32Identifier));
+    m_char = from_type_definition(std::make_unique<ConcreteType>(CharIdentifier));
+    m_bool = from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier));
+    m_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier));
 }
 
 [[nodiscard]] const DataType* TypeContainer::from_type_definition(std::unique_ptr<DataType> type_definition) {
@@ -67,21 +63,18 @@ const DataType* TypeContainer::find(const DataType& data_type) const {
     return data_type_found ? find_iterator->get() : nullptr;
 }
 
-const DataType* TypeContainer::const_u32() const {
-    return m_const_u32;
+const DataType* TypeContainer::get_u32() const {
+    return m_u32;
 }
 
-const DataType* TypeContainer::const_bool() const {
-    return m_const_bool;
+const DataType* TypeContainer::get_bool() const {
+    return m_bool;
 }
 
-const DataType* TypeContainer::const_char() const {
-    return m_const_char;
+const DataType* TypeContainer::get_char() const {
+    return m_char;
 }
 
-const DataType* TypeContainer::const_nothing() const {
-    return m_const_nothing;
-}
-const DataType* TypeContainer::mutable_nothing() const {
-    return m_mutable_nothing;
+const DataType* TypeContainer::get_nothing() const {
+    return m_nothing;
 }

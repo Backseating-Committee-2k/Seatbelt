@@ -189,8 +189,8 @@ namespace Emitter {
         void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
             expression.operand->accept(*this);
             if (is<Not>(expression.operator_token)) {
-                assert(expression.data_type->as_const(*type_container) == type_container->const_bool() and
-                       "type checker should've caught this");
+                assert(*(expression.data_type) == *(type_container->get_bool()) and "type checker should've caught this"
+                );
                 // we can assume that the value on the stack is 0 or 1 (representing false or true)
                 // we have to flip the least significant bit to invert the truth value
                 emit("pop R1", "get value of operand for logical not operation");
