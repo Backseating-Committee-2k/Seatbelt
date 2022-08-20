@@ -6,6 +6,7 @@
 
 #include "type_container.hpp"
 #include "types.hpp"
+#include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -214,20 +215,36 @@ struct FunctionPointerType : public DataType {
     }
 
     const DataType* as_mutable(TypeContainer& type_container) const override {
-        if (is_mutable()) {
+        using std::ranges::all_of;
+        const auto all_parameters_mutable =
+                all_of(parameter_types, [](const auto data_type) { return data_type->is_mutable(); });
+        if (is_mutable() and all_parameters_mutable) {
             return this;
         }
+        auto mutable_parameter_types = std::vector<const DataType*>{};
+        mutable_parameter_types.reserve(parameter_types.size());
+        for (const auto type : parameter_types) {
+            mutable_parameter_types.push_back(type->as_mutable(type_container));
+        }
         return type_container.from_type_definition(
-                std::make_unique<FunctionPointerType>(parameter_types, return_type, Mutability::Mutable)
+                std::make_unique<FunctionPointerType>(mutable_parameter_types, return_type, Mutability::Mutable)
         );
     }
 
     const DataType* as_const(TypeContainer& type_container) const override {
-        if (is_const()) {
+        using std::ranges::all_of;
+        const auto all_parameters_const =
+                all_of(parameter_types, [](const auto data_type) { return data_type->is_const(); });
+        if (is_const() and all_parameters_const) {
             return this;
         }
+        auto const_parameter_types = std::vector<const DataType*>{};
+        const_parameter_types.reserve(parameter_types.size());
+        for (const auto type : parameter_types) {
+            const_parameter_types.push_back(type->as_const(type_container));
+        }
         return type_container.from_type_definition(
-                std::make_unique<FunctionPointerType>(parameter_types, return_type, Mutability::Const)
+                std::make_unique<FunctionPointerType>(const_parameter_types, return_type, Mutability::Const)
         );
     }
 
