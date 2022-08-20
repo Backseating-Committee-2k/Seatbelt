@@ -322,6 +322,7 @@ namespace Parser {
             explicit Integer(IntegerLiteral value) : value{ value } { }
 
             IntegerLiteral value;
+            std::string emittable_string{};
         };
 
         struct Char : public ExpressionAcceptor<Char> {
