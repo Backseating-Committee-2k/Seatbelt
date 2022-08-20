@@ -44,10 +44,7 @@ namespace TypeChecker {
         }
 
         if (is_one_of<EqualsEquals, ExclamationEquals>(token)) {
-            return type_container.const_bool();
-        }
-        if (is<Equals>(token) and lhs->is_mutable()) {
-            return lhs;
+            return type_container.get_bool();
         }
         return nullptr;
     }
@@ -83,17 +80,17 @@ namespace TypeChecker {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
                 return nullptr;
             }
-            return type_container.const_bool();
+            return type_container.get_bool();
         }
         if (is_one_of<GreaterThan, GreaterOrEquals, LessThan, LessOrEquals>(token)) {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or
                 concrete_types[0].value() != U32Identifier) {
                 return nullptr;
             }
-            return type_container.const_bool();
+            return type_container.get_bool();
         }
         if (is<Equals>(token)) {
-            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or lhs->is_const()) {
+            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
                 return nullptr;
             }
             return rhs;
@@ -102,7 +99,7 @@ namespace TypeChecker {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
                 return nullptr;
             }
-            return concrete_types[0].value() == U32Identifier ? type_container.const_u32() : nullptr;
+            return concrete_types[0].value() == U32Identifier ? type_container.get_u32() : nullptr;
         }
         if (is_one_of<And, Or, Xor>(token)) {
             if (not same_type or not both_concrete) {
@@ -235,9 +232,9 @@ namespace TypeChecker {
                 statement.return_value->accept(*this);
             }
             const auto return_value_type =
-                    statement.return_value ? statement.return_value->data_type : type_container->mutable_nothing();
-            const auto return_value_type_mutable = return_value_type->as_mutable(*type_container);
-            const auto function_return_type_mutable = surrounding_function->return_type->as_mutable(*type_container);
+                    statement.return_value ? statement.return_value->data_type : type_container->get_nothing();
+            const auto return_value_type_mutable = return_value_type;
+            const auto function_return_type_mutable = surrounding_function->return_type;
             if (return_value_type_mutable != function_return_type_mutable) {
                 Error::error(
                         statement.return_token,
@@ -264,8 +261,7 @@ namespace TypeChecker {
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
             // get the mutable version of the assignee type (if it is not mutable already)
-            DataType const* const assignee_type =
-                    statement.type->is_mutable() ? statement.type : statement.type->as_mutable(*type_container);
+            DataType const* const assignee_type = statement.type;
 
             // type checking rules are the same as if we would do type checking during an assignment
             const auto resulting_type = get_resulting_data_type(
@@ -294,15 +290,15 @@ namespace TypeChecker {
         void visit(Parser::Statements::GotoStatement&) override { }
 
         void visit(Parser::Expressions::Integer& expression) override {
-            expression.data_type = type_container->const_u32();
+            expression.data_type = type_container->get_u32();
         }
 
         void visit(Parser::Expressions::Char& expression) override {
-            expression.data_type = type_container->const_char();
+            expression.data_type = type_container->get_char();
         }
 
         void visit(Parser::Expressions::Bool& expression) override {
-            expression.data_type = type_container->const_bool();
+            expression.data_type = type_container->get_bool();
         }
 
         void visit(Parser::Expressions::Name& expression) override {
@@ -312,9 +308,19 @@ namespace TypeChecker {
                 expression.data_type = std::visit(
                         overloaded{ [&](const VariableDefinition* variable_definition) -> const DataType* {
                                        assert(variable_definition->type and "type must be known");
+                                       // the name is assignable if the variable definition has a mutable binding
+                                       expression.assignability =
+                                               (variable_definition->binding_mutability == Mutability::Mutable
+                                                        ? Assignability::Assignable
+                                                        : Assignability::NotAssignable);
                                        return variable_definition->type;
                                    },
-                                    [](const Parameter* parameter) -> const DataType* {
+                                    [&](const Parameter* parameter) -> const DataType* {
+                                        // the name is assignable if the parameter definition has a mutable binding
+                                        expression.assignability =
+                                                (parameter->binding_mutability == Mutability::Mutable
+                                                         ? Assignability::Assignable
+                                                         : Assignability::NotAssignable);
                                         assert(parameter->type and "type must be known");
                                         return parameter->type;
                                     },
@@ -325,6 +331,9 @@ namespace TypeChecker {
                         expression.variable_symbol.value()->definition
                 );
             } else {
+                // it's impossible to assign something to a function
+                expression.assignability = Assignability::NotAssignable;
+
                 // only the last token of a qualified name is relevant for lookup
                 const auto& name_token = expression.name_tokens.back();
                 const auto identifier = Error::token_location(name_token).view();
@@ -347,7 +356,7 @@ namespace TypeChecker {
                         parameter_types.push_back(parameter.type);
                     }
                     expression.data_type = type_container->from_type_definition(std::make_unique<FunctionPointerType>(
-                            std::move(parameter_types), function_definition->return_type, Mutability::Const
+                            std::move(parameter_types), function_definition->return_type
                     ));
                 } else {
                     assert(false and "unreachable");
@@ -359,7 +368,7 @@ namespace TypeChecker {
             expression.operand->accept(*this);
             const auto operand_type = expression.operand->data_type;
             if (is<Lexer::Tokens::Not>(expression.operator_token)) {
-                if (operand_type->as_const(*type_container) != type_container->const_bool()) {
+                if (*operand_type != *type_container->get_bool()) {
                     Error::error(
                             expression.operator_token, fmt::format(
                                                                "logical 'not'-operator can only be applied to boolean "
@@ -439,7 +448,7 @@ namespace TypeChecker {
                 for (usize i = 0; i < expected_num_parameters; ++i) {
                     const auto actual = expression.arguments[i]->data_type;
                     const auto expected = function_pointer_type->parameter_types[i];
-                    if (actual->as_mutable(*type_container) != expected->as_mutable(*type_container)) {
+                    if (*actual != *expected) {
                         Error::error(
                                 *(expression.arguments[i]),
                                 fmt::format(
@@ -461,7 +470,7 @@ namespace TypeChecker {
                         "{}({})", identifier,
                         fmt::join(
                                 expression.arguments | transform([](const auto& argument) {
-                                    return argument->data_type->mangled_name();
+                                    return argument->data_type->to_string();
                                 }),
                                 ", "
                         )
@@ -482,7 +491,7 @@ namespace TypeChecker {
                         );// no curly braces because of constructor ambiguity
 
                         name->data_type = type_container->from_type_definition(std::make_unique<FunctionPointerType>(
-                                std::move(parameter_types), overload->definition->return_type, Mutability::Const
+                                std::move(parameter_types), overload->definition->return_type
                         ));
                         overload_found = true;
                     }
@@ -513,9 +522,7 @@ namespace TypeChecker {
             expression.value->accept(*this);
 
             // check if the left side is an LVALUE
-            const auto name = dynamic_cast<const Parser::Expressions::Name*>(expression.assignee.get());
-            const auto assignee_is_name = (name != nullptr);
-            if (not assignee_is_name or not name->variable_symbol.has_value()) {
+            if (expression.assignee->assignability != Assignability::Assignable) {
                 Error::error(expression.equals_token, "left-hand side of assignment is not assignable");
             }
 
@@ -537,7 +544,7 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::Nothing& expression) override {
-            expression.data_type = type_container->const_nothing();
+            expression.data_type = type_container->get_nothing();
         }
 
         usize claim_stack_space(const usize size_of_type) {
@@ -605,7 +612,7 @@ namespace TypeChecker {
                     "{}({})", function_definition->name.location.view(),
                     fmt::join(
                             function_definition->parameters |
-                                    transform([](const auto& parameter) { return parameter.type->mangled_name(); }),
+                                    transform([](const auto& parameter) { return parameter.type->to_string(); }),
                             ", "
                     )
             );
@@ -676,7 +683,7 @@ namespace TypeChecker {
                     overloaded{ [&](const std::unique_ptr<Parser::FunctionDefinition>& function) {
                                    auto return_type_checker = ReturnTypeChecker{};
                                    function->body.accept(return_type_checker);
-                                   if (function->return_type != type_container.const_nothing() and
+                                   if (function->return_type != type_container.get_nothing() and
                                        not return_type_checker.all_code_paths_return_a_value) {
                                        Error::error(function->name, "not all code paths return a value\n");
                                    }

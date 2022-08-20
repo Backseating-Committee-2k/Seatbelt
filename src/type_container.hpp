@@ -19,20 +19,18 @@ public:
     void register_type(std::unique_ptr<DataType> data_type);
     [[nodiscard]] bool is_defined(const DataType& data_type) const;
 
-    [[nodiscard]] const DataType* const_u32() const;
-    [[nodiscard]] const DataType* const_bool() const;
-    [[nodiscard]] const DataType* const_char() const;
-    [[nodiscard]] const DataType* const_nothing() const;
-    [[nodiscard]] const DataType* mutable_nothing() const;
+    [[nodiscard]] const DataType* get_u32() const;
+    [[nodiscard]] const DataType* get_bool() const;
+    [[nodiscard]] const DataType* get_char() const;
+    [[nodiscard]] const DataType* get_nothing() const;
 
 private:
     [[nodiscard]] const DataType* find(const DataType& data_type) const;
 
 private:
     std::vector<std::unique_ptr<DataType>> m_data_types;
-    const DataType* m_const_u32;
-    const DataType* m_const_bool;
-    const DataType* m_const_char;
-    const DataType* m_const_nothing;
-    const DataType* m_mutable_nothing;
+    const DataType* m_u32;
+    const DataType* m_bool;
+    const DataType* m_char;
+    const DataType* m_nothing;
 };

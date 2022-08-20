@@ -34,6 +34,12 @@ overloaded(Ts...) -> overloaded<Ts...>;
  */
 struct FunctionPointerMarker { };
 
+enum class Assignability {
+    Assignable,
+    NotAssignable,
+    Undetermined,
+};
+
 namespace Parser {
     using namespace Lexer::Tokens;
 
@@ -206,18 +212,20 @@ namespace Parser {
         };
 
         struct VariableDefinition : public StatementAcceptor<VariableDefinition> {
-            explicit VariableDefinition(
+            VariableDefinition(
                     Let let_token,
                     Identifier name,
                     Equals equals_token,
                     std::unique_ptr<DataType> type_definition,
-                    std::unique_ptr<Expression> initial_value
+                    std::unique_ptr<Expression> initial_value,
+                    Mutability binding_mutability
             )
                 : let_token{ let_token },
                   name{ name },
                   equals_token{ equals_token },
                   type_definition{ std::move(type_definition) },
-                  initial_value{ std::move(initial_value) } { }
+                  initial_value{ std::move(initial_value) },
+                  binding_mutability{ binding_mutability } { }
 
             Let let_token;
             Identifier name;
@@ -226,6 +234,7 @@ namespace Parser {
             const DataType* type{ nullptr };
             std::unique_ptr<Expression> initial_value;
             VariableSymbol* variable_symbol{ nullptr };
+            Mutability binding_mutability;
         };
 
         struct InlineAssembly : public StatementAcceptor<InlineAssembly> {
@@ -297,6 +306,7 @@ namespace Parser {
 
             const DataType* data_type{ nullptr };
             const Scope* surrounding_scope{ nullptr };
+            Assignability assignability{ Assignability::Undetermined };
         };
 
         template<typename T>

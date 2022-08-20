@@ -202,10 +202,16 @@ namespace Parser {
             while (not end_of_file() and not current_is<RightParenthesis>()) {
                 const auto parameter_name = consume<Identifier>("expected parameter name");
                 consume<Colon>("expected \":\"");
+                const auto is_mutable = static_cast<bool>(maybe_consume<Mutable>());
+                if (not is_mutable) {
+                    maybe_consume<Const>();
+                }
+                const auto mutability = (is_mutable ? Mutability::Mutable : Mutability::Const);
                 auto type_definition = data_type();
-                parameters.push_back(
-                        Parameter{ .name{ parameter_name }, .type_definition{ std::move(type_definition) }, .type{} }
-                );
+                parameters.push_back(Parameter{ .name{ parameter_name },
+                                                .type_definition{ std::move(type_definition) },
+                                                .binding_mutability{ mutability },
+                                                .type{} });
                 if (not maybe_consume<Comma>()) {
                     break;
                 }
@@ -388,29 +394,31 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<DataType> data_type() {
-            const auto mutability =
-                    static_cast<bool>(maybe_consume<Mutable>()) ? Mutability::Mutable : Mutability::Const;
-            if (mutability == Mutability::Const) {
-                maybe_consume<Const>();
-            }
             if (current_is<Arrow>()) {
-                return pointer_type(mutability);
+                return pointer_type();
             } else if (current_is<CapitalizedFunction>()) {
-                return function_pointer_type(mutability);
+                return function_pointer_type();
             } else {
-                return primitive_type(mutability);
+                return primitive_type();
             }
         }
 
-        [[nodiscard]] std::unique_ptr<DataType> pointer_type(const Mutability mutability) {
+        [[nodiscard]] std::unique_ptr<DataType> pointer_type() {
             consume<Arrow>();
+
+            const auto is_mutable = static_cast<bool>(maybe_consume<Mutable>());
+            if (not is_mutable) {
+                maybe_consume<Const>();
+            }
+            const auto mutability = is_mutable ? Mutability::Mutable : Mutability::Const;
+
             auto pointee_type = data_type();
             return std::make_unique<PointerType>(
                     m_type_container->from_type_definition(std::move(pointee_type)), mutability
             );
         }
 
-        [[nodiscard]] std::unique_ptr<DataType> function_pointer_type(const Mutability mutability) {
+        [[nodiscard]] std::unique_ptr<DataType> function_pointer_type() {
             consume<CapitalizedFunction>();
             consume<LeftParenthesis>("expected \"(\"");
             auto parameter_types = std::vector<const DataType*>{};
@@ -424,26 +432,31 @@ namespace Parser {
             consume<TildeArrow>("expected \"~>\"");
             auto return_type = data_type();
             return std::make_unique<FunctionPointerType>(
-                    std::move(parameter_types), m_type_container->from_type_definition(std::move(return_type)),
-                    mutability
+                    std::move(parameter_types), m_type_container->from_type_definition(std::move(return_type))
             );
         }
 
-        [[nodiscard]] std::unique_ptr<DataType> primitive_type(const Mutability mutability) {
+        [[nodiscard]] std::unique_ptr<DataType> primitive_type() {
             auto identifier = consume<Identifier>("type identifier expected");
-            return std::make_unique<ConcreteType>(identifier.location.view(), mutability);
+            return std::make_unique<ConcreteType>(identifier.location.view());
         }
 
         [[nodiscard]] std::unique_ptr<Statements::VariableDefinition> variable_definition() {
             const auto let_token = consume<Let>();
             const auto identifier = consume<Identifier>("expected variable name");
             consume<Colon>("expected \":\"");
+            const auto is_mutable = static_cast<bool>(maybe_consume<Mutable>());
+            if (not is_mutable) {
+                maybe_consume<Const>();
+            }
+            const auto mutability = is_mutable ? Mutability::Mutable : Mutability::Const;
             auto type_definition = data_type();
             auto equals_token = consume<Equals>("expected variable initialization");
             auto initial_value = expression();
             consume_semicolon();
             return std::make_unique<Statements::VariableDefinition>(
-                    let_token, identifier, equals_token, std::move(type_definition), std::move(initial_value)
+                    let_token, identifier, equals_token, std::move(type_definition), std::move(initial_value),
+                    mutability
             );
         }
 
