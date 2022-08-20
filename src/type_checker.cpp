@@ -689,6 +689,12 @@ namespace TypeChecker {
 
             for (auto& parameter : function_definition->parameters) {
                 assert(parameter.type_definition and "type definition must have been set before");
+                if (not type_container->is_defined(*(parameter.type_definition))) {
+                    Error::error(
+                            parameter.name,
+                            fmt::format("use of undeclared type \"{}\"", parameter.type_definition->to_string())
+                    );
+                }
                 parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
                 parameter.variable_symbol->offset = offset;
                 offset += parameter.type->size();
