@@ -10,9 +10,57 @@
 #include <cassert>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <limits>
 #include <ranges>
 #include <string_view>
 #include <variant>
+
+[[nodiscard]] u8 char_to_digit(char c, const u64 base) {
+    constexpr auto valid_digits =
+            std::array{ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+    assert(base <= 16);
+    c = static_cast<char>(std::toupper(c));
+    for (usize i = 0; i < base; ++i) {
+        if (c == valid_digits[i]) {
+            if (i < 10) {
+                return static_cast<u8>(c - '0');
+            } else {
+                return static_cast<u8>(c - 'A' + 10);
+            }
+        }
+    }
+    assert(false and "invalid input character");
+    return 0;
+}
+
+[[nodiscard]] bool validate_integer(const std::string_view text, const u64 base) {
+    u64 result = 0;
+    u64 factor = 1;
+    for (char c : std::ranges::reverse_view(text)) {
+        const auto digit = char_to_digit(c, base);
+        result += digit * factor;
+        factor *= base;
+        if (result > std::numeric_limits<u32>::max()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] u32 octal_to_decimal(std::string_view text) {
+    if (text.starts_with("0o")) {
+        text = text.substr(2);
+    }
+    u32 result = 0;
+    u32 factor = 1;
+    for (char c : std::ranges::reverse_view(text)) {
+        assert(c >= '0' and c <= '7' and "digit out of bounds for octal number");
+        const u32 digit = c - '0';
+        result += factor * digit;
+        factor *= 8;
+    }
+    return result;
+}
 
 namespace TypeChecker {
     using Lexer::Tokens::Token;
@@ -293,6 +341,41 @@ namespace TypeChecker {
         void visit(Parser::Statements::GotoStatement&) override { }
 
         void visit(Parser::Expressions::Integer& expression) override {
+            /* We know that the integer literal semantically is correct, but
+             * it still may exceed the maximum possible value. First we have
+             * to discard any underscores in the literal, and then we have to
+             * validate the value.
+             *
+             * On a side note:   Not only do we validate the number here, but we
+             * ~~~~~~~~~~~~~~~   also save the number as a string that can be
+             *                   emitted. Of course this should not be the
+             *                   responsibility of the type checker, but this way
+             *                   we can prevent the need of checking/converting
+             *                   the number twice. */
+            auto number_string = std::string{};
+            for (const auto c : expression.value.location.view()) {
+                if (c != '_') {
+                    number_string += c;
+                }
+            }
+            u64 base = 10;
+            if (number_string.starts_with("0x")) {
+                base = 16;
+            } else if (number_string.starts_with("0o")) {
+                base = 8;
+            } else if (number_string.starts_with("0b")) {
+                base = 2;
+            }
+            const auto digits_view =
+                    (base == 10 ? std::string_view{ number_string }
+                                : std::string_view{ number_string.begin() + 2, number_string.end() });
+            if (not validate_integer(digits_view, base)) {
+                Error::error(expression.value, "integer literal out of bounds");
+            }
+            // The bssembler language does not support octal literals. We convert those to decimal first.
+            expression.emittable_string =
+                    (base == 8 ? std::to_string(octal_to_decimal(digits_view)) : std::move(number_string));
+
             expression.data_type = type_container->get_u32();
         }
 
