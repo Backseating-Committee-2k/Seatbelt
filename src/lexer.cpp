@@ -306,7 +306,7 @@ private:
 
         static constexpr char identifier_pattern[] = "([a-zA-Z_][a-zA-Z0-9_]*)";
         static constexpr char integer_pattern[] = "(0o([0-7]+_?)+)|(0x([\\dA-Fa-f]+_?)+)|(0b([01]+_?)+)|(\\d+_?)+";
-        static constexpr char char_pattern[] = R"('(\\'|[ -~]|\\[n\\tnvfr0])')";
+        static constexpr char char_pattern[] = R"('(\\'|[ -\[\]-~]|\\[n\\tnvfr0])')";
 
         if (const auto char_literal_result = ctre::starts_with<char_pattern>(remaining_source)) {
             const usize length = char_literal_result.view().length();
