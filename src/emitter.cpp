@@ -148,7 +148,15 @@ namespace Emitter {
         }
 
         void visit(Integer& expression) override {
-            emit(fmt::format("copy {}, R1", expression.value.location.view()), "put immediate into register");
+            // integer literals may contain underscores that have to be stripped because
+            // they are not supported in the bssembly language
+            auto number = std::string{};
+            for (const auto c : expression.value.location.view()) {
+                if (c != '_') {
+                    number += c;
+                }
+            }
+            emit(fmt::format("copy {}, R1", number), "put immediate into register");
             emit("push R1", "push immediate onto stack");
         }
 
