@@ -35,7 +35,9 @@ namespace TypeChecker {
             return nullptr;
         }
         for (usize i = 0; i < lhs->parameter_types.size(); ++i) {
-            if (lhs->parameter_types[i] != rhs->parameter_types[i]) {
+            // ignore mutability
+            if (lhs->parameter_types[i]->as_const(type_container) !=
+                rhs->parameter_types[i]->as_const(type_container)) {
                 return nullptr;
             }
         }
