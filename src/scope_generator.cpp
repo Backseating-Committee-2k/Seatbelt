@@ -25,14 +25,10 @@ namespace ScopeGenerator {
         // do not know the function signature), but the function can only be a valid choice
         // if it is within the correct namespace
 
-        fmt::print(stderr, "lookup for {}\n", Error::token_location(name.name_tokens.back()).view());
-
         auto remaining_namespaces = namespace_qualifier.empty() ? 0 : count(namespace_qualifier, ':') / 2;
         const auto was_qualified_name = (name.name_tokens.size() > 1);
         auto possible_overloads = std::vector<const FunctionOverload*>{};
         while (true) {
-            fmt::print(stderr, "searching in namespace {}\n", namespace_qualifier);
-
             // Function definitions are only allowed in the global scope. That means
             // that we must be at the top of the scope stack right now.
             for (const auto& overload : function.overloads) {
@@ -45,17 +41,9 @@ namespace ScopeGenerator {
                     // if the namespace the name expression occurred in is different from the namespace
                     // in which we found the function overload, then the lookup is only valid if the function
                     // has been exported
-                    fmt::print(
-                            stderr, "{}:, surrounding namespace: {}, namespace qualifier: {}, is exported: {}\n",
-                            overload.definition->name.location.view(), name.surrounding_scope->surrounding_namespace,
-                            namespace_qualifier, overload.definition->export_token.has_value()
-                    );
                     if (name.surrounding_scope->surrounding_namespace.starts_with(namespace_qualifier) or
                         overload.definition->is_exported()) {
-                        fmt::print(stderr, "\t=> adding overload\n");
                         possible_overloads.push_back(&overload);
-                    } else {
-                        fmt::print(stderr, "\t=> not adding overload\n");
                     }
                 }
             }
