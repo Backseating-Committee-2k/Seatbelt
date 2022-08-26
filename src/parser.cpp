@@ -217,8 +217,17 @@ namespace Parser {
                 }
             }
             consume<RightParenthesis>("expected \")\"");
-            consume<TildeArrow>("expected \"~>\"");
-            auto return_type_definition = data_type();
+            std::unique_ptr<DataType> return_type_definition = std::make_unique<ConcreteType>(NothingIdentifier);
+            if (maybe_consume<TildeArrow>()) {
+                return_type_definition = data_type();
+            } else if (not current_is<LeftCurlyBracket>()) {
+                // this is irrelevant for the parsing logic, but it yields a better error message
+                Error::error(
+                        current(),
+                        "expected either \"~>\" following a type definition, or a block if implicit return type "
+                        "\"Nothing\" is intended"
+                );
+            }
             auto body = block();
             auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
             return std::make_unique<FunctionDefinition>(FunctionDefinition{
