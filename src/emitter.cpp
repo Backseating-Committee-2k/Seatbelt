@@ -188,7 +188,7 @@ namespace Emitter {
             assert(size % 4 == 0);
             const auto num_words = size / 4;
             assembly += fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name);
-            for (auto i = 0; i < num_words; ++i) {
+            for (usize i = 0; i < num_words; ++i) {
                 emit("copy *R1, R2");
                 emit("push R2");
                 if (i < num_words - 1) {
