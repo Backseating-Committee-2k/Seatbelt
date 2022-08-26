@@ -623,7 +623,7 @@ namespace TypeChecker {
                         expression.equals_token,
                         fmt::format(
                                 R"(expression of type "{}" cannot be assigned to expression of type "{}")",
-                                expression.assignee->data_type->to_string(), expression.value->data_type->to_string()
+                                expression.value->data_type->to_string(), expression.assignee->data_type->to_string()
                         )
                 );
             }
