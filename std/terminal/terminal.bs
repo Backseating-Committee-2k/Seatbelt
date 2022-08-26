@@ -1,6 +1,6 @@
 namespace std {
 
-    function put_char(char: Char) ~> Nothing {
+    export function put_char(char: Char) ~> Nothing {
         bsm {
             copy *R0, R1 // put the value of char into R1
             copy *CURSOR_POINTER, R2 // get the current cursor pointer value
@@ -30,7 +30,7 @@ namespace std {
         return result;
     }
 
-    function print(n: mutable U32) ~> Nothing {
+    export function print(n: mutable U32) ~> Nothing {
         let factor: mutable U32 = 1000000000; // highest power of 10 representable as a U32
         let started_output: mutable Bool = false;
         while factor > 0 {
