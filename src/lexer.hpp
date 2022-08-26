@@ -70,7 +70,8 @@
     x(Label) \
     x(Goto) \
     x(NothingLiteral) \
-    x(CapitalizedFunction)
+    x(CapitalizedFunction) \
+    x(Export)
 
 // clang-format on
 

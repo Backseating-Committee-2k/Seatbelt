@@ -24,17 +24,39 @@ namespace ScopeGenerator {
         // We *did* find a function symbol with the correct function name (even though we
         // do not know the function signature), but the function can only be a valid choice
         // if it is within the correct namespace
+
+        fmt::print(stderr, "lookup for {}\n", Error::token_location(name.name_tokens.back()).view());
+
         auto remaining_namespaces = namespace_qualifier.empty() ? 0 : count(namespace_qualifier, ':') / 2;
         const auto was_qualified_name = (name.name_tokens.size() > 1);
         auto possible_overloads = std::vector<const FunctionOverload*>{};
         while (true) {
+            fmt::print(stderr, "searching in namespace {}\n", namespace_qualifier);
+
             // Function definitions are only allowed in the global scope. That means
             // that we must be at the top of the scope stack right now.
             for (const auto& overload : function.overloads) {
                 if (overload.namespace_name == namespace_qualifier) {
+                    // we found a possible overload!
+
                     // we cannot determine the return type of the function here because
-                    // we cannot do overload resolution as of now
-                    possible_overloads.push_back(&overload);
+                    // we cannot do type-based overload resolution as of now
+
+                    // if the namespace the name expression occurred in is different from the namespace
+                    // in which we found the function overload, then the lookup is only valid if the function
+                    // has been exported
+                    fmt::print(
+                            stderr, "{}:, surrounding namespace: {}, namespace qualifier: {}, is exported: {}\n",
+                            overload.definition->name.location.view(), name.surrounding_scope->surrounding_namespace,
+                            namespace_qualifier, overload.definition->export_token.has_value()
+                    );
+                    if (name.surrounding_scope->surrounding_namespace.starts_with(namespace_qualifier) or
+                        overload.definition->is_exported()) {
+                        fmt::print(stderr, "\t=> adding overload\n");
+                        possible_overloads.push_back(&overload);
+                    } else {
+                        fmt::print(stderr, "\t=> not adding overload\n");
+                    }
                 }
             }
 
@@ -67,10 +89,15 @@ namespace ScopeGenerator {
             const auto global_name_qualifier = get_absolute_namespace_qualifier(name);
             for (const auto& overload : function.overloads) {
                 if (overload.namespace_name == global_name_qualifier) {
+                    // we found a possible overload!
+
                     // we cannot determine the return type of the function here because
-                    // we cannot do overload resolution as of now
+                    // we cannot do type-based overload resolution as of now
                     if (is_global_lookup_fallback) {
-                        possible_overloads.push_back(&overload);
+                        // during fall-back, only exported functions are valid
+                        if (overload.definition->is_exported()) {
+                            possible_overloads.push_back(&overload);
+                        }
                     } else if (not inside_global_namespace) {
                         Error::warning(
                                 name.name_tokens.back(),
@@ -417,6 +444,13 @@ namespace ScopeGenerator {
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using namespace std::string_literals;
             using std::ranges::find_if;
+
+            if (function_definition->export_token.has_value() and function_definition->namespace_name == "::") {
+                Error::error(
+                        *(function_definition->export_token),
+                        "exporting functions from the global namespace is not allowed"
+                );
+            }
 
             auto identifier = function_definition->name.location.view();
             auto find_iterator = find_if(*global_scope, [&](const auto& pair) { return pair.first == identifier; });

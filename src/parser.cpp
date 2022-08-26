@@ -48,7 +48,7 @@ namespace Parser {
             while (not end_of_file()) {
                 if (current_is<Namespace>()) {
                     concatenate_programs(program, parse_namespace());
-                } else if (current_is<Function>()) {
+                } else if (current_is<Function>() or (current_is<Export>() and peek_is<Function>())) {
                     program.push_back(function_definition());
                 } else if (current_is<Import>()) {
                     Error::error(current(), "imports must precede all other top level statements of a source file");
@@ -192,6 +192,9 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<FunctionDefinition> function_definition() {
+            assert(current_is<Function>() or (current_is<Export>() and peek_is<Function>()));
+            const std::optional<Export> export_token =
+                    current_is<Export>() ? consume<Export>() : decltype(export_token){};
             assert(current_is<Function>());
             advance();
             const auto name = consume<Identifier>("expected function name");
@@ -234,6 +237,7 @@ namespace Parser {
                     .name{ name },
                     .parameters{ std::move(parameters) },
                     .return_type_definition{ std::move(return_type_definition) },
+                    .export_token{ export_token },
                     .return_type{},
                     .body{ std::move(body) },
                     .namespace_name{ std::move(namespace_name) } });

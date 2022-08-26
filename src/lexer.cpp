@@ -344,6 +344,7 @@ private:
             KEYWORD("goto", Goto)
             KEYWORD("nothing", NothingLiteral)
             KEYWORD("Function", CapitalizedFunction)
+            KEYWORD("export", Export)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

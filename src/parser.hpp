@@ -413,6 +413,7 @@ namespace Parser {
         Identifier name;
         ParameterList parameters;
         std::unique_ptr<DataType> return_type_definition;
+        std::optional<Export> export_token{};
         const DataType* return_type{ nullptr };
         Statements::Block body;
         FunctionOverload* corresponding_symbol{ nullptr };
@@ -421,6 +422,10 @@ namespace Parser {
         std::vector<Statements::LabelDefinition*> contained_labels{};
         std::optional<usize> occupied_stack_space{};  // total size of the needed stack space (in bytes)
         std::optional<usize> parameters_stack_space{};// size of all parameters (in bytes)
+
+        [[nodiscard]] bool is_exported() const {
+            return export_token.has_value();
+        }
     };
 
     struct ImportStatement {
