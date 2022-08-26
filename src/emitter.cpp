@@ -183,8 +183,18 @@ namespace Emitter {
 
             emit(fmt::format("add R0, {}, R1", offset),
                  fmt::format("calculate address of variable \"{}\"", variable_name));
-            emit("copy *R1, R2", fmt::format("load value of variable \"{}\" into R2", variable_name));
-            emit("push R2", fmt::format("push value of variable \"{}\" onto the stack", variable_name));
+
+            const auto size = expression.data_type->size();
+            assert(size % 4 == 0);
+            const auto num_words = size / 4;
+            assembly += fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name);
+            for (usize i = 0; i < num_words; ++i) {
+                emit("copy *R1, R2");
+                emit("push R2");
+                if (i < num_words - 1) {
+                    emit("add R1, 4, R1");
+                }
+            }
         }
 
         void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
@@ -312,7 +322,16 @@ namespace Emitter {
             emit("jump R1", "call the function");
             emit_label(call_return_label, "this is where the control flow returns to after the function call");
             emit("pop", "pop the callee address off of the stack");
-            emit("push R1", "push the return value of the called function");
+
+            const auto size = expression.data_type->size();
+            assert(size % 4 == 0);
+            const auto num_words = size / 4;
+
+            assert(num_words <= 1 and "not implemented");
+            if (num_words == 1) {
+                assembly += "\t// push the return value of the called function\n";
+                emit("push R1");
+            }
         }
 
         void visit(Assignment& expression) override {
@@ -323,19 +342,45 @@ namespace Emitter {
             assert(assignee->variable_symbol.has_value() and "there must be a pointer to the corresponding symbol");
             const auto offset = assignee->variable_symbol.value()->offset.value();
 
-            expression.value->accept(*this);// puts value to assign onto stack
-            emit("pop R2", "get value of right side of assignment");
-            emit(fmt::format("add R0, {}, R1 ", offset), "get target address of assignment");
-            emit("copy R2, *R1", "store value at target address");
-            emit("push R2", "push value of assignment expression");
+            // get the size of the variable in words
+            const auto size = expression.data_type->size();
+            assert(size % 4 == 0);
+            const auto num_words = size / 4;
+
+            if (num_words > 0) {
+                // we only emit code if there is any actual data to copy
+                assembly += "\t// evaluate the right-hand-side of the assignment (put the value onto the stack)\n";
+                expression.value->accept(*this);// puts value to assign onto stack
+
+                emit(fmt::format("add R0, {}, R1 ", offset + num_words - 1),
+                     "get the address of the least significant byte of the assignment target");
+                assembly += "\t// store the value at the target address\n";
+                for (usize i = 0; i < num_words; ++i) {
+                    emit("pop R2");
+                    emit("copy R2, *R1");
+                    if (i < num_words - 1) {
+                        emit("sub R1, 4, R1");
+                    }
+                }
+
+                // Since assignments are expressions, they have a resulting value. We have to push
+                // the value onto the stack.
+                // (this obviously could be optimized)
+                assembly += "\t// push the value of the assignment expression onto the stack\n";
+                emit(fmt::format("add R0, {}, R1 ", offset),
+                     "get the address of the most significant byte of the assignment target");
+                for (usize i = 0; i < num_words; ++i) {
+                    emit("copy *R1, R2");
+                    emit("push R2");
+                    if (i < num_words - 1) {
+                        emit("add R1, 4, R1");
+                    }
+                }
+            }
         }
 
         void visit(Nothing&) override {
-            // every expression must have a value, and therefore we have to push something
-            // onto the stack, even though a "Nothing"-expression doesn't *really* have a
-            // value
-            emit("copy 42, R1");
-            emit("push R1", "push some value for the \"Nothing\"-literal");
+            // we do not push anything onto the stack, since this data type has a size of 0 bytes
         }
 
         void visit(Block& statement) override {
@@ -481,8 +526,21 @@ namespace Emitter {
             statement.initial_value->accept(*this);// initial value is evaluated and pushed
             emit(fmt::format("add R0, {}, R1", offset),
                  fmt::format("calculate address for variable {}", statement.name.location.view()));
-            emit("pop R2", "get initial value of variable");
-            emit("copy R2, *R1", "store initial value in stack");
+
+            assembly += "\t// get initial value of variable\n";
+            const auto size = statement.initial_value->data_type->size();
+            assert(size % 4 == 0);
+            const auto num_words = size / 4;
+            for (usize i = 0; i < num_words; ++i) {
+                emit(fmt::format("pop R{}", i + 2));
+            }
+            assembly += "\t// store initial value of variable in the stack\n";
+            for (usize i = 0; i < num_words; ++i) {
+                emit(fmt::format("copy R{}, *R1", i + 2));
+                if (i < num_words - 1) {
+                    emit("add R1, 4, R1");
+                }
+            }
         }
 
         void visit(Parser::Statements::InlineAssembly& statement) override {
@@ -497,7 +555,13 @@ namespace Emitter {
 
         void visit(ExpressionStatement& statement) override {
             statement.expression->accept(*this);
-            emit("pop R1", "discard value of expression statement");
+            const auto size = statement.expression->data_type->size();
+            assert(size % 4 == 0);
+            const auto num_words = size / 4;
+            assembly += "\t// discard value of expression statement\n";
+            for (usize i = 0; i < num_words; ++i) {
+                emit("pop");
+            }
         }
 
         void visit(LabelDefinition& statement) override {
