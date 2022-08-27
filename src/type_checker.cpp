@@ -100,15 +100,21 @@ namespace TypeChecker {
         return nullptr;
     }
 
-    [[nodiscard]] const DataType*
-    get_resulting_data_type_for_pointers(const PointerType* lhs, const Token& token, const PointerType* rhs) {
+    [[nodiscard]] const DataType* get_resulting_data_type_for_pointers(
+            const PointerType* lhs,
+            const Token& token,
+            const PointerType* rhs,
+            TypeContainer& type_container
+    ) {
         using namespace Lexer::Tokens;
-        if (lhs->contained != rhs->contained or
-            (lhs->binding_mutability == Mutability::Mutable and rhs->binding_mutability == Mutability::Const)) {
-            // pointers point to different data types or mutability is invalid
+        if (lhs->contained != rhs->contained) {
             return nullptr;
         }
-        if (is<Equals>(token)) {
+        if (is_one_of<EqualsEquals, ExclamationEquals, GreaterThan, GreaterOrEquals, LessThan, LessOrEquals>(token)) {
+            return type_container.get_bool();
+        }
+        if (is<Equals>(token) and
+            (lhs->binding_mutability == Mutability::Const or rhs->binding_mutability == Mutability::Mutable)) {
             return lhs;
         }
         return nullptr;
@@ -142,7 +148,7 @@ namespace TypeChecker {
         const auto first_pointer = dynamic_cast<const PointerType*>(lhs); // maybe nullptr
         const auto second_pointer = dynamic_cast<const PointerType*>(rhs);// maybe nullptr
         if (first_pointer != nullptr and second_pointer != nullptr) {
-            return get_resulting_data_type_for_pointers(first_pointer, token, second_pointer);
+            return get_resulting_data_type_for_pointers(first_pointer, token, second_pointer, type_container);
         } else if (first_pointer != nullptr or second_pointer != nullptr) {
             return nullptr;
         }
