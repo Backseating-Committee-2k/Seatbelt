@@ -278,8 +278,7 @@ namespace Parser {
         struct Char;
         struct Bool;
         struct Name;
-        struct UnaryPrefixOperator;
-        struct UnaryPostfixOperator;
+        struct UnaryOperator;
         struct BinaryOperator;
         struct FunctionCall;
         struct Assignment;
@@ -290,8 +289,7 @@ namespace Parser {
             virtual void visit(Char& expression) = 0;
             virtual void visit(Bool& expression) = 0;
             virtual void visit(Name& expression) = 0;
-            virtual void visit(UnaryPrefixOperator& expression) = 0;
-            virtual void visit(UnaryPostfixOperator& expression) = 0;
+            virtual void visit(UnaryOperator& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
             virtual void visit(Assignment& expression) = 0;
@@ -345,22 +343,13 @@ namespace Parser {
             std::optional<const VariableSymbol*> variable_symbol{};
         };
 
-        struct UnaryPrefixOperator : public ExpressionAcceptor<UnaryPrefixOperator> {
-            UnaryPrefixOperator(Token operator_token, std::unique_ptr<Expression> operand)
+        struct UnaryOperator : public ExpressionAcceptor<UnaryOperator> {
+            UnaryOperator(Token operator_token, std::unique_ptr<Expression> operand)
                 : operator_token{ operator_token },
                   operand{ std::move(operand) } { }
 
             Token operator_token;
             std::unique_ptr<Expression> operand;
-        };
-
-        struct UnaryPostfixOperator : public ExpressionAcceptor<UnaryPostfixOperator> {
-            UnaryPostfixOperator(std::unique_ptr<Expression> operand, Token operator_token)
-                : operand{ std::move(operand) },
-                  operator_token{ operator_token } { }
-
-            std::unique_ptr<Expression> operand;
-            Token operator_token;
         };
 
         struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {

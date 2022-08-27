@@ -450,7 +450,7 @@ namespace TypeChecker {
             }
         }
 
-        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+        void visit(Parser::Expressions::UnaryOperator& expression) override {
             expression.operand->accept(*this);
             const auto operand_type = expression.operand->data_type;
             if (is<Lexer::Tokens::Not>(expression.operator_token)) {
@@ -467,10 +467,6 @@ namespace TypeChecker {
             } else {
                 assert(false and "not implemented");
             }
-        }
-
-        void visit(Parser::Expressions::UnaryPostfixOperator&) override {
-            assert(false and "not implemented");
         }
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {

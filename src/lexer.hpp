@@ -71,7 +71,9 @@
     x(Goto) \
     x(NothingLiteral) \
     x(CapitalizedFunction) \
-    x(Export)
+    x(Export) \
+    x(At) \
+    x(ExclamationMark)
 
 // clang-format on
 

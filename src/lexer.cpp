@@ -53,6 +53,8 @@ public:
                 SINGLE_CHAR_TOKEN('{', LeftCurlyBracket)
                 SINGLE_CHAR_TOKEN('}', RightCurlyBracket)
                 SINGLE_CHAR_TOKEN(',', Comma)
+                SINGLE_CHAR_TOKEN('@', At)
+                SINGLE_CHAR_TOKEN('!', ExclamationMark)
                 case '>':
                     token_length = greater_than(tokens);
                     break;

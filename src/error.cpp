@@ -85,12 +85,8 @@ struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
         token = expression.name_tokens.front();
     }
 
-    void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+    void visit(Parser::Expressions::UnaryOperator& expression) override {
         token = expression.operator_token;
-    }
-
-    void visit(Parser::Expressions::UnaryPostfixOperator& expression) override {
-        expression.operand->accept(*this);
     }
 
     void visit(Parser::Expressions::BinaryOperator& expression) override {

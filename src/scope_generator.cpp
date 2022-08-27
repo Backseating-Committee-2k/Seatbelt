@@ -278,12 +278,7 @@ namespace ScopeGenerator {
             Error::error(identifier_token, "use of undeclared identifier");
         }
 
-        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
-            expression.operand->accept(*this);
-            expression.surrounding_scope = scope;
-        }
-
-        void visit(Parser::Expressions::UnaryPostfixOperator& expression) override {
+        void visit(Parser::Expressions::UnaryOperator& expression) override {
             expression.operand->accept(*this);
             expression.surrounding_scope = scope;
         }
@@ -413,8 +408,7 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::Char&) override { }
         void visit(Parser::Expressions::Bool&) override { }
         void visit(Parser::Expressions::Name&) override { }
-        void visit(Parser::Expressions::UnaryPrefixOperator&) override { }
-        void visit(Parser::Expressions::UnaryPostfixOperator&) override { }
+        void visit(Parser::Expressions::UnaryOperator&) override { }
         void visit(Parser::Expressions::BinaryOperator&) override { }
         void visit(Parser::Expressions::FunctionCall&) override { }
         void visit(Parser::Expressions::Assignment&) override { }

@@ -126,14 +126,19 @@ namespace Parser {
         // When called without any arguments, this overload is chosen. Since there are no precedence groups left over,
         // we just pass on the call to the expression with the next higher precedence.
         [[nodiscard]] std::unique_ptr<Expression> binary_operator() {
-            return unary_not();
+            return unary_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> unary_not() {
+        [[nodiscard]] std::unique_ptr<Expression> unary_operator() {
             if (current_is<Not>()) {
                 const auto not_token = current();
                 advance();
-                return std::make_unique<Expressions::UnaryPrefixOperator>(not_token, unary_not());
+                return std::make_unique<Expressions::UnaryOperator>(not_token, unary_operator());
+            }
+            if (current_is<At>()) {
+                const auto at_token = current();
+                advance();
+                return std::make_unique<Expressions::UnaryOperator>(at_token, unary_operator());
             }
             return function_call();
         }

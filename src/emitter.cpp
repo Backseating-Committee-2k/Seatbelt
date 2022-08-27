@@ -197,7 +197,7 @@ namespace Emitter {
             }
         }
 
-        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+        void visit(Parser::Expressions::UnaryOperator& expression) override {
             expression.operand->accept(*this);
             if (is<Not>(expression.operator_token)) {
                 assert(*(expression.data_type) == *(type_container->get_bool()) and "type checker should've caught this"
@@ -211,10 +211,6 @@ namespace Emitter {
             } else {
                 assert(false and "not implemented");
             }
-        }
-
-        void visit(Parser::Expressions::UnaryPostfixOperator&) override {
-            assert(false and "not implemented");
         }
 
         void visit(BinaryOperator& expression) override {
