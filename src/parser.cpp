@@ -140,24 +140,13 @@ namespace Parser {
                 advance();
                 return std::make_unique<Expressions::UnaryOperator>(at_token, right_associative_unary_operator());
             }
-            return dereferencing();
-        }
-
-        [[nodiscard]] std::unique_ptr<Expression> dereferencing() {
-            auto accumulator = function_call();
-            while (current_is<ExclamationMark>()) {
-                const auto exclamation_mark_token = current();
-                advance();
-                accumulator =
-                        std::make_unique<Expressions::UnaryOperator>(exclamation_mark_token, std::move(accumulator));
-            }
-            return accumulator;
+            return function_call();
         }
 
         [[nodiscard]] std::unique_ptr<Expression> function_call() {
             using Expressions::FunctionCall;
 
-            auto accumulator = this->primary();
+            auto accumulator = dereferencing();
             while (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
                 std::vector<std::unique_ptr<Expression>> arguments;
                 while (not end_of_file() and not current_is<RightParenthesis>()) {
@@ -169,6 +158,17 @@ namespace Parser {
                 consume<RightParenthesis>("expected \")\" at end of parameter list");
                 accumulator =
                         std::make_unique<FunctionCall>(std::move(accumulator), *left_parenthesis, std::move(arguments));
+            }
+            return accumulator;
+        }
+
+        [[nodiscard]] std::unique_ptr<Expression> dereferencing() {
+            auto accumulator = primary();
+            while (current_is<ExclamationMark>()) {
+                const auto exclamation_mark_token = current();
+                advance();
+                accumulator =
+                        std::make_unique<Expressions::UnaryOperator>(exclamation_mark_token, std::move(accumulator));
             }
             return accumulator;
         }
