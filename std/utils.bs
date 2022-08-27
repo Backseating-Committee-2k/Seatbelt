@@ -1,0 +1,9 @@
+namespace std {
+
+    function swap(lhs: ->mutable U32, rhs: ->mutable U32) {
+        let temp: U32 = !lhs;
+        !lhs = !rhs;
+        !rhs = temp;
+    }
+
+}
