@@ -270,6 +270,8 @@ namespace Emitter {
                                        R"(store lhs for {}-operator in R2)",
                                        Error::token_location(expression.operator_token).view()
                                ));
+                assert(expression.lhs->data_type == type_container->get_bool());
+                assert(expression.rhs->data_type == type_container->get_bool());
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
                 const auto after_push = label_generator->next_label("after_push");
                 emit(fmt::format("jump {}", after_push));
@@ -296,6 +298,8 @@ namespace Emitter {
                                        R"(store lhs for {}-operator in R2)",
                                        Error::token_location(expression.operator_token).view()
                                ));
+                assert(expression.lhs->data_type == type_container->get_bool());
+                assert(expression.rhs->data_type == type_container->get_bool());
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
                 const auto after_push = label_generator->next_label("after_push");
                 emit(fmt::format("jump {}", after_push));
@@ -314,7 +318,39 @@ namespace Emitter {
                                        Error::token_location(expression.operator_token).view()
                                ));
 
+                const auto either_is_a_pointer = (expression.lhs->data_type == type_container->get_u32() and
+                                                  expression.rhs->data_type->is_pointer_type()) or
+                                                 (expression.lhs->data_type->is_pointer_type() and
+                                                  expression.rhs->data_type == type_container->get_u32());
+                const auto both_are_pointers =
+                        (expression.lhs->data_type->is_pointer_type() and expression.rhs->data_type->is_pointer_type());
+
+                if (either_is_a_pointer) {
+                    // one operand is a pointer, the other is a U32
+                    const auto first_is_pointer = expression.lhs->data_type->is_pointer_type();
+                    const auto& pointer = first_is_pointer ? expression.lhs : expression.rhs;
+                    const auto pointer_type = dynamic_cast<const PointerType*>(pointer->data_type);
+                    assert(pointer_type != nullptr);
+                    assert(is<Plus>(expression.operator_token) or first_is_pointer);
+                    const auto size = pointer_type->contained->size();
+                    const std::string_view number_register = (first_is_pointer ? "R2" : "R1");
+                    emit(fmt::format("copy {}, R4", size),
+                         fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string()));
+                    emit(fmt::format("mult {}, R4, R3, {}", number_register, number_register),
+                         "multiply operand with size");
+                }
+
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
+
+                if (both_are_pointers and is<Minus>(expression.operator_token)) {
+                    const auto pointer_type = dynamic_cast<const PointerType*>(expression.lhs->data_type);
+                    assert(pointer_type != nullptr and "this must be a pointer type");
+                    const auto size = pointer_type->contained->size();
+                    emit(fmt::format("copy {}, R5", size),
+                         fmt::format("get the size of the data type \"{}\"", pointer_type->to_string()));
+                    emit(fmt::format("divmod R3, R5, R3, R4", size),
+                         "divide the result of pointer subtraction by the size of the data type");
+                }
             }
             emit("push R3", "push result onto stack");
         }

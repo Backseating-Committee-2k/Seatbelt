@@ -117,6 +117,9 @@ namespace TypeChecker {
             (lhs->binding_mutability == Mutability::Const or rhs->binding_mutability == Mutability::Mutable)) {
             return lhs;
         }
+        if (is<Minus>(token)) {
+            return type_container.get_u32();// TODO: this should be a unique data type (e. g. "Distance")
+        }
         return nullptr;
     }
 
@@ -149,8 +152,6 @@ namespace TypeChecker {
         const auto second_pointer = dynamic_cast<const PointerType*>(rhs);// maybe nullptr
         if (first_pointer != nullptr and second_pointer != nullptr) {
             return get_resulting_data_type_for_pointers(first_pointer, token, second_pointer, type_container);
-        } else if (first_pointer != nullptr or second_pointer != nullptr) {
-            return nullptr;
         }
 
         // the following array represents the concrete data types ignoring their mutability
@@ -174,6 +175,17 @@ namespace TypeChecker {
                 return nullptr;
             }
             return rhs;
+        }
+        if (is_one_of<Plus, Minus>(token) and (first_pointer or second_pointer)) {
+            // pointer arithmetics
+            if (concrete_types[0].has_value() and *concrete_types[0] == U32Identifier) {
+                if (is<Plus>(token)) {
+                    return second_pointer;
+                }
+            }
+            if (concrete_types[1].has_value() and *concrete_types[1] == U32Identifier) {
+                return first_pointer;
+            }
         }
         if (is_one_of<Plus, Minus, Asterisk, ForwardSlash, Mod>(token)) {
             if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
