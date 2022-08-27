@@ -126,21 +126,32 @@ namespace Parser {
         // When called without any arguments, this overload is chosen. Since there are no precedence groups left over,
         // we just pass on the call to the expression with the next higher precedence.
         [[nodiscard]] std::unique_ptr<Expression> binary_operator() {
-            return unary_operator();
+            return right_associative_unary_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> unary_operator() {
+        [[nodiscard]] std::unique_ptr<Expression> right_associative_unary_operator() {
             if (current_is<Not>()) {
                 const auto not_token = current();
                 advance();
-                return std::make_unique<Expressions::UnaryOperator>(not_token, unary_operator());
+                return std::make_unique<Expressions::UnaryOperator>(not_token, right_associative_unary_operator());
             }
             if (current_is<At>()) {
                 const auto at_token = current();
                 advance();
-                return std::make_unique<Expressions::UnaryOperator>(at_token, unary_operator());
+                return std::make_unique<Expressions::UnaryOperator>(at_token, right_associative_unary_operator());
             }
-            return function_call();
+            return dereferencing();
+        }
+
+        [[nodiscard]] std::unique_ptr<Expression> dereferencing() {
+            auto accumulator = function_call();
+            while (current_is<ExclamationMark>()) {
+                const auto exclamation_mark_token = current();
+                advance();
+                accumulator =
+                        std::make_unique<Expressions::UnaryOperator>(exclamation_mark_token, std::move(accumulator));
+            }
+            return accumulator;
         }
 
         [[nodiscard]] std::unique_ptr<Expression> function_call() {

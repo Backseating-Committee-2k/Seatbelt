@@ -211,8 +211,7 @@ namespace Emitter {
         void visit(Parser::Expressions::UnaryOperator& expression) override {
             expression.operand->accept(*this);
             if (is<Not>(expression.operator_token)) {
-                assert(*(expression.data_type) == *(type_container->get_bool()) and "type checker should've caught this"
-                );
+                assert(expression.data_type == type_container->get_bool() and "type checker should've caught this");
                 // we can assume that the value on the stack is 0 or 1 (representing false or true)
                 // we have to flip the least significant bit to invert the truth value
                 emit("pop R1", "get value of operand for logical not operation");
@@ -222,18 +221,26 @@ namespace Emitter {
             } else if (is<At>(expression.operator_token)) {
                 // we do not have to do anything, since the operand is guaranteed to be an lvalue and therefore
                 // puts its address onto the stack upon being evaluated
-
-                /*const auto name_expression = dynamic_cast<const Name*>(expression.operand.get());
-                assert(name_expression != nullptr and "we only can get the address of a name");
-                assert(name_expression->variable_symbol.has_value() and "this must be a variable to get the address");
-                assert((*(name_expression->variable_symbol))->offset.has_value() and "offset must be known");
-
-                const auto offset = *((*(name_expression->variable_symbol))->offset);
-
-                // we now calculate the address of this variable and push this address (not the actual value!) onto
-                // the stack
-                emit(fmt::format("add R0, {}, R1", offset), "calculate the address of the operand of the @-operator");
-                emit("push R1", "push address onto the stack");*/
+            } else if (is<ExclamationMark>(expression.operator_token)) {
+                // we have to act differently based on if the result of the dereferencing operation should be used
+                // as an lvalue or as an rvalue
+                if (expression.is_lvalue()) {
+                    // lvalue: evaluating the operand already yielded the contained address, nothing to do here
+                } else {
+                    // rvalue: evaluating the operand yielded the address which we now have to dereference
+                    emit("pop R1", "get address to dereference");
+                    const auto num_words = expression.data_type->num_words();
+                    if (num_words > 0) {
+                        assembly += "\t// push the dereferenced value onto the stack\n";
+                        for (usize i = 0; i < num_words; ++i) {
+                            emit("copy *R1, R2");
+                            emit("push R2");
+                            if (i < num_words - 1) {
+                                emit("add R1, 4, R1");
+                            }
+                        }
+                    }
+                }
             } else {
                 assert(false and "not implemented");
             }

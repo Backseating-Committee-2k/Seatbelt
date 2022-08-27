@@ -103,8 +103,9 @@ namespace TypeChecker {
     [[nodiscard]] const DataType*
     get_resulting_data_type_for_pointers(const PointerType* lhs, const Token& token, const PointerType* rhs) {
         using namespace Lexer::Tokens;
-        if (lhs->contained != rhs->contained) {
-            // pointers point to different data types
+        if (lhs->contained != rhs->contained or
+            (lhs->binding_mutability == Mutability::Mutable and rhs->binding_mutability == Mutability::Const)) {
+            // pointers point to different data types or mutability is invalid
             return nullptr;
         }
         if (is<Equals>(token)) {
@@ -139,7 +140,7 @@ namespace TypeChecker {
         const auto same_type = (lhs == rhs);
 
         const auto first_pointer = dynamic_cast<const PointerType*>(lhs); // maybe nullptr
-        const auto second_pointer = dynamic_cast<const PointerType*>(lhs);// maybe nullptr
+        const auto second_pointer = dynamic_cast<const PointerType*>(rhs);// maybe nullptr
         if (first_pointer != nullptr and second_pointer != nullptr) {
             return get_resulting_data_type_for_pointers(first_pointer, token, second_pointer);
         } else if (first_pointer != nullptr or second_pointer != nullptr) {
@@ -352,8 +353,7 @@ namespace TypeChecker {
 
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
-            // get the mutable version of the assignee type (if it is not mutable already)
-            DataType const* const assignee_type = statement.type;
+            const DataType* const assignee_type = statement.type;
 
             // type checking rules are the same as if we would do type checking during an assignment
             const auto resulting_type = get_resulting_data_type(
@@ -524,6 +524,25 @@ namespace TypeChecker {
                                                                                     : Mutability::Const);
                 expression.data_type = type_container->pointer_to(expression.operand->data_type, binding_mutability);
                 expression.value_type = ValueType::RValue;
+            } else if (is<Lexer::Tokens::ExclamationMark>(expression.operator_token)) {
+                // the operand is required to be an rvalue
+                expression.operand->value_type = ValueType::RValue;
+                if (not expression.operand->data_type->is_pointer_type()) {
+                    Error::error(
+                            expression.operator_token,
+                            fmt::format(
+                                    "only pointer types can be dereferenced (found type \"{}\")",
+                                    expression.operand->data_type->to_string()
+                            )
+                    );
+                }
+                const auto pointer_type = dynamic_cast<const PointerType*>(expression.operand->data_type);
+                assert(pointer_type != nullptr and "we checked before that this is a pointer");
+                expression.data_type = pointer_type->contained;
+                // dereferencing a pointer yields an lvalue
+                expression.value_type =
+                        (pointer_type->binding_mutability == Mutability::Mutable ? ValueType::MutableLValue
+                                                                                 : ValueType::ConstLValue);
             } else {
                 assert(false and "not implemented");
             }
@@ -651,7 +670,10 @@ namespace TypeChecker {
                     }
                 }
                 if (not overload_found) {
-                    Error::error(name_token, fmt::format("no matching function overload found", identifier));
+                    Error::error(
+                            name_token,
+                            fmt::format("no matching function overload found with signature \"{}\"", signature)
+                    );
                 }
                 // erase all possible overloads with the wrong signature
                 possible_overloads.erase(

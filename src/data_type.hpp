@@ -30,6 +30,23 @@ public:
     virtual bool operator==(const DataType& other) const = 0;
     [[nodiscard]] virtual std::string to_string() const = 0;
     [[nodiscard]] virtual usize size() const = 0;
+
+    [[nodiscard]] virtual usize num_words() const {
+        assert(size() % 4 == 0);
+        return size() / 4;
+    }
+
+    [[nodiscard]] virtual bool is_concrete_type() const {
+        return false;
+    }
+
+    [[nodiscard]] virtual bool is_pointer_type() const {
+        return false;
+    }
+
+    [[nodiscard]] virtual bool is_function_pointer_type() const {
+        return false;
+    }
 };
 
 struct ConcreteType final : public DataType {
@@ -56,6 +73,10 @@ struct ConcreteType final : public DataType {
         }
     }
 
+    [[nodiscard]] bool is_concrete_type() const override {
+        return true;
+    }
+
     std::string_view name;
 };
 
@@ -79,6 +100,10 @@ struct PointerType final : public DataType {
 
     [[nodiscard]] usize size() const override {
         return 4;
+    }
+
+    [[nodiscard]] bool is_pointer_type() const override {
+        return true;
     }
 
     const DataType* contained;
@@ -116,6 +141,10 @@ struct FunctionPointerType final : public DataType {
 
     [[nodiscard]] usize size() const override {
         return 4;
+    }
+
+    [[nodiscard]] bool is_function_pointer_type() const override {
+        return true;
     }
 
     std::vector<const DataType*> parameter_types;
