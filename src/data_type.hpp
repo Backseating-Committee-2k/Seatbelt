@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "mutability.hpp"
 #include "type_container.hpp"
 #include "types.hpp"
 #include <cassert>
@@ -21,19 +22,6 @@ static constexpr std::string_view CharIdentifier{ "Char" };
 static constexpr std::string_view BoolIdentifier{ "Bool" };
 static constexpr std::string_view NothingIdentifier{ "Nothing" };
 static constexpr std::string_view FunctionPointerKeyword{ "Function" };
-
-enum class Mutability {
-    Mutable,
-    Const,
-};
-
-[[nodiscard]] inline bool is_const(const Mutability mutability) {
-    return mutability == Mutability::Const;
-}
-
-[[nodiscard]] inline bool is_mutable(const Mutability mutability) {
-    return mutability == Mutability::Mutable;
-}
 
 struct DataType {
 public:

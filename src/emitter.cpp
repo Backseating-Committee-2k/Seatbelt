@@ -177,6 +177,8 @@ namespace Emitter {
             }
             assert(expression.variable_symbol.has_value() and "if this is not a function, it has to be a variable");
 
+            // we know, we have a variable
+
             const auto offset = expression.variable_symbol.value()->offset.value();
             const auto& variable_token = expression.name_tokens.back();
             const auto variable_name = Error::token_location(variable_token).view();
@@ -184,15 +186,24 @@ namespace Emitter {
             emit(fmt::format("add R0, {}, R1", offset),
                  fmt::format("calculate address of variable \"{}\"", variable_name));
 
-            const auto size = expression.data_type->size();
-            assert(size % 4 == 0);
-            const auto num_words = size / 4;
-            assembly += fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name);
-            for (usize i = 0; i < num_words; ++i) {
-                emit("copy *R1, R2");
-                emit("push R2");
-                if (i < num_words - 1) {
-                    emit("add R1, 4, R1");
+            // If the variable is used as an lvalue, we have to push its address onto the stack. Otherwise,
+            // we dereference the address and push the value.
+
+            if (expression.is_lvalue()) {
+                emit("push R1", "push the address of variable onto the stack");
+            } else {
+                // we have an rvalue
+                const auto size = expression.data_type->size();
+                assert(size % 4 == 0);
+                const auto num_words = size / 4;
+                assembly +=
+                        fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name);
+                for (usize i = 0; i < num_words; ++i) {
+                    emit("copy *R1, R2");
+                    emit("push R2");
+                    if (i < num_words - 1) {
+                        emit("add R1, 4, R1");
+                    }
                 }
             }
         }
@@ -208,6 +219,21 @@ namespace Emitter {
                 emit("copy 1, R3", "get constant 1");
                 emit("xor R1, R3, R1", "flip the truth value");
                 emit("push R1", "push the result of the logical not operation");
+            } else if (is<At>(expression.operator_token)) {
+                // we do not have to do anything, since the operand is guaranteed to be an lvalue and therefore
+                // puts its address onto the stack upon being evaluated
+
+                /*const auto name_expression = dynamic_cast<const Name*>(expression.operand.get());
+                assert(name_expression != nullptr and "we only can get the address of a name");
+                assert(name_expression->variable_symbol.has_value() and "this must be a variable to get the address");
+                assert((*(name_expression->variable_symbol))->offset.has_value() and "offset must be known");
+
+                const auto offset = *((*(name_expression->variable_symbol))->offset);
+
+                // we now calculate the address of this variable and push this address (not the actual value!) onto
+                // the stack
+                emit(fmt::format("add R0, {}, R1", offset), "calculate the address of the operand of the @-operator");
+                emit("push R1", "push address onto the stack");*/
             } else {
                 assert(false and "not implemented");
             }
@@ -331,12 +357,14 @@ namespace Emitter {
         }
 
         void visit(Assignment& expression) override {
+            assert(expression.assignee->is_lvalue());
+
             /* we cannot simply evaluate the assignee since that would only give us the
              * value of the left hand side, so this is a special case */
-            const auto assignee = dynamic_cast<const Name*>(expression.assignee.get());
+            /*const auto assignee = dynamic_cast<const Name*>(expression.assignee.get());
             assert(assignee and "assignee must be a name");
             assert(assignee->variable_symbol.has_value() and "there must be a pointer to the corresponding symbol");
-            const auto offset = assignee->variable_symbol.value()->offset.value();
+            const auto offset = assignee->variable_symbol.value()->offset.value();*/
 
             // get the size of the variable in words
             const auto size = expression.data_type->size();
@@ -348,8 +376,14 @@ namespace Emitter {
                 assembly += "\t// evaluate the right-hand-side of the assignment (put the value onto the stack)\n";
                 expression.value->accept(*this);// puts value to assign onto stack
 
-                emit(fmt::format("add R0, {}, R1 ", offset + num_words - 1),
-                     "get the address of the least significant byte of the assignment target");
+                expression.assignee->accept(*this);// this will put the address of the assignee onto the stack
+                emit("pop R1", "get address of assignee");
+
+                if (num_words > 1) {
+                    emit(fmt::format("add R1, {}, R1 ", num_words - 1),
+                         "get the address of the least significant byte of the assignment target");
+                }
+
                 assembly += "\t// store the value at the target address\n";
                 for (usize i = 0; i < num_words; ++i) {
                     emit("pop R2");
@@ -363,8 +397,6 @@ namespace Emitter {
                 // the value onto the stack.
                 // (this obviously could be optimized)
                 assembly += "\t// push the value of the assignment expression onto the stack\n";
-                emit(fmt::format("add R0, {}, R1 ", offset),
-                     "get the address of the most significant byte of the assignment target");
                 for (usize i = 0; i < num_words; ++i) {
                     emit("copy *R1, R2");
                     emit("push R2");

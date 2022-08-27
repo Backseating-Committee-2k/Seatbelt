@@ -70,7 +70,7 @@ add_executable(Seatbelt
         src/namespace.cpp
         src/return_type_checker.hpp
         src/return_type_checker.cpp
-        )
+        src/mutability.hpp)
 
 target_link_libraries(Seatbelt fmt ctre Arguably)
 

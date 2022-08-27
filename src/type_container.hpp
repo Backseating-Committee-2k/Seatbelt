@@ -5,6 +5,7 @@
 #pragma once
 
 #include "lexer.hpp"
+#include "mutability.hpp"
 #include <memory>
 #include <span>
 #include <vector>
@@ -18,6 +19,7 @@ public:
     [[nodiscard]] const DataType* from_type_definition(std::unique_ptr<DataType> data_type);
     void register_type(std::unique_ptr<DataType> data_type);
     [[nodiscard]] bool is_defined(const DataType& data_type) const;
+    [[nodiscard]] const DataType* pointer_to(const DataType* pointee_type, Mutability binding_mutability);
 
     [[nodiscard]] const DataType* get_u32() const;
     [[nodiscard]] const DataType* get_bool() const;

@@ -100,6 +100,19 @@ namespace TypeChecker {
         return nullptr;
     }
 
+    [[nodiscard]] const DataType*
+    get_resulting_data_type_for_pointers(const PointerType* lhs, const Token& token, const PointerType* rhs) {
+        using namespace Lexer::Tokens;
+        if (lhs->contained != rhs->contained) {
+            // pointers point to different data types
+            return nullptr;
+        }
+        if (is<Equals>(token)) {
+            return lhs;
+        }
+        return nullptr;
+    }
+
     [[nodiscard]] const DataType* get_resulting_data_type(
             const DataType* lhs,
             const Token& token,
@@ -120,9 +133,18 @@ namespace TypeChecker {
         } else if (first_function_pointer != nullptr or second_function_pointer != nullptr) {
             return nullptr;
         }
+
         // if neither operand is a function pointer, we evaluate the actual types
 
         const auto same_type = (lhs == rhs);
+
+        const auto first_pointer = dynamic_cast<const PointerType*>(lhs); // maybe nullptr
+        const auto second_pointer = dynamic_cast<const PointerType*>(lhs);// maybe nullptr
+        if (first_pointer != nullptr and second_pointer != nullptr) {
+            return get_resulting_data_type_for_pointers(first_pointer, token, second_pointer);
+        } else if (first_pointer != nullptr or second_pointer != nullptr) {
+            return nullptr;
+        }
 
         // the following array represents the concrete data types ignoring their mutability
         const auto concrete_types = std::array{ concrete_type(lhs), concrete_type(rhs) };
@@ -198,6 +220,9 @@ namespace TypeChecker {
 
         void visit(Parser::Statements::IfStatement& statement) override {
             statement.condition->accept(*this);
+            // condition must be an rvalue
+            statement.condition->value_type = ValueType::RValue;
+
             const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
             if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
                 Error::error(
@@ -222,6 +247,9 @@ namespace TypeChecker {
 
         void visit(Parser::Statements::WhileStatement& statement) override {
             statement.condition->accept(*this);
+            // condition must be an rvalue
+            statement.condition->value_type = ValueType::RValue;
+
             const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
             if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
                 Error::error(
@@ -238,6 +266,9 @@ namespace TypeChecker {
         void visit(Parser::Statements::DoWhileStatement& statement) override {
             statement.body.accept(*this);
             statement.condition->accept(*this);
+            // condition must be an rvalue
+            statement.condition->value_type = ValueType::RValue;
+
             const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
             if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
                 Error::error(
@@ -258,6 +289,9 @@ namespace TypeChecker {
             }
             if (statement.condition) {
                 statement.condition->accept(*this);
+                // condition must be an rvalue
+                statement.condition->value_type = ValueType::RValue;
+
                 const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
                 if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
                     Error::error(
@@ -271,6 +305,8 @@ namespace TypeChecker {
             }
             if (statement.increment) {
                 statement.increment->accept(*this);
+                // increment must be an rvalue
+                statement.increment->value_type = ValueType::RValue;
             }
             statement.body.accept(*this);
             offset = old_offset;
@@ -281,6 +317,8 @@ namespace TypeChecker {
             assert(surrounding_function->return_type and "return type must be known at this point");
             if (statement.return_value) {
                 statement.return_value->accept(*this);
+                // we can only return rvalues
+                statement.return_value->value_type = ValueType::RValue;
             }
             const auto return_value_type =
                     statement.return_value ? statement.return_value->data_type : type_container->get_nothing();
@@ -309,6 +347,9 @@ namespace TypeChecker {
             statement.variable_symbol->offset = claim_stack_space(statement.type->size());
 
             statement.initial_value->accept(*this);
+            // initial value must be an rvalue
+            statement.initial_value->value_type = ValueType::RValue;
+
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
             // get the mutable version of the assignee type (if it is not mutable already)
@@ -334,6 +375,8 @@ namespace TypeChecker {
 
         void visit(Parser::Statements::ExpressionStatement& statement) override {
             statement.expression->accept(*this);
+            // expression must be an rvalue
+            statement.expression->value_type = ValueType::RValue;
         }
 
         void visit(Parser::Statements::LabelDefinition&) override { }
@@ -377,48 +420,52 @@ namespace TypeChecker {
                     (base == 8 ? std::to_string(octal_to_decimal(digits_view)) : std::move(number_string));
 
             expression.data_type = type_container->get_u32();
+            expression.value_type = ValueType::RValue;
         }
 
         void visit(Parser::Expressions::Char& expression) override {
             expression.data_type = type_container->get_char();
+            expression.value_type = ValueType::RValue;
         }
 
         void visit(Parser::Expressions::Bool& expression) override {
             expression.data_type = type_container->get_bool();
+            expression.value_type = ValueType::RValue;
         }
 
         void visit(Parser::Expressions::Name& expression) override {
             using Parser::Statements::VariableDefinition;
             const auto is_variable = expression.variable_symbol.has_value();
+
             if (is_variable) {
+                // now we visit the definition that is the origin of this variable
+                const auto& definition = expression.variable_symbol.value()->definition;
                 expression.data_type = std::visit(
                         overloaded{ [&](const VariableDefinition* variable_definition) -> const DataType* {
                                        assert(variable_definition->type and "type must be known");
-                                       // the name is assignable if the variable definition has a mutable binding
-                                       expression.assignability =
+                                       expression.value_type =
                                                (variable_definition->binding_mutability == Mutability::Mutable
-                                                        ? Assignability::Assignable
-                                                        : Assignability::NotAssignable);
+                                                        ? ValueType::MutableLValue
+                                                        : ValueType::ConstLValue);
                                        return variable_definition->type;
                                    },
-                                    [&](const Parameter* parameter) -> const DataType* {
-                                        // the name is assignable if the parameter definition has a mutable binding
-                                        expression.assignability =
-                                                (parameter->binding_mutability == Mutability::Mutable
-                                                         ? Assignability::Assignable
-                                                         : Assignability::NotAssignable);
-                                        assert(parameter->type and "type must be known");
-                                        return parameter->type;
+                                    [&](const Parameter* parameter_definition) -> const DataType* {
+                                        assert(parameter_definition->type and "type must be known");
+                                        expression.value_type =
+                                                (parameter_definition->binding_mutability == Mutability::Mutable
+                                                         ? ValueType::MutableLValue
+                                                         : ValueType::ConstLValue);
+                                        return parameter_definition->type;
                                     },
                                     [](std::monostate) -> const DataType* {
                                         assert(false and "unreachable");
                                         return nullptr;
                                     } },
-                        expression.variable_symbol.value()->definition
+                        definition
                 );
             } else {
-                // it's impossible to assign something to a function
-                expression.assignability = Assignability::NotAssignable;
+                // a function always is an rvalue
+                expression.value_type = ValueType::RValue;
 
                 // only the last token of a qualified name is relevant for lookup
                 const auto& name_token = expression.name_tokens.back();
@@ -463,7 +510,20 @@ namespace TypeChecker {
                                                        )
                     );
                 }
+                // the operand is required to be an rvalue
+                expression.operand->value_type = ValueType::RValue;
+
                 expression.data_type = operand_type;
+                expression.value_type = ValueType::RValue;
+            } else if (is<Lexer::Tokens::At>(expression.operator_token)) {
+                if (not expression.operand->is_lvalue()) {
+                    Error::error(expression.operator_token, "lvalue required to take the address of this expression");
+                }
+                const auto binding_mutability =
+                        (expression.operand->value_type == ValueType::MutableLValue ? Mutability::Mutable
+                                                                                    : Mutability::Const);
+                expression.data_type = type_container->pointer_to(expression.operand->data_type, binding_mutability);
+                expression.value_type = ValueType::RValue;
             } else {
                 assert(false and "not implemented");
             }
@@ -473,8 +533,14 @@ namespace TypeChecker {
             using namespace Lexer::Tokens;
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
+
+            // both operands are required to be rvalues
+            expression.lhs->value_type = ValueType::RValue;
+            expression.rhs->value_type = ValueType::RValue;
+
             if (const auto resulting_type = get_resulting_data_type(expression, *type_container)) {
                 expression.data_type = resulting_type;
+                expression.value_type = ValueType::RValue;
                 return;
             }
             Error::error(
@@ -492,6 +558,9 @@ namespace TypeChecker {
 
             for (const auto& argument : expression.arguments) {
                 argument->accept(*this);
+
+                // all arguments must be rvalues
+                argument->value_type = ValueType::RValue;
             }
 
             const auto name = dynamic_cast<Parser::Expressions::Name*>(expression.callee.get());
@@ -502,6 +571,8 @@ namespace TypeChecker {
 
                 // first evaluate the callee - this is needed in either case
                 expression.callee->accept(*this);
+                // callee must be an rvalue
+                expression.callee->value_type = ValueType::RValue;
 
                 // this must be a function pointer
                 const auto function_pointer_type =
@@ -541,6 +612,7 @@ namespace TypeChecker {
                     }
                 }
                 expression.data_type = function_pointer_type->return_type;
+                expression.value_type = ValueType::RValue;
                 expression.function_to_call = FunctionPointerMarker{};
             } else {
                 auto& possible_overloads = name->possible_overloads.value();
@@ -593,6 +665,7 @@ namespace TypeChecker {
                 possible_overloads.erase(std::begin(possible_overloads) + 1, std::end(possible_overloads));
                 assert(possible_overloads.size() == 1);
                 expression.data_type = possible_overloads.front()->definition->return_type;
+                expression.value_type = ValueType::RValue;
                 assert(possible_overloads.front()->definition and "each overload must have a pointer to its definition"
                 );
                 expression.function_to_call = possible_overloads.front()->definition;
@@ -603,10 +676,18 @@ namespace TypeChecker {
             expression.assignee->accept(*this);
             expression.value->accept(*this);
 
-            // check if the left side is an LVALUE
-            if (expression.assignee->assignability != Assignability::Assignable) {
-                Error::error(expression.equals_token, "left-hand side of assignment is not assignable");
+            // check if the left side is an lvalue
+            if (not expression.assignee->is_lvalue()) {
+                Error::error(expression.equals_token, "left-hand side of assignment must be an lvalue");
             }
+
+            // check if the left side is mutable
+            if (expression.assignee->value_type != ValueType::MutableLValue) {
+                Error::error(expression.equals_token, "cannot assign to expression since assignee is immutable");
+            }
+
+            // The right side must be an rvalue
+            expression.value->value_type = ValueType::RValue;
 
             const auto resulting_data_type = get_resulting_data_type(
                     expression.assignee->data_type, expression.equals_token, expression.value->data_type,
@@ -614,6 +695,7 @@ namespace TypeChecker {
             );
             if (resulting_data_type != nullptr) {
                 expression.data_type = resulting_data_type;
+                expression.value_type = ValueType::RValue;
             } else {
                 Error::error(
                         expression.equals_token,
@@ -627,6 +709,7 @@ namespace TypeChecker {
 
         void visit(Parser::Expressions::Nothing& expression) override {
             expression.data_type = type_container->get_nothing();
+            expression.value_type = ValueType::RValue;
         }
 
         usize claim_stack_space(const usize size_of_type) {

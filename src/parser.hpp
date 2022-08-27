@@ -34,9 +34,10 @@ overloaded(Ts...) -> overloaded<Ts...>;
  */
 struct FunctionPointerMarker { };
 
-enum class Assignability {
-    Assignable,
-    NotAssignable,
+enum class ValueType {
+    MutableLValue,
+    ConstLValue,
+    RValue,
     Undetermined,
 };
 
@@ -304,7 +305,11 @@ namespace Parser {
 
             const DataType* data_type{ nullptr };
             const Scope* surrounding_scope{ nullptr };
-            Assignability assignability{ Assignability::Undetermined };
+            ValueType value_type{ ValueType::Undetermined };
+
+            [[nodiscard]] bool is_lvalue() const {
+                return value_type == ValueType::ConstLValue or value_type == ValueType::MutableLValue;
+            }
         };
 
         template<typename T>

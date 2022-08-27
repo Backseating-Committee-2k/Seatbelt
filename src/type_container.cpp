@@ -56,6 +56,10 @@ bool TypeContainer::is_defined(const DataType& data_type) const {
     return false;
 }
 
+[[nodiscard]] const DataType* TypeContainer::pointer_to(const DataType* pointee_type, Mutability binding_mutability) {
+    return from_type_definition(std::make_unique<PointerType>(pointee_type, binding_mutability));
+}
+
 const DataType* TypeContainer::find(const DataType& data_type) const {
     using std::ranges::find_if;
     const auto find_iterator = find_if(m_data_types, [&](const auto& other) { return data_type == *other; });
