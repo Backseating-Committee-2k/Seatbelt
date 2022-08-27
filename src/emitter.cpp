@@ -177,6 +177,8 @@ namespace Emitter {
             }
             assert(expression.variable_symbol.has_value() and "if this is not a function, it has to be a variable");
 
+            // we know, we have a variable
+
             const auto offset = expression.variable_symbol.value()->offset.value();
             const auto& variable_token = expression.name_tokens.back();
             const auto variable_name = Error::token_location(variable_token).view();
@@ -184,37 +186,64 @@ namespace Emitter {
             emit(fmt::format("add R0, {}, R1", offset),
                  fmt::format("calculate address of variable \"{}\"", variable_name));
 
-            const auto size = expression.data_type->size();
-            assert(size % 4 == 0);
-            const auto num_words = size / 4;
-            assembly += fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name);
-            for (usize i = 0; i < num_words; ++i) {
-                emit("copy *R1, R2");
-                emit("push R2");
-                if (i < num_words - 1) {
-                    emit("add R1, 4, R1");
+            // If the variable is used as an lvalue, we have to push its address onto the stack. Otherwise,
+            // we dereference the address and push the value.
+
+            if (expression.is_lvalue()) {
+                emit("push R1", "push the address of variable onto the stack");
+            } else {
+                // we have an rvalue
+                const auto size = expression.data_type->size();
+                assert(size % 4 == 0);
+                const auto num_words = size / 4;
+                assembly +=
+                        fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name);
+                for (usize i = 0; i < num_words; ++i) {
+                    emit("copy *R1, R2");
+                    emit("push R2");
+                    if (i < num_words - 1) {
+                        emit("add R1, 4, R1");
+                    }
                 }
             }
         }
 
-        void visit(Parser::Expressions::UnaryPrefixOperator& expression) override {
+        void visit(Parser::Expressions::UnaryOperator& expression) override {
             expression.operand->accept(*this);
             if (is<Not>(expression.operator_token)) {
-                assert(*(expression.data_type) == *(type_container->get_bool()) and "type checker should've caught this"
-                );
+                assert(expression.data_type == type_container->get_bool() and "type checker should've caught this");
                 // we can assume that the value on the stack is 0 or 1 (representing false or true)
                 // we have to flip the least significant bit to invert the truth value
                 emit("pop R1", "get value of operand for logical not operation");
                 emit("copy 1, R3", "get constant 1");
                 emit("xor R1, R3, R1", "flip the truth value");
                 emit("push R1", "push the result of the logical not operation");
+            } else if (is<At>(expression.operator_token)) {
+                // we do not have to do anything, since the operand is guaranteed to be an lvalue and therefore
+                // puts its address onto the stack upon being evaluated
+            } else if (is<ExclamationMark>(expression.operator_token)) {
+                // we have to act differently based on if the result of the dereferencing operation should be used
+                // as an lvalue or as an rvalue
+                if (expression.is_lvalue()) {
+                    // lvalue: evaluating the operand already yielded the contained address, nothing to do here
+                } else {
+                    // rvalue: evaluating the operand yielded the address which we now have to dereference
+                    emit("pop R1", "get address to dereference");
+                    const auto num_words = expression.data_type->num_words();
+                    if (num_words > 0) {
+                        assembly += "\t// push the dereferenced value onto the stack\n";
+                        for (usize i = 0; i < num_words; ++i) {
+                            emit("copy *R1, R2");
+                            emit("push R2");
+                            if (i < num_words - 1) {
+                                emit("add R1, 4, R1");
+                            }
+                        }
+                    }
+                }
             } else {
                 assert(false and "not implemented");
             }
-        }
-
-        void visit(Parser::Expressions::UnaryPostfixOperator&) override {
-            assert(false and "not implemented");
         }
 
         void visit(BinaryOperator& expression) override {
@@ -335,12 +364,14 @@ namespace Emitter {
         }
 
         void visit(Assignment& expression) override {
+            assert(expression.assignee->is_lvalue());
+
             /* we cannot simply evaluate the assignee since that would only give us the
              * value of the left hand side, so this is a special case */
-            const auto assignee = dynamic_cast<const Name*>(expression.assignee.get());
+            /*const auto assignee = dynamic_cast<const Name*>(expression.assignee.get());
             assert(assignee and "assignee must be a name");
             assert(assignee->variable_symbol.has_value() and "there must be a pointer to the corresponding symbol");
-            const auto offset = assignee->variable_symbol.value()->offset.value();
+            const auto offset = assignee->variable_symbol.value()->offset.value();*/
 
             // get the size of the variable in words
             const auto size = expression.data_type->size();
@@ -352,8 +383,14 @@ namespace Emitter {
                 assembly += "\t// evaluate the right-hand-side of the assignment (put the value onto the stack)\n";
                 expression.value->accept(*this);// puts value to assign onto stack
 
-                emit(fmt::format("add R0, {}, R1 ", offset + num_words - 1),
-                     "get the address of the least significant byte of the assignment target");
+                expression.assignee->accept(*this);// this will put the address of the assignee onto the stack
+                emit("pop R1", "get address of assignee");
+
+                if (num_words > 1) {
+                    emit(fmt::format("add R1, {}, R1 ", num_words - 1),
+                         "get the address of the least significant byte of the assignment target");
+                }
+
                 assembly += "\t// store the value at the target address\n";
                 for (usize i = 0; i < num_words; ++i) {
                     emit("pop R2");
@@ -367,8 +404,6 @@ namespace Emitter {
                 // the value onto the stack.
                 // (this obviously could be optimized)
                 assembly += "\t// push the value of the assignment expression onto the stack\n";
-                emit(fmt::format("add R0, {}, R1 ", offset),
-                     "get the address of the most significant byte of the assignment target");
                 for (usize i = 0; i < num_words; ++i) {
                     emit("copy *R1, R2");
                     emit("push R2");

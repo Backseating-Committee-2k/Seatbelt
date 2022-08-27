@@ -53,6 +53,10 @@ public:
                 SINGLE_CHAR_TOKEN('{', LeftCurlyBracket)
                 SINGLE_CHAR_TOKEN('}', RightCurlyBracket)
                 SINGLE_CHAR_TOKEN(',', Comma)
+                SINGLE_CHAR_TOKEN('@', At)
+                case '!':
+                    token_length = exclamation_mark(tokens);
+                    break;
                 case '>':
                     token_length = greater_than(tokens);
                     break;
@@ -185,6 +189,17 @@ private:
         return token_length;
     }
 
+    [[nodiscard]] usize exclamation_mark(Lexer::TokenList& tokens) {
+        assert(current() == '!');
+        using namespace Lexer::Tokens;
+        if (peek() == '=') {
+            emit_token<ExclamationEquals>(tokens, 2);
+            return 2;
+        }
+        emit_single_char_token<ExclamationMark>(tokens);
+        return 1;
+    }
+
     [[nodiscard]] usize greater_than(Lexer::TokenList& tokens) {
         assert(current() == '>');
         using namespace Lexer::Tokens;
@@ -296,10 +311,7 @@ private:
 
         std::string_view remaining_source = m_source_code.text.substr(m_index);
 
-        if (remaining_source.starts_with("!=")) {
-            emit_token<ExclamationEquals>(tokens, 2);
-            return 2;
-        } else if (remaining_source.starts_with("~>")) {
+        if (remaining_source.starts_with("~>")) {
             emit_token<TildeArrow>(tokens, 2);
             return 2;
         }
