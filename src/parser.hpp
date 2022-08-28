@@ -276,6 +276,8 @@ namespace Parser {
         struct FunctionCall;
         struct Assignment;
         struct Nothing;
+        struct TypeSizeExpression;
+        struct ValueSizeExpression;
 
         struct ExpressionVisitor {
             virtual void visit(Integer& expression) = 0;
@@ -287,6 +289,8 @@ namespace Parser {
             virtual void visit(FunctionCall& expression) = 0;
             virtual void visit(Assignment& expression) = 0;
             virtual void visit(Nothing& expression) = 0;
+            virtual void visit(TypeSizeExpression& expression) = 0;
+            virtual void visit(ValueSizeExpression& expression) = 0;
 
             virtual ~ExpressionVisitor() = default;
         };
@@ -392,6 +396,26 @@ namespace Parser {
 
             NothingLiteral nothing_token;
         };
+
+        struct TypeSizeExpression : public ExpressionAcceptor<TypeSizeExpression> {
+            TypeSizeExpression(TypeSize type_size_token, std::unique_ptr<DataType> type_definition)
+                : type_size_token{ type_size_token },
+                  type_definition{ std::move(type_definition) } { }
+
+            TypeSize type_size_token;
+            std::unique_ptr<DataType> type_definition;
+            const DataType* contained_data_type{ nullptr };
+        };
+
+        struct ValueSizeExpression : public ExpressionAcceptor<ValueSizeExpression> {
+            explicit ValueSizeExpression(ValueSize value_size_token, std::unique_ptr<Expression> expression)
+                : value_size_token{ value_size_token },
+                  expression{ std::move(expression) } { }
+
+            ValueSize value_size_token;
+            std::unique_ptr<Expression> expression;
+        };
+
 
     }// namespace Expressions
 

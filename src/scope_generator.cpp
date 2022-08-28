@@ -307,6 +307,15 @@ namespace ScopeGenerator {
             expression.surrounding_scope = scope;
         }
 
+        void visit(Parser::Expressions::TypeSizeExpression& expression) override {
+            expression.surrounding_scope = scope;
+        }
+
+        void visit(Parser::Expressions::ValueSizeExpression& expression) override {
+            expression.expression->accept(*this);
+            expression.surrounding_scope = scope;
+        }
+
         Scope* scope;
         TypeContainer* type_container;
     };
@@ -413,6 +422,8 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::FunctionCall&) override { }
         void visit(Parser::Expressions::Assignment&) override { }
         void visit(Parser::Expressions::Nothing&) override { }
+        void visit(Parser::Expressions::TypeSizeExpression&) override { }
+        void visit(Parser::Expressions::ValueSizeExpression&) override { }
 
         Parser::FunctionDefinition* surrounding_function;
     };

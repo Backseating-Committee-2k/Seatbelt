@@ -73,7 +73,9 @@
     x(CapitalizedFunction) \
     x(Export) \
     x(At) \
-    x(ExclamationMark)
+    x(ExclamationMark) \
+    x(TypeSize) \
+    x(ValueSize)
 
 // clang-format on
 

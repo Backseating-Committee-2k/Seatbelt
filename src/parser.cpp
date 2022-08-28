@@ -176,6 +176,18 @@ namespace Parser {
         [[nodiscard]] std::unique_ptr<Expression> primary() {
             using namespace Expressions;
 
+            if (const auto type_size_token = maybe_consume<TypeSize>()) {
+                consume<LeftParenthesis>("expected \"(\"");
+                auto type_definition = data_type();
+                consume<RightParenthesis>("expected \")\"");
+                return std::make_unique<TypeSizeExpression>(*type_size_token, std::move(type_definition));
+            }
+            if (const auto value_size_token = maybe_consume<ValueSize>()) {
+                consume<LeftParenthesis>("expected \"(\"");
+                auto sub_expression = expression();
+                consume<RightParenthesis>("expected \")\"");
+                return std::make_unique<ValueSizeExpression>(*value_size_token, std::move(sub_expression));
+            }
             if (maybe_consume<LeftParenthesis>()) {
                 auto sub_expression = expression();
                 consume<RightParenthesis>("expected \")\"");

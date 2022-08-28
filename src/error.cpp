@@ -105,6 +105,14 @@ struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
         token = expression.nothing_token;
     }
 
+    void visit(Parser::Expressions::TypeSizeExpression& expression) override {
+        token = expression.type_size_token;
+    }
+
+    void visit(Parser::Expressions::ValueSizeExpression& expression) override {
+        token = expression.value_size_token;
+    }
+
     Lexer::Tokens::Token token;
 };
 
