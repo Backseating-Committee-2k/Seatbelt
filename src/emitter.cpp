@@ -484,7 +484,7 @@ namespace Emitter {
                 bssembly.add(Comment{"store the value at the target address"});
                 for (usize i = 0; i < num_words; ++i) {
                     bssembly.add(Instruction{POP, {R2}});
-                    bssembly.add(Instruction{COPY, {R1, Pointer{R1}}});
+                    bssembly.add(Instruction{COPY, {R2, Pointer{R1}}});
                     if (i < num_words - 1) {
                         bssembly.add(Instruction{SUB, {R1, Immediate{4}, R1}});
                     }
