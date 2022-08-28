@@ -673,6 +673,7 @@ namespace Emitter {
             const auto inner = std::string_view{ start_iterator + 1, assembly_block.cend() - 1 };
             bssembly.add(Comment{"-- block of inline bssembly --"});
             bssembly.add(InlineBssembly{inner});
+            bssembly.add(NewLine{});
             bssembly.add(Comment{"-- end of inline bssembly --"});
         }
 
