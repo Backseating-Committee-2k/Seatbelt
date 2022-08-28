@@ -473,13 +473,21 @@ namespace Parser {
         [[nodiscard]] std::unique_ptr<Statements::VariableDefinition> variable_definition() {
             const auto let_token = consume<Let>();
             const auto identifier = consume<Identifier>("expected variable name");
-            consume<Colon>("expected \":\"");
-            const auto is_mutable = static_cast<bool>(maybe_consume<Mutable>());
-            if (not is_mutable) {
-                maybe_consume<Const>();
+            auto type_definition = std::unique_ptr<DataType>{};
+            auto is_mutable = false;
+            if (not current_is<Equals>()) {
+                consume<Colon>("expected \":\"");
+                // either automatic type deduction with mutable binding, or annotated type
+                is_mutable = static_cast<bool>(maybe_consume<Mutable>());
+                if (not is_mutable) {
+                    maybe_consume<Const>();
+                }
+                if (not current_is<Equals>()) {
+                    // type is annotated
+                    type_definition = data_type();
+                }
             }
             const auto mutability = is_mutable ? Mutability::Mutable : Mutability::Const;
-            auto type_definition = data_type();
             auto equals_token = consume<Equals>("expected variable initialization");
             auto initial_value = expression();
             consume_semicolon();
