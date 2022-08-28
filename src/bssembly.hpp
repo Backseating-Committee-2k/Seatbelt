@@ -66,6 +66,8 @@ namespace Bssembler {
 #undef x
 
     struct DynamicRegister {
+        [[nodiscard]] bool operator==(const DynamicRegister& other) const = default;
+
         u8 number;
     };
 
@@ -107,10 +109,14 @@ namespace Bssembler {
 
         Immediate(std::string_view value) : value{ std::string{ value } } { }
 
+        [[nodiscard]] bool operator==(const Immediate& other) const = default;
+
         std::variant<std::string, usize> value;
     };
 
     struct Pointer {
+        [[nodiscard]] bool operator==(const Pointer& other) const = default;
+
         Register register_;
     };
 
@@ -180,6 +186,14 @@ namespace Bssembler {
     };
 
     class Bssembly {
+    private:
+        using InstructionVariant = std::variant<NewLine, Comment, Instruction, Label, InlineBssembly>;
+        using InstructionVector = std::vector<InstructionVariant>;
+
+    public:
+        using iterator = InstructionVector::iterator;
+        using const_iterator = InstructionVector::const_iterator;
+
     public:
         Bssembly() = default;
 
@@ -227,8 +241,45 @@ namespace Bssembler {
             return *this;
         }
 
-    private:
-        using InstructionVector = std::vector<std::variant<NewLine, Comment, Instruction, Label, InlineBssembly>>;
+        [[nodiscard]] usize size() const {
+            return m_instructions.size();
+        }
+
+        [[nodiscard]] iterator begin() {
+            return m_instructions.begin();
+        }
+
+        [[nodiscard]] const_iterator begin() const {
+            return m_instructions.begin();
+        }
+
+        [[nodiscard]] iterator end() {
+            return m_instructions.begin();
+        }
+
+        [[nodiscard]] const_iterator end() const {
+            return m_instructions.begin();
+        }
+
+        [[nodiscard]] InstructionVariant& operator[](usize index) {
+            return m_instructions[index];
+        }
+
+        [[nodiscard]] const InstructionVariant& operator[](usize index) const {
+            return m_instructions[index];
+        }
+
+        void replace(usize from, usize to, std::initializer_list<InstructionVariant> replacement) {
+            m_instructions.erase(
+                    m_instructions.begin() + static_cast<decltype(m_instructions)::difference_type>(from),
+                    m_instructions.begin() + static_cast<decltype(m_instructions)::difference_type>(to)
+            );
+            auto position = static_cast<decltype(m_instructions)::difference_type>(from);
+            for (const auto& instruction : replacement) {
+                m_instructions.insert(m_instructions.begin() + position, instruction);
+                ++position;
+            }
+        }
 
     private:
         explicit Bssembly(InstructionVector instruction) : m_instructions{ std::move(instruction) } { }

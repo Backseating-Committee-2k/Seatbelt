@@ -1,4 +1,5 @@
 #include "bssembly.hpp"
+#include "bssembly_optimizer.hpp"
 #include "emitter.hpp"
 #include "error.hpp"
 #include "lexer.hpp"
@@ -267,6 +268,7 @@ int main(int, char** argv) {
                     .optionally_named<
                             'l', "lib", "pass a comma-separated list of paths to use for import-lookup", std::string>(""
                     )
+                    .flag<'v', "verbose", "show verbose output">()
                     .create();
 
     command_line_parser.parse(argv);
@@ -312,11 +314,22 @@ int main(int, char** argv) {
 
     auto bssembly = Bssembler::Bssembly{};
     using namespace std::string_view_literals;
-    bssembly.add(Bssembler::Instruction{Bssembler::Mnemonic::JUMP, {Bssembler::Immediate{"$\"::main()\""sv}}});
+    bssembly.add(Bssembler::Instruction{ Bssembler::Mnemonic::JUMP, { Bssembler::Immediate{ "$\"::main()\""sv } } });
 
     auto label_generator = Emitter::LabelGenerator{};
     for (const auto& item : program) {
         bssembly += std::visit(Emitter::Emitter{ &program, &label_generator, &type_container }, item);
+    }
+
+    usize size_before = bssembly.size();
+    optimize(bssembly);
+    usize size_after = bssembly.size();
+    if (command_line_parser.get<'v'>()) {
+        fmt::print(
+                stderr, "optimization: {:.2} % ({} instructions to {} instructions)\n",
+                static_cast<double>(size_before - size_after) / static_cast<double>(size_before) * 100.0, size_before,
+                size_after, bssembly.size()
+        );
     }
 
     if (command_line_parser.was_provided<'o'>()) {
