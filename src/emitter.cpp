@@ -411,7 +411,6 @@ namespace Emitter {
         }
 
         void visit(FunctionCall& expression) override {
-            bssembly.add(NewLine{});
             bssembly.add(Comment{"evaluate function call"});
 
             /*
