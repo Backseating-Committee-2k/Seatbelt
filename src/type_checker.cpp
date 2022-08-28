@@ -759,6 +759,25 @@ namespace TypeChecker {
             expression.value_type = ValueType::RValue;
         }
 
+        void visit(Parser::Expressions::TypeSizeExpression& expression) override {
+            if (not type_container->is_defined(*(expression.type_definition))) {
+                Error::error(
+                        expression.type_size_token,
+                        fmt::format("use of undeclared type \"{}\"", expression.type_definition->to_string())
+                );
+            }
+            expression.contained_data_type =
+                    type_container->from_type_definition(std::move(expression.type_definition));
+            expression.data_type = type_container->get_u32();
+            expression.value_type = ValueType::RValue;
+        }
+
+        void visit(Parser::Expressions::ValueSizeExpression& expression) override {
+            expression.expression->accept(*this);
+            expression.data_type = type_container->get_u32();
+            expression.value_type = ValueType::RValue;
+        }
+
         usize claim_stack_space(const usize size_of_type) {
             const auto old_offset = offset;
             offset += size_of_type;

@@ -357,6 +357,8 @@ private:
             KEYWORD("nothing", NothingLiteral)
             KEYWORD("Function", CapitalizedFunction)
             KEYWORD("export", Export)
+            KEYWORD("type_size", TypeSize)
+            KEYWORD("value_size", ValueSize)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }
