@@ -72,7 +72,7 @@ add_executable(Seatbelt
         src/return_type_checker.cpp
         src/mutability.hpp
         src/bssembly.hpp
-        src/overloaded.hpp)
+        src/overloaded.hpp src/bssembly_optimizer.hpp)
 
 target_link_libraries(Seatbelt fmt ctre Arguably)
 
