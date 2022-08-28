@@ -47,6 +47,9 @@
 namespace Emitter {
     using namespace Parser::Statements;
     using namespace Parser::Expressions;
+    using namespace Bssembler;
+    using enum Register;
+    using enum Mnemonic;
 
     struct LoopLabels {
         std::string continue_to_label;
@@ -60,55 +63,101 @@ namespace Emitter {
         // operands are already stored in R1 and R2, result has to be stored in R3
         struct BinaryOperatorEmitter {
             void operator()(const Plus&) const {
-                visitor->emit("add R1, R2, R3", "add values");
+                visitor->bssembly.add(Instruction{
+                        ADD,
+                        {R1, R2, R3},
+                        "add values"
+                });
             }
 
             void operator()(const Minus&) const {
-                visitor->emit("sub R1, R2, R3", "subtract values");
+                visitor->bssembly.add(Instruction{
+                        SUB,
+                        {R1, R2, R3},
+                        "subtract values"
+                });
             }
 
             void operator()(const Asterisk&) const {
-                visitor->emit("mult R1, R2, R4, R3", "multiply values");
+                visitor->bssembly.add(Instruction{
+                        MULT,
+                        {R1, R2, R4, R3},
+                        "multiply values"
+                });
             }
 
             void operator()(const ForwardSlash&) const {
-                visitor->emit("divmod R1, R2, R3, R4", "divmod the values, R4 gets the result of the division");
+                visitor->bssembly.add(Instruction{
+                        DIVMOD,
+                        {R1, R2, R3, R4},
+                        "divmod the values, R4 gets the result of the division"
+                });
             }
 
             void operator()(const Mod&) const {
-                visitor->emit("divmod R1, R2, R4, R3", "divmod the values, R3 gets the result of 'mod'");
+                visitor->bssembly.add(Instruction{
+                        DIVMOD,
+                        {R1, R2, R4, R3},
+                        "divmod the values, R3 gets the result of 'mod'"
+                });
             }
 
             void operator()(const And&) const {
-                visitor->emit("and R1, R2, R3", "and values");
+                visitor->bssembly.add(Instruction{
+                        AND,
+                        {R1, R2, R3},
+                        "and values"
+                });
             }
 
             void operator()(const Or&) const {
-                visitor->emit("or R1, R2, R3", "or values");
+                visitor->bssembly.add(Instruction{
+                        OR,
+                        {R1, R2, R3},
+                        "or values"
+                });
             }
 
             void operator()(const EqualsEquals&) const {
-                visitor->emit("comp_eq R1, R2, R3");
+                visitor->bssembly.add(Instruction{
+                        COMP_EQ,
+                        {R1, R2, R3}
+                });
             }
 
             void operator()(const ExclamationEquals&) const {
-                visitor->emit("comp_neq R1, R2, R3");
+                visitor->bssembly.add(Instruction{
+                        COMP_NEQ,
+                        {R1, R2, R3}
+                });
             }
 
             void operator()(const GreaterThan&) const {
-                visitor->emit("comp_gt R1, R2, R3");
+                visitor->bssembly.add(Instruction{
+                        COMP_GT,
+                        {R1, R2, R3}
+                });
             }
 
             void operator()(const GreaterOrEquals&) const {
-                visitor->emit("comp_ge R1, R2, R3");
+                visitor->bssembly.add(Instruction{
+                        COMP_GE,
+                        {R1, R2, R3}
+                });
             }
 
             void operator()(const LessThan&) const {
-                visitor->emit("comp_lt R1, R2, R3");
+                visitor->bssembly.add(Instruction{
+                        COMP_LT,
+                        {R1, R2, R3}
+                });
             }
 
             void operator()(const LessOrEquals&) const {
-                visitor->emit("comp_le R1, R2, R3");
+                visitor->bssembly.add(Instruction{
+                        COMP_LE,
+                        {R1, R2, R3}
+                });
             }
 
             void operator()(const auto&) const {
@@ -124,44 +173,33 @@ namespace Emitter {
               label_generator{ label_generator },
               return_label{ return_label } { }
 
-        void emit(const std::string_view instruction) {
-            emit(instruction, "");
-        }
-
-        void emit(const std::string_view instruction, const std::string_view comment) {
-            assembly += fmt::format("\t{}", instruction);
-            if (not comment.empty()) {
-                if (not instruction.empty()) {
-                    assembly += " ";
-                }
-                assembly += fmt::format("// {}", comment);
-            }
-            assembly += "\n";
-        }
-
-        void emit_label(const std::string_view label, const std::string_view comment = "") {
-            assembly += fmt::format("{}:", label);
-            if (not comment.empty()) {
-                assembly += fmt::format(" // {}", comment);
-            }
-            assembly += "\n";
-        }
-
         void visit(Integer& expression) override {
             assert(not expression.emittable_string.empty());
-            emit(fmt::format("copy {}, R1", expression.emittable_string), "put immediate into register");
-            emit("push R1", "push immediate onto stack");
+            bssembly.add(Instruction{
+                    COPY,
+                    {Immediate{ expression.emittable_string }, R1},
+                    "put immediate into register"
+            });
+            bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
         }
 
         void visit(Char& expression) override {
-            emit(fmt::format("copy {}, R1", char_token_to_u8(expression.value)), "put immediate into register");
-            emit("push R1", "push immediate onto stack");
+            bssembly.add(Instruction{
+                    COPY,
+                    {Immediate{ char_token_to_u8(expression.value) }, R1},
+                    "put immediate into register"
+            });
+            bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
         }
 
         void visit(Bool& expression) override {
             const u8 value = expression.value.location.view() == "true" ? 1 : 0;
-            emit(fmt::format("copy {}, R1", value), "put immediate into register");
-            emit("push R1", "push immediate onto stack");
+            bssembly.add(Instruction{
+                    COPY,
+                    {Immediate{ value }, R1},
+                    "put immediate into register"
+            });
+            bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
         }
 
         void visit(Name& expression) override {
@@ -171,8 +209,12 @@ namespace Emitter {
                 assert(expression.possible_overloads.value().size() == 1);
                 const auto& overload = expression.possible_overloads.value().front();
                 const auto mangled_name = fmt::format("{}{}", overload->namespace_name, overload->signature);
-                emit(fmt::format("copy $\"{}\", R1", mangled_name), "get address of label");
-                emit("push R1", "push address of label onto stack");
+                bssembly.add(Instruction{
+                        COPY,
+                        {Immediate{ fmt::format("$\"{}\"", mangled_name) }, R1},
+                        "get address of label"
+                });
+                bssembly.add(Instruction{ PUSH, { R1 }, "push address of label onto stack" });
                 return;
             }
             assert(expression.variable_symbol.has_value() and "if this is not a function, it has to be a variable");
@@ -183,26 +225,35 @@ namespace Emitter {
             const auto& variable_token = expression.name_tokens.back();
             const auto variable_name = Error::token_location(variable_token).view();
 
-            emit(fmt::format("add R0, {}, R1", offset),
-                 fmt::format("calculate address of variable \"{}\"", variable_name));
-
+            bssembly.add(Instruction{
+                    ADD,
+                    {R0, Immediate{ offset }, R1},
+                    fmt::format("calculate address of variable \"{}\"", variable_name)
+            });
             // If the variable is used as an lvalue, we have to push its address onto the stack. Otherwise,
             // we dereference the address and push the value.
 
             if (expression.is_lvalue()) {
-                emit("push R1", "push the address of variable onto the stack");
+                bssembly.add(Instruction{ PUSH, { R1 }, "push the address of variable onto the stack" });
             } else {
                 // we have an rvalue
                 const auto size = expression.data_type->size();
                 assert(size % 4 == 0);
                 const auto num_words = size / 4;
-                assembly +=
-                        fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name);
+                bssembly.add(Comment{
+                        fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) }
+                );
                 for (usize i = 0; i < num_words; ++i) {
-                    emit("copy *R1, R2");
-                    emit("push R2");
+                    bssembly.add(Instruction{
+                            COPY,
+                            {Pointer{ R1 }, R2}
+                    });
+                    bssembly.add(Instruction{ PUSH, { R2 } });
                     if (i < num_words - 1) {
-                        emit("add R1, 4, R1");
+                        bssembly.add(Instruction{
+                                ADD,
+                                {R1, Immediate{ 4 }, R1}
+                        });
                     }
                 }
             }
@@ -214,10 +265,18 @@ namespace Emitter {
                 assert(expression.data_type == type_container->get_bool() and "type checker should've caught this");
                 // we can assume that the value on the stack is 0 or 1 (representing false or true)
                 // we have to flip the least significant bit to invert the truth value
-                emit("pop R1", "get value of operand for logical not operation");
-                emit("copy 1, R3", "get constant 1");
-                emit("xor R1, R3, R1", "flip the truth value");
-                emit("push R1", "push the result of the logical not operation");
+                bssembly.add(Instruction{ POP, { R1 }, "get value of operand for logical not operation" });
+                bssembly.add(Instruction{
+                        COPY,
+                        {Immediate{ 1 }, R3},
+                        "get constant 1"
+                });
+                bssembly.add(Instruction{
+                        XOR,
+                        {R1, R3, R1},
+                        "flip the truth value"
+                });
+                bssembly.add(Instruction{ PUSH, { R1 }, "push the result of the logical not operation" });
             } else if (is<At>(expression.operator_token)) {
                 // we do not have to do anything, since the operand is guaranteed to be an lvalue and therefore
                 // puts its address onto the stack upon being evaluated
@@ -228,15 +287,15 @@ namespace Emitter {
                     // lvalue: evaluating the operand already yielded the contained address, nothing to do here
                 } else {
                     // rvalue: evaluating the operand yielded the address which we now have to dereference
-                    emit("pop R1", "get address to dereference");
+                    bssembly.add(Instruction{POP, {R1}, "get address to dereference"});
                     const auto num_words = expression.data_type->num_words();
                     if (num_words > 0) {
-                        assembly += "\t// push the dereferenced value onto the stack\n";
+                        bssembly.add(Comment{"push the dereferenced value onto the stack"});
                         for (usize i = 0; i < num_words; ++i) {
-                            emit("copy *R1, R2");
-                            emit("push R2");
+                            bssembly.add(Instruction{COPY, {Pointer{R1}, R2}});
+                            bssembly.add(Instruction{PUSH, {R2}});
                             if (i < num_words - 1) {
-                                emit("add R1, 4, R1");
+                                bssembly.add(Instruction{ADD, {R1, Immediate{4}, R1}});
                             }
                         }
                     }
@@ -251,72 +310,72 @@ namespace Emitter {
 
             expression.lhs->accept(*this);
             if (is<And>(expression.operator_token)) {
-                emit("pop R1", fmt::format(
-                                       R"(store lhs for {}-operator in R1)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
+                bssembly.add(Instruction{POP, {R1}, fmt::format(
+                                                               R"(store lhs for {}-operator in R1)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
                 const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
-                emit(fmt::format("jump_eq R1, {}", end_of_evaluation), "skip rest of evaluation if value is false");
-                emit("push R1", fmt::format(
-                                        "push left operand for {}-operator onto the stack",
-                                        Error::token_location(expression.operator_token).view()
-                                ));
+                bssembly.add(Instruction{JUMP_EQ, {R1, Immediate{end_of_evaluation}}, "skip rest of evaluation if value is false"});
+                bssembly.add(Instruction{PUSH, {R1}, fmt::format(
+                                                                "push left operand for {}-operator onto the stack",
+                                                                Error::token_location(expression.operator_token).view()
+                                                        )});
                 expression.rhs->accept(*this);
-                emit("pop R2", fmt::format(
-                                       R"(store rhs for {}-operator in R2)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
-                emit("pop R1", fmt::format(
-                                       R"(store lhs for {}-operator in R2)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
+                bssembly.add(Instruction{POP, {R2}, fmt::format(
+                                                               R"(store rhs for {}-operator in R2)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
+                bssembly.add(Instruction{POP, {R1}, fmt::format(
+                                                               R"(store lhs for {}-operator in R2)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
                 assert(expression.lhs->data_type == type_container->get_bool());
                 assert(expression.rhs->data_type == type_container->get_bool());
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
                 const auto after_push = label_generator->next_label("after_push");
-                emit(fmt::format("jump {}", after_push));
-                emit_label(end_of_evaluation);
-                emit("copy R1, R3", "store \"false\" as result");
-                emit_label(after_push);
+                bssembly.add(Instruction{JUMP, {Immediate{after_push}} });
+                bssembly.add(Bssembler::Label{end_of_evaluation});
+                bssembly.add(Instruction{COPY, {R1, R3}, "store \"false\" as result"});
+                bssembly.add(Bssembler::Label{after_push});
             } else if (is<Or>(expression.operator_token)) {
-                emit("pop R1", fmt::format(
-                                       R"(store lhs for {}-operator in R1)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
+                bssembly.add(Instruction{POP, {R1}, fmt::format(
+                                                               R"(store lhs for {}-operator in R1)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
                 const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
-                emit(fmt::format("jump_gt R1, {}", end_of_evaluation), "skip rest of evaluation if value is true");
-                emit("push R1", fmt::format(
-                                        "push left operand for {}-operator onto the stack",
-                                        Error::token_location(expression.operator_token).view()
-                                ));
+                bssembly.add(Instruction{JUMP_GT, {R1, Immediate{end_of_evaluation}}, "skip rest of evaluation if value is true"});
+                bssembly.add(Instruction{PUSH, {R1}, fmt::format(
+                                                                "push left operand for {}-operator onto the stack",
+                                                                Error::token_location(expression.operator_token).view()
+                                                        )});
                 expression.rhs->accept(*this);
-                emit("pop R2", fmt::format(
-                                       R"(store rhs for {}-operator in R2)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
-                emit("pop R1", fmt::format(
-                                       R"(store lhs for {}-operator in R2)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
+                bssembly.add(Instruction{POP, {R2}, fmt::format(
+                                                               R"(store rhs for {}-operator in R2)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
+                bssembly.add(Instruction{POP, {R1}, fmt::format(
+                                                               R"(store lhs for {}-operator in R2)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
                 assert(expression.lhs->data_type == type_container->get_bool());
                 assert(expression.rhs->data_type == type_container->get_bool());
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
                 const auto after_push = label_generator->next_label("after_push");
-                emit(fmt::format("jump {}", after_push));
-                emit_label(end_of_evaluation);
-                emit("copy R1, R3", "store \"true\" as result");
-                emit_label(after_push);
+                bssembly.add(Instruction{JUMP, {Immediate{after_push}} });
+                bssembly.add(Bssembler::Label{end_of_evaluation});
+                bssembly.add(Instruction{COPY, {R1, R3}, "store \"true\" as result"});
+                bssembly.add(Bssembler::Label{after_push});
             } else {
                 expression.rhs->accept(*this);
 
-                emit("pop R2", fmt::format(
-                                       R"(store rhs for {}-operator in R2)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
-                emit("pop R1", fmt::format(
-                                       R"(store lhs for {}-operator in R1)",
-                                       Error::token_location(expression.operator_token).view()
-                               ));
+                bssembly.add(Instruction{POP, {R2}, fmt::format(
+                                                               R"(store rhs for {}-operator in R2)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
+                bssembly.add(Instruction{POP, {R1}, fmt::format(
+                                                               R"(store lhs for {}-operator in R1)",
+                                                               Error::token_location(expression.operator_token).view()
+                                                       )});
 
                 const auto either_is_a_pointer = (expression.lhs->data_type == type_container->get_u32() and
                                                   expression.rhs->data_type->is_pointer_type()) or
@@ -334,10 +393,8 @@ namespace Emitter {
                     assert(is<Plus>(expression.operator_token) or first_is_pointer);
                     const auto size = pointer_type->contained->size();
                     const std::string_view number_register = (first_is_pointer ? "R2" : "R1");
-                    emit(fmt::format("copy {}, R4", size),
-                         fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string()));
-                    emit(fmt::format("mult {}, R4, R3, {}", number_register, number_register),
-                         "multiply operand with size");
+                    bssembly.add(Instruction{COPY, {Immediate{size}, R4}, fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string())});
+                    bssembly.add(Instruction{MULT, {Immediate{number_register}, R4, R3, Immediate{number_register}}, "multiply operand with size"});
                 }
 
                 std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
@@ -346,17 +403,15 @@ namespace Emitter {
                     const auto pointer_type = dynamic_cast<const PointerType*>(expression.lhs->data_type);
                     assert(pointer_type != nullptr and "this must be a pointer type");
                     const auto size = pointer_type->contained->size();
-                    emit(fmt::format("copy {}, R5", size),
-                         fmt::format("get the size of the data type \"{}\"", pointer_type->to_string()));
-                    emit(fmt::format("divmod R3, R5, R3, R4", size),
-                         "divide the result of pointer subtraction by the size of the data type");
+                    bssembly.add(Instruction{COPY, {Immediate{size}, R5}, fmt::format("get the size of the data type \"{}\"", pointer_type->to_string())});
+                    bssembly.add(Instruction{DIVMOD, {R3, R5, R3, R4}, "divide the result of pointer subtraction by the size of the data type"});
                 }
             }
-            emit("push R3", "push result onto stack");
+            bssembly.add(Instruction{PUSH, {R3}, "push result onto stack"});
         }
 
         void visit(FunctionCall& expression) override {
-            emit("\n", "evaluate function call");
+            bssembly.add(Comment{"evaluate function call"});
 
             /*
              * Structure of stack before call-instruction:
@@ -367,8 +422,8 @@ namespace Emitter {
              * jump address
              */
             expression.callee->accept(*this);// evaluate callee => jump address is pushed
-            emit("add sp, 4, sp", "reserve stack space for the return address");
-            emit("push R0", "push the current stack frame base pointer");
+            bssembly.add(Instruction{ADD, {SP, Immediate{4}, SP}, "reserve stack space for the return address"});
+            bssembly.add(Instruction{PUSH, {R0}, "push the current stack frame base pointer"});
 
             usize arguments_size = 0;
             for (const auto& argument : expression.arguments) {
@@ -376,17 +431,17 @@ namespace Emitter {
                 arguments_size += argument->data_type->size();
             }
 
-            emit(fmt::format("sub sp, {}, R0", arguments_size), "set stack frame base pointer for callee");
-            emit("sub R0, 8, R1", "calculate address of placeholder for return address");
+            bssembly.add(Instruction{SUB, {SP, Immediate{arguments_size}, R0}, "set stack frame base pointer for callee"});
+            bssembly.add(Instruction{SUB, {R0, Immediate{ 8 }, R1}, "calculate address of placeholder for return address"});
 
             const auto call_return_label = label_generator->next_label("return_address");
-            emit(fmt::format("copy {}, R2", call_return_label), "get return address");
-            emit("copy R2, *R1", "fill in return address");
-            emit("sub R0, 12, R1", "calculate address of jump address");
-            emit("copy *R1, R1", "dereference the pointer");
-            emit("jump R1", "call the function");
-            emit_label(call_return_label, "this is where the control flow returns to after the function call");
-            emit("pop", "pop the callee address off of the stack");
+            bssembly.add(Instruction{COPY, {Immediate{call_return_label}, R2}, "get return address"});
+            bssembly.add(Instruction{COPY, {R2, Pointer{R1}}, "fill in return address"});
+            bssembly.add(Instruction{SUB, {R0, Immediate{12}, R1}, "calculate address of jump address"});
+            bssembly.add(Instruction{COPY, {Pointer{R1}, R1}, "dereference the pointer"});
+            bssembly.add(Instruction{JUMP, {R1}, "call the function"});
+            bssembly.add(Bssembler::Label{call_return_label, "this is where the control flow returns to after the function call"});
+            bssembly.add(Instruction{POP, {}, "pop the callee address off of the stack"});
 
             const auto size = expression.data_type->size();
             assert(size % 4 == 0);
@@ -394,8 +449,8 @@ namespace Emitter {
 
             assert(num_words <= 1 and "not implemented");
             if (num_words == 1) {
-                assembly += "\t// push the return value of the called function\n";
-                emit("push R1");
+                bssembly.add(Comment{"// push the return value of the called function"});
+                bssembly.add(Instruction{PUSH, {R1}});
             }
         }
 
@@ -416,35 +471,34 @@ namespace Emitter {
 
             if (num_words > 0) {
                 // we only emit code if there is any actual data to copy
-                assembly += "\t// evaluate the right-hand-side of the assignment (put the value onto the stack)\n";
+                bssembly.add(Comment{"evaluate the right-hand-side of the assignment (put the value onto the stack)"});
                 expression.value->accept(*this);// puts value to assign onto stack
 
                 expression.assignee->accept(*this);// this will put the address of the assignee onto the stack
-                emit("pop R1", "get address of assignee");
+                bssembly.add(Instruction{POP, {R1}, "get address of assignee"});
 
                 if (num_words > 1) {
-                    emit(fmt::format("add R1, {}, R1 ", num_words - 1),
-                         "get the address of the least significant byte of the assignment target");
+                    bssembly.add(Instruction{ADD, {R1, Immediate{num_words - 1}, R1}, "get the address of the least significant byte of the assignment target"});
                 }
 
-                assembly += "\t// store the value at the target address\n";
+                bssembly.add(Comment{"store the value at the target address"});
                 for (usize i = 0; i < num_words; ++i) {
-                    emit("pop R2");
-                    emit("copy R2, *R1");
+                    bssembly.add(Instruction{POP, {R2}});
+                    bssembly.add(Instruction{COPY, {R2, Pointer{R1}}});
                     if (i < num_words - 1) {
-                        emit("sub R1, 4, R1");
+                        bssembly.add(Instruction{SUB, {R1, Immediate{4}, R1}});
                     }
                 }
 
                 // Since assignments are expressions, they have a resulting value. We have to push
                 // the value onto the stack.
                 // (this obviously could be optimized)
-                assembly += "\t// push the value of the assignment expression onto the stack\n";
+                bssembly.add(Comment{"push the value of the assignment expression onto the stack"});
                 for (usize i = 0; i < num_words; ++i) {
-                    emit("copy *R1, R2");
-                    emit("push R2");
+                    bssembly.add(Instruction{COPY, {Pointer{R1}, R2}});
+                    bssembly.add(Instruction{PUSH, {R2}});
                     if (i < num_words - 1) {
-                        emit("add R1, 4, R1");
+                        bssembly.add(Instruction{ADD, {R1, Immediate{4}, R1}});
                     }
                 }
             }
@@ -462,29 +516,29 @@ namespace Emitter {
 
         void visit(IfStatement& statement) override {
             statement.condition->accept(*this);
-            emit("pop R1", "get result of condition");
-            emit("copy 0, R2", "get constant zero");
-            emit("comp R1, R2, R3", "evaluate if condition is true");
+            bssembly.add(Instruction{POP, {R1}, "get result of condition"});
+            bssembly.add(Instruction{COPY, {Immediate{0}, R2}, "get constant zero"});
+            bssembly.add(Instruction{COMP, {R1, R2, R3}, "evaluate if condition is true"});
             const auto else_label = label_generator->next_label("else");
             const auto endif_label = label_generator->next_label("endif");
-            emit(fmt::format("jump_eq R3, {}", else_label), "jump to else-block");
-            emit("", "begin of then-block");
+            bssembly.add(Instruction{JUMP_EQ, {R3, Immediate{else_label}}, "jump to else-block"});
+            bssembly.add(Comment{"begin of then-block"});
             statement.then_block.accept(*this);
-            emit(fmt::format("jump {}", endif_label), "jump to end of else-block");
-            emit_label(else_label, "begin of else-block");
+            bssembly.add(Instruction{JUMP, {Immediate{endif_label}}, "jump to end of else-block"});
+            bssembly.add(Bssembler::Label{else_label, "begin of else-block"});
             statement.else_block.accept(*this);
-            emit_label(endif_label, "end of else-block");
+            bssembly.add(Bssembler::Label{endif_label, "end of else-block"});
         }
 
         void visit(LoopStatement& statement) override {
             const auto loop_start_label = label_generator->next_label("loop_start");
             const auto loop_end_label = label_generator->next_label("loop_end");
             loop_stack.push(LoopLabels{ .continue_to_label{ loop_start_label }, .break_to_label{ loop_end_label } });
-            emit_label(loop_start_label, "brrrrr");
+            bssembly.add(Bssembler::Label{loop_start_label, "brrrrr"});
             statement.body.accept(*this);
             loop_stack.pop();
-            emit(fmt::format("jump {}", loop_start_label));
-            emit_label(loop_end_label, "end of loop");
+            bssembly.add(Instruction{JUMP, {Immediate{loop_start_label}}});
+            bssembly.add(Bssembler::Label{loop_end_label, "end of loop"});
         }
 
         void visit(WhileStatement& statement) override {
@@ -493,18 +547,18 @@ namespace Emitter {
             const auto while_end_label = label_generator->next_label("while_end");
             loop_stack.push(LoopLabels{ .continue_to_label{ while_condition_label },
                                         .break_to_label{ while_end_label } });
-            emit(fmt::format("jump {}", while_condition_label), "jump to condition of while-loop");
-            emit_label(while_start_label);
+            bssembly.add(Instruction{JUMP, {Immediate{while_condition_label}}, "jump to condition of while-loop"});
+            bssembly.add(Bssembler::Label{while_start_label});
 
             statement.body.accept(*this);
 
-            emit_label(while_condition_label);
+            bssembly.add(Bssembler::Label{while_condition_label});
             statement.condition->accept(*this);
-            emit("pop R1", "get value of while-loop condition");
+            bssembly.add(Instruction{POP, {R1}, "get value of while-loop condition"});
 
-            emit(fmt::format("jump_gt R1, {}", while_start_label), "repeat the while-loop if the condition is true");
+            bssembly.add(Instruction{JUMP_GT, {R1, Immediate{while_start_label}}, "repeat the while-loop if the condition is true"});
 
-            emit_label(while_end_label);
+            bssembly.add(Bssembler::Label{while_end_label});
             loop_stack.pop();
         }
 
@@ -515,17 +569,16 @@ namespace Emitter {
             loop_stack.push(LoopLabels{ .continue_to_label{ do_while_condition_label },
                                         .break_to_label{ do_while_end_label } });
 
-            emit_label(do_while_start_label);
+            bssembly.add(Bssembler::Label{do_while_start_label});
             statement.body.accept(*this);
 
-            emit_label(do_while_condition_label);
+            bssembly.add(Bssembler::Label{do_while_condition_label});
             statement.condition->accept(*this);
-            emit("pop R1", "get value of do-while-loop condition");
+            bssembly.add(Instruction{POP, {R1}, "get value of do-while-loop condition"});
 
-            emit(fmt::format("jump_gt R1, {}", do_while_start_label),
-                 "repeat the do-while-loop if the condition is true");
+            bssembly.add(Instruction{JUMP_GT, {R1, Immediate{do_while_start_label}}, "repeat the do-while-loop if the condition is true"});
 
-            emit_label(do_while_end_label);
+            bssembly.add(Bssembler::Label{do_while_end_label});
             loop_stack.pop();
         }
 
@@ -541,27 +594,27 @@ namespace Emitter {
             }
 
             if (statement.condition) {
-                emit(fmt::format("jump {}", for_condition_label), "jump to the condition of the for-loop");
+                bssembly.add(Instruction{JUMP, {Immediate{for_condition_label}}, "jump to the condition of the for-loop"});
             }
 
-            emit_label(for_start_label);
+            bssembly.add(Bssembler::Label{for_start_label});
 
             statement.body.accept(*this);
 
             if (statement.increment) {
                 statement.increment->accept(*this);
-                emit("pop R1", "pop result of increment");
+                bssembly.add(Instruction{POP, {R1}, "pop result of increment"});
             }
 
-            emit_label(for_condition_label);
+            bssembly.add(Bssembler::Label{for_condition_label});
             if (statement.condition) {
                 statement.condition->accept(*this);
-                emit("pop R1", "get value of for-loop condition");
-                emit(fmt::format("jump_gt R1, {}", for_start_label), "jump to the beginning of the for-loop");
+                bssembly.add(Instruction{POP, {R1}, "get value of for-loop condition"});
+                bssembly.add(Instruction{JUMP_GT, {R1, Immediate{for_start_label}}, "jump to the beginning of the for-loop"});
             } else {
-                emit(fmt::format("jump {}", for_start_label), "jump to the beginning of the for-loop");
+                bssembly.add(Instruction{JUMP, {Immediate{for_start_label}}, "jump to the beginning of the for-loop"});
             }
-            emit_label(for_end_label);
+            bssembly.add(Bssembler::Label{for_end_label});
             loop_stack.pop();
         }
 
@@ -569,47 +622,46 @@ namespace Emitter {
             if (loop_stack.empty()) {
                 Error::error(statement.break_token, "break statement not allowed here");
             }
-            emit(fmt::format("jump {}", loop_stack.top().break_to_label), "break out of loop");
+            bssembly.add(Instruction{JUMP, {Immediate{loop_stack.top().break_to_label}}, "break out of loop"});
         }
 
         void visit(ContinueStatement& statement) override {
             if (loop_stack.empty()) {
                 Error::error(statement.continue_token, "continue statement not allowed here");
             }
-            emit(fmt::format("jump {}", loop_stack.top().continue_to_label), "continue to top of loop");
+            bssembly.add(Instruction{JUMP, {Immediate{loop_stack.top().continue_to_label}}, "continue to top of loop"});
         }
 
         void visit(ReturnStatement& statement) override {
             if (statement.return_value) {
                 statement.return_value->accept(*this);// evaluate return value => result is pushed
-                emit("pop R1", "put return value into R1");
+                bssembly.add(Instruction{POP, {R1}, "put return value into R1"});
             }
-            emit(fmt::format("jump {}", return_label), "immediately exit the current function");
+            bssembly.add(Instruction{JUMP, {Immediate{return_label}}, "immediately exit the current function"});
         }
 
         void visit(VariableDefinition& statement) override {
             const usize offset =
                     std::get<VariableSymbol>((*statement.surrounding_scope).at(statement.name.location.view()))
                             .offset.value();
-            assembly += fmt::format(
-                    "\t// new variable called \"{}\" with offset {}\n", statement.name.location.view(), offset
-            );
+            bssembly.add(Comment{fmt::format(
+                    "new variable called \"{}\" with offset {}", statement.name.location.view(), offset
+            )});
             statement.initial_value->accept(*this);// initial value is evaluated and pushed
-            emit(fmt::format("add R0, {}, R1", offset),
-                 fmt::format("calculate address for variable {}", statement.name.location.view()));
+            bssembly.add(Instruction{ADD, {R0, Immediate{offset}, R1}, fmt::format("calculate address for variable {}", statement.name.location.view())});
 
-            assembly += "\t// get initial value of variable\n";
+            bssembly.add(Comment{"get initial value of variable"});
             const auto size = statement.initial_value->data_type->size();
             assert(size % 4 == 0);
             const auto num_words = size / 4;
             for (usize i = 0; i < num_words; ++i) {
-                emit(fmt::format("pop R{}", i + 2));
+                bssembly.add(Instruction{POP, {DynamicRegister{ static_cast<u8>(i + 2)}}});
             }
-            assembly += "\t// store initial value of variable in the stack\n";
+            bssembly.add(Comment{"store initial value of variable in the stack"});
             for (usize i = 0; i < num_words; ++i) {
-                emit(fmt::format("copy R{}, *R1", i + 2));
+                bssembly.add(Instruction{COPY, {DynamicRegister{static_cast<u8>(i + 2)}, Pointer{R1}}});
                 if (i < num_words - 1) {
-                    emit("add R1, 4, R1");
+                    bssembly.add(Instruction{ADD, {R1, Immediate{4}, R1}});
                 }
             }
         }
@@ -619,9 +671,10 @@ namespace Emitter {
             const auto start_iterator = std::find(assembly_block.cbegin(), assembly_block.cend(), '{');
             assert(start_iterator != assembly_block.cend());
             const auto inner = std::string_view{ start_iterator + 1, assembly_block.cend() - 1 };
-            emit("", "-- block of inline bssembly --");
-            emit(inner);
-            emit("", "-- end of inline bssembly --");
+            bssembly.add(Comment{"-- block of inline bssembly --"});
+            bssembly.add(InlineBssembly{inner});
+            bssembly.add(NewLine{});
+            bssembly.add(Comment{"-- end of inline bssembly --"});
         }
 
         void visit(ExpressionStatement& statement) override {
@@ -629,31 +682,31 @@ namespace Emitter {
             const auto size = statement.expression->data_type->size();
             assert(size % 4 == 0);
             const auto num_words = size / 4;
-            assembly += "\t// discard value of expression statement\n";
+            bssembly.add(Comment{"discard value of expression statement"});
             for (usize i = 0; i < num_words; ++i) {
-                emit("pop");
+                bssembly.add(Instruction{POP, {}});
             }
         }
 
         void visit(LabelDefinition& statement) override {
             assert(not statement.emitted_label.empty() and "emitted label must have been generated before");
-            emit_label(statement.emitted_label);
+            bssembly.add(Bssembler::Label{statement.emitted_label});
         }
 
         void visit(GotoStatement& statement) override {
             assert(statement.target_label != nullptr and "target label must have been set before");
             const auto& label = statement.target_label->emitted_label;
-            emit(fmt::format("jump {}", label), fmt::format("goto {}", statement.label_identifier.location.view()));
+            bssembly.add(Instruction{JUMP, {Immediate{label}}, fmt::format("goto {}", statement.label_identifier.location.view())});
         }
 
         TypeContainer* type_container;
         LabelGenerator* label_generator;
         std::stack<LoopLabels> loop_stack{};
         std::string_view return_label;
-        std::string assembly{};
+        Bssembler::Bssembly bssembly{};
     };
 
-    std::string emit_statement(
+    Bssembly emit_statement(
             Statement& statement,
             LabelGenerator* label_generator,
             const std::string_view return_label,
@@ -661,25 +714,18 @@ namespace Emitter {
     ) {
         auto visitor = EmitterVisitor{ type_container, label_generator, return_label };
         statement.accept(visitor);
-        return visitor.assembly;
+        return std::move(visitor.bssembly);
     }
 
-    std::string Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
+    Bssembly Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
         assert(function_definition->occupied_stack_space.has_value() and "size of stack frame has to be known");
         assert(function_definition->parameters_stack_space.has_value() and "size of parameters has to be known");
 
         const auto mangled_name =
                 function_definition->namespace_name + function_definition->corresponding_symbol->signature;
-        auto result = fmt::format("\n$\"{}\":\n", mangled_name);
-
-        const auto emit = [&result](const std::string_view instruction, const std::string_view comment = "") {
-            result += fmt::format("\t{}", instruction);
-            if (not comment.empty()) {
-                result += fmt::format(" // {}", comment);
-            }
-            result += "\n";
-        };
-        const auto emit_label = [&result](const std::string_view label) { result += fmt::format("{}:\n", label); };
+        auto result = Bssembly{};
+        result.add(NewLine{});
+        result.add(Bssembler::Label{fmt::format("$\"{}\"", mangled_name)});
 
         // get the size needed for the locals of this function (excluding its parameters)
         const auto locals_size =
@@ -687,7 +733,7 @@ namespace Emitter {
 
         // the caller has already pushed the arguments onto the stack - we only have to reserve stack space for
         // the locals of this function
-        emit(fmt::format("add sp, {}, sp", locals_size), "reserve stack space for local variables");
+        result.add(Instruction{ADD, {SP, Immediate{locals_size}, SP}, "reserve stack space for local variables"});
 
         // generate labels for all label definitions in the current function
         for (auto& label : function_definition->contained_labels) {
@@ -695,31 +741,30 @@ namespace Emitter {
         }
 
         if (function_definition->is_entry_point) {
-            emit("copy sp, R0", "save stack frame base pointer for main function into R0");
+            result.add(Instruction{COPY, {SP, R0}, "save stack frame base pointer for main function into R0"});
             assert(function_definition->body.occupied_stack_space.has_value() and
                    "needed stack size for function must be known");
-            emit(fmt::format("add sp, {}, sp", function_definition->body.occupied_stack_space.value()),
-                 "reserve stack space for main function");
+            result.add(Instruction{ADD, {SP, Immediate{function_definition->body.occupied_stack_space.value()}, SP}, "reserve stack space for main function"});
         }
         const auto function_return_label = label_generator->next_label("function_return");
 
         result += emit_statement(function_definition->body, label_generator, function_return_label, type_container);
 
-        emit_label(function_return_label);
+        result.add(Bssembler::Label{function_return_label});
 
         if (function_definition->is_entry_point) {
-            emit("halt");
+            result.add(Instruction{HALT, {}});
         } else {
-            emit("copy R0, sp", "clear current stack frame");
-            emit("pop R0", "restore previous stack frame");
-            emit("return");
+            result.add(Instruction{COPY, {R0, SP}, "clear current stack frame"});
+            result.add(Instruction{POP, {R0}, "restore previous stack frame"});
+            result.add(Instruction{RETURN, {}});
         }
 
         return result;
     }
 
-    std::string Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) {
-        return "";
+    Bssembly Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) {
+        return {};
     }
 
 }// namespace Emitter

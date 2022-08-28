@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "bssembly.hpp"
 #include "parser.hpp"
 #include <string>
 
@@ -24,9 +25,9 @@ namespace Emitter {
               label_generator{ label_generator },
               type_container{ type_container } { }
 
-        std::string operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition);
+        Bssembler::Bssembly operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition);
 
-        std::string operator()(const std::unique_ptr<Parser::ImportStatement>& function_definition);
+        Bssembler::Bssembly operator()(const std::unique_ptr<Parser::ImportStatement>& function_definition);
 
         const Parser::Program* program;
         LabelGenerator* label_generator;
