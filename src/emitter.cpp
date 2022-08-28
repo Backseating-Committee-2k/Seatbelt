@@ -241,7 +241,7 @@ namespace Emitter {
                 assert(size % 4 == 0);
                 const auto num_words = size / 4;
                 bssembly.add(Comment{
-                        fmt::format("\t// load value of variable \"{}\" and push it onto the stack\n", variable_name) }
+                        fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) }
                 );
                 for (usize i = 0; i < num_words; ++i) {
                     bssembly.add(Instruction{
