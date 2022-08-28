@@ -355,19 +355,26 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
-            assert(statement.type_definition and "type definition must have been set before");// TODO: type deduction
-            auto& type = statement.type_definition;
-            if (not type_container->is_defined(*type)) {
-                Error::error(statement.name, fmt::format("use of undeclared type \"{}\"", type->to_string()));
+            // if the type definition is missing, we have to do automatic type deduction
+            const auto type_deduction = not static_cast<bool>(statement.type_definition);
+
+            // get the type of the initial value
+            statement.initial_value->accept(*this);
+            statement.initial_value->value_type = ValueType::RValue;// initial value must be an rvalue
+
+            if (not type_deduction) {
+                auto& type = statement.type_definition;
+                if (not type_container->is_defined(*type)) {
+                    Error::error(statement.name, fmt::format("use of undeclared type \"{}\"", type->to_string()));
+                }
+                statement.type = type_container->from_type_definition(std::move(statement.type_definition));
+            } else {
+                // when doing type deduction, we use the type of the initial value as type for the variable
+                statement.type = statement.initial_value->data_type;
             }
-            statement.type = type_container->from_type_definition(std::move(statement.type_definition));
 
             assert(statement.variable_symbol != nullptr);
             statement.variable_symbol->offset = claim_stack_space(statement.type->size());
-
-            statement.initial_value->accept(*this);
-            // initial value must be an rvalue
-            statement.initial_value->value_type = ValueType::RValue;
 
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
