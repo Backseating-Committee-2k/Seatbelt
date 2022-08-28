@@ -6,6 +6,7 @@
 
 #include "data_type.hpp"
 #include "lexer.hpp"
+#include "overloaded.hpp"
 #include "parameter_list.hpp"
 #include "scope.hpp"
 #include <cassert>
@@ -17,15 +18,6 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
-
-template<class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-
-// explicit deduction guide (not needed as of C++20)
-template<class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
 
 /**
  * This type only serves as a marker inside the `function_to_call`-member of

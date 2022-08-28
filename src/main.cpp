@@ -1,3 +1,4 @@
+#include "bssembly.hpp"
 #include "emitter.hpp"
 #include "error.hpp"
 #include "lexer.hpp"
@@ -309,18 +310,20 @@ int main(int, char** argv) {
             global_scope, type_container
     );
 
-    std::string assembly = "jump $\"::main()\"\n";
+    auto bssembly = Bssembler::Bssembly{};
+    using namespace std::string_view_literals;
+    bssembly.add(Bssembler::Instruction{Bssembler::Mnemonic::JUMP, {Bssembler::Immediate{"$\"::main()\""sv}}});
 
     auto label_generator = Emitter::LabelGenerator{};
     for (const auto& item : program) {
-        assembly += std::visit(Emitter::Emitter{ &program, &label_generator, &type_container }, item);
+        bssembly += std::visit(Emitter::Emitter{ &program, &label_generator, &type_container }, item);
     }
 
     if (command_line_parser.was_provided<'o'>()) {
         auto out_filename = command_line_parser.get<'o'>();
-        write_to_file(assembly, std::move(out_filename));
+        write_to_file(bssembly.to_string(), std::move(out_filename));
     } else {
-        fmt::print("{}", assembly);
+        fmt::print("{}", bssembly.to_string());
     }
 
     std::exit(EXIT_SUCCESS);
