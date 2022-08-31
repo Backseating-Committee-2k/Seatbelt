@@ -457,6 +457,60 @@ namespace Bssembler {
             m_instructions.emplace_back(std::forward<decltype(instruction)>(instruction));
         }
 
+        void emit_mem_copy(const Register source_pointer, const Register destination_pointer, usize size) {
+            if (size == 0 or source_pointer == destination_pointer) {
+                return;
+            }
+            using enum Register;
+            using enum Mnemonic;
+
+            Register temp_register = R0;
+            for (int i = static_cast<int>(R1); i < static_cast<int>(R253); ++i) {
+                const auto current = static_cast<Register>(i);
+                if (current != source_pointer and current != destination_pointer) {
+                    temp_register = current;
+                    break;
+                }
+            }
+            assert(temp_register != source_pointer and temp_register != destination_pointer);
+
+            Register source_address = R0;
+            for (int i = static_cast<int>(R1); i < static_cast<int>(R253); ++i) {
+                const auto current = static_cast<Register>(i);
+                if (current != source_pointer and current != destination_pointer and current != temp_register) {
+                    source_address = current;
+                    break;
+                }
+            }
+            assert(source_address != source_pointer and source_address != destination_pointer
+                   and source_address != temp_register);
+
+            add(Instruction{
+                    COPY,
+                    {source_pointer, source_address}
+            });
+            // TODO: optimize by utilizing COPY and COPY_HALFWORD instead of always using COPY_BYTE
+            for (usize i = 0; i < size; ++i) {
+                add(Instruction{
+                        COPY_BYTE,
+                        {Pointer{ source_address }, temp_register},
+                        "fetch byte"
+                });
+                add(Instruction{
+                        OFFSET_COPY_BYTE,
+                        {temp_register, Immediate{ i }, Pointer{ destination_pointer }},
+                        "copy byte"
+                });
+                if (i < size - 1) {
+                    add(Instruction{
+                            ADD,
+                            {source_address, 1, source_address},
+                            "increase source pointer"
+                    });
+                }
+            }
+        }
+
         [[nodiscard]] std::string to_string() const {
             auto result = std::string{};
             for (const auto& instruction : m_instructions) {
@@ -543,4 +597,4 @@ namespace Bssembler {
     private:
         InstructionVector m_instructions;
     };
-}// namespace Bssembler
+} // namespace Bssembler
