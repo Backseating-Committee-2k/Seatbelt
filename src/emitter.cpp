@@ -7,6 +7,7 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "types.hpp"
+#include "utils.hpp"
 #include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
@@ -237,16 +238,38 @@ namespace Emitter {
                 bssembly.add(Instruction{ PUSH, { R1 }, "push the address of variable onto the stack" });
             } else {
                 // we have an rvalue
+                // TODO: rewrite to utilize a mem-copy
+
                 const auto size = expression.data_type->size();
-                assert(size % 4 == 0);
-                const auto num_words = size / 4;
+                const auto num_words = Utils::ceiling_division(size, WordSize);
+                assert(num_words > 0 and "not implemented");
+
+                // how many bytes in the last word are occupied?
+                const auto occupied_in_last_word = (size % WordSize == 0 ? WordSize : size % WordSize);
+
                 bssembly.add(Comment{
                         fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) });
                 for (usize i = 0; i < num_words; ++i) {
-                    bssembly.add(Instruction{
-                            COPY,
-                            {Pointer{ R1 }, R2}
-                    });
+                    if (i != num_words - 1 or occupied_in_last_word == WordSize) {
+                        bssembly.add(Instruction{
+                                COPY,
+                                {Pointer{ R1 }, R2}
+                        });
+                    } else if (occupied_in_last_word == 1) {
+                        bssembly.add(Instruction{
+                                COPY_BYTE,
+                                {Pointer{ R1 }, R2}
+                        });
+                    } else if (occupied_in_last_word == 2) {
+                        bssembly.add(Instruction{
+                                COPY_HALFWORD,
+                                {Pointer{ R1 }, R2}
+                        });
+                    } else if (occupied_in_last_word == 3) {
+                        assert(false and "not implemented");
+                    } else {
+                        assert(false and "unreachable");
+                    }
                     bssembly.add(Instruction{ PUSH, { R2 } });
                     if (i < num_words - 1) {
                         bssembly.add(Instruction{
@@ -418,10 +441,10 @@ namespace Emitter {
                                                   Error::token_location(expression.operator_token).view()
                                           ) });
 
-                const auto either_is_a_pointer = (expression.lhs->data_type == type_container->get_u32() and
-                                                  expression.rhs->data_type->is_pointer_type()) or
-                                                 (expression.lhs->data_type->is_pointer_type() and
-                                                  expression.rhs->data_type == type_container->get_u32());
+                const auto either_is_a_pointer = (expression.lhs->data_type == type_container->get_u32()
+                                                  and expression.rhs->data_type->is_pointer_type())
+                                                 or (expression.lhs->data_type->is_pointer_type()
+                                                     and expression.rhs->data_type == type_container->get_u32());
                 const auto both_are_pointers =
                         (expression.lhs->data_type->is_pointer_type() and expression.rhs->data_type->is_pointer_type());
 
@@ -478,7 +501,7 @@ namespace Emitter {
              * return address
              * jump address
              */
-            expression.callee->accept(*this);// evaluate callee => jump address is pushed
+            expression.callee->accept(*this); // evaluate callee => jump address is pushed
             bssembly.add(Instruction{
                     ADD,
                     {SP, Immediate{ 4 }, SP},
@@ -488,8 +511,51 @@ namespace Emitter {
 
             usize arguments_size = 0;
             for (const auto& argument : expression.arguments) {
-                argument->accept(*this);// evaluate argument => result will be pushed
-                arguments_size += argument->data_type->size();
+                const auto type = argument->data_type;
+                arguments_size = Utils::round_up(arguments_size, type->alignment());
+                arguments_size += type->size();
+            }
+            const auto arguments_size_with_padding = Utils::round_up(arguments_size, WordSize);
+            const auto arguments_padding = arguments_size_with_padding - arguments_size;
+            bssembly.add(Instruction{
+                    ADD,
+                    {SP, Immediate{ arguments_size_with_padding }, SP},
+                    fmt::format(
+                            "reserve stack space for the arguments (additional padding of {} bytes)", arguments_padding
+                    )
+            });
+            bssembly.add(Comment{ "evaluate all arguments one by one and put them into the reserved stack space" });
+            usize current_offset = 0;
+            for (const auto& argument : expression.arguments) {
+                if (argument->data_type->size() == 0) {
+                    continue;
+                }
+                current_offset = Utils::round_up(current_offset, argument->data_type->alignment());
+                argument->accept(*this); // evaluate argument => result will be pushed
+                bssembly.add(Instruction{
+                        SUB,
+                        {SP, Immediate{ argument->data_type->size() }, R1},
+                        "calculate address of argument value"
+                });
+                bssembly.add(Instruction{
+                        SUB,
+                        {SP, Immediate{ WordSize + arguments_size_with_padding - current_offset }, R2},
+                        "calculate target address"
+                });
+                bssembly.add(Comment{ "mem-copy the argument" });
+                bssembly.emit_mem_copy(R1, R2, argument->data_type->size());
+                assert(argument->data_type->size() <= WordSize and "not implemented");
+                bssembly.add(Instruction{ POP, {}, "discard argument value" });
+                current_offset += argument->data_type->size();
+            }
+
+            // if we had to use padding for the arguments, we now have to undo the padding
+            if (arguments_padding > 0) {
+                bssembly.add(Instruction{
+                        SUB,
+                        {SP, Immediate{ arguments_padding }, SP},
+                        fmt::format("undo the additional arguments padding of {} bytes", arguments_padding)
+                });
             }
 
             bssembly.add(Instruction{
@@ -530,80 +596,34 @@ namespace Emitter {
             bssembly.add(Instruction{ POP, {}, "pop the callee address off of the stack" });
 
             const auto size = expression.data_type->size();
-            assert(size % 4 == 0);
-            const auto num_words = size / 4;
+            const auto num_words = Utils::ceiling_division(size, WordSize);
 
             assert(num_words <= 1 and "not implemented");
             if (num_words == 1) {
-                bssembly.add(Comment{ "// push the return value of the called function" });
-                bssembly.add(Instruction{ PUSH, { R1 } });
+                bssembly.add(Instruction{ PUSH, { R1 }, "push the return value of the called function" });
             }
         }
 
         void visit(Assignment& expression) override {
             assert(expression.assignee->is_lvalue());
 
-            /* we cannot simply evaluate the assignee since that would only give us the
-             * value of the left hand side, so this is a special case */
-            /*const auto assignee = dynamic_cast<const Name*>(expression.assignee.get());
-            assert(assignee and "assignee must be a name");
-            assert(assignee->variable_symbol.has_value() and "there must be a pointer to the corresponding symbol");
-            const auto offset = assignee->variable_symbol.value()->offset.value();*/
-
-            // get the size of the variable in words
             const auto size = expression.data_type->size();
-            assert(size % 4 == 0);
-            const auto num_words = size / 4;
+            if (size > 0) {
+                bssembly.add(Comment{ "evaluate the right-hand-side of the assignment (put result on the stack)" });
+                expression.value->accept(*this); // puts value on the stack
+                bssembly.add(Comment{ "evaluate the assignee to get the address to store the value at" });
+                expression.assignee->accept(*this); // this will put the address of the assignee onto the stack
+                bssembly.add(Instruction{ POP, { R2 }, "get address of assignee" });
+                bssembly.add(Instruction{
+                        SUB,
+                        {SP, Immediate{ size }, R1},
+                        "calculate address of value"
+                });
+                bssembly.emit_mem_copy(R1, R2, size);
 
-            if (num_words > 0) {
-                // we only emit code if there is any actual data to copy
-                bssembly.add(Comment{ "evaluate the right-hand-side of the assignment (put the value onto the stack)" }
-                );
-                expression.value->accept(*this);// puts value to assign onto stack
-
-                expression.assignee->accept(*this);// this will put the address of the assignee onto the stack
-                bssembly.add(Instruction{ POP, { R1 }, "get address of assignee" });
-
-                if (num_words > 1) {
-                    bssembly.add(Instruction{
-                            ADD,
-                            {R1, Immediate{ num_words - 1 }, R1},
-                            "get the address of the least significant byte of the assignment target"
-                    });
-                }
-
-                bssembly.add(Comment{ "store the value at the target address" });
-                for (usize i = 0; i < num_words; ++i) {
-                    bssembly.add(Instruction{ POP, { R2 } });
-                    bssembly.add(Instruction{
-                            COPY,
-                            {R2, Pointer{ R1 }}
-                    });
-                    if (i < num_words - 1) {
-                        bssembly.add(Instruction{
-                                SUB,
-                                {R1, Immediate{ 4 }, R1}
-                        });
-                    }
-                }
-
-                // Since assignments are expressions, they have a resulting value. We have to push
-                // the value onto the stack.
-                // (this obviously could be optimized)
-                bssembly.add(Comment{ "push the value of the assignment expression onto the stack" });
-                for (usize i = 0; i < num_words; ++i) {
-                    bssembly.add(Instruction{
-                            COPY,
-                            {Pointer{ R1 }, R2}
-                    });
-                    bssembly.add(Instruction{ PUSH, { R2 } });
-                    if (i < num_words - 1) {
-                        bssembly.add(Instruction{
-                                ADD,
-                                {R1, Immediate{ 4 }, R1}
-                        });
-                    }
-                }
+                // Since assignments are expressions, they have a resulting value. This value must lie on the
+                // stack after the assignment has been evaluated. Since we only copied the value, it is still
+                // present on the stack. We don't have to do anything else here.
             }
         }
 
@@ -788,7 +808,7 @@ namespace Emitter {
 
         void visit(ReturnStatement& statement) override {
             if (statement.return_value) {
-                statement.return_value->accept(*this);// evaluate return value => result is pushed
+                statement.return_value->accept(*this); // evaluate return value => result is pushed
                 bssembly.add(Instruction{ POP, { R1 }, "put return value into R1" });
             }
             bssembly.add(Instruction{ JUMP, { Immediate{ return_label } }, "immediately exit the current function" });
@@ -800,32 +820,22 @@ namespace Emitter {
                             .offset.value();
             bssembly.add(Comment{
                     fmt::format("new variable called \"{}\" with offset {}", statement.name.location.view(), offset) });
-            statement.initial_value->accept(*this);// initial value is evaluated and pushed
-            bssembly.add(Instruction{
-                    ADD,
-                    {R0, Immediate{ offset }, R1},
-                    fmt::format("calculate address for variable {}", statement.name.location.view())
-            });
-
-            bssembly.add(Comment{ "get initial value of variable" });
-            const auto size = statement.initial_value->data_type->size();
-            assert(size % 4 == 0);
-            const auto num_words = size / 4;
-            for (usize i = 0; i < num_words; ++i) {
-                bssembly.add(Instruction{ POP, { DynamicRegister{ static_cast<u8>(i + 2) } } });
-            }
-            bssembly.add(Comment{ "store initial value of variable in the stack" });
-            for (usize i = 0; i < num_words; ++i) {
+            if (statement.initial_value->data_type->size() > 0) {
+                statement.initial_value->accept(*this); // initial value is evaluated and pushed
                 bssembly.add(Instruction{
-                        COPY,
-                        {DynamicRegister{ static_cast<u8>(i + 2) }, Pointer{ R1 }}
+                        SUB,
+                        {SP, Immediate{ statement.initial_value->data_type->size() }, R1},
+                        "get address of initial value"
                 });
-                if (i < num_words - 1) {
-                    bssembly.add(Instruction{
-                            ADD,
-                            {R1, Immediate{ 4 }, R1}
-                    });
-                }
+                assert(statement.variable_symbol->offset.has_value() and "offset must have been set before");
+                bssembly.add(Instruction{
+                        ADD,
+                        {R0, Immediate{ *(statement.variable_symbol->offset) }, R2},
+                        "get target address"
+                });
+                bssembly.emit_mem_copy(R1, R2, statement.initial_value->data_type->size());
+                assert(statement.initial_value->data_type->size() <= WordSize and "not implemented");
+                bssembly.add(Instruction{ POP, {}, "discard initial value" });
             }
         }
 
@@ -843,11 +853,12 @@ namespace Emitter {
         void visit(ExpressionStatement& statement) override {
             statement.expression->accept(*this);
             const auto size = statement.expression->data_type->size();
-            assert(size % 4 == 0);
-            const auto num_words = size / 4;
-            bssembly.add(Comment{ "discard value of expression statement" });
-            for (usize i = 0; i < num_words; ++i) {
-                bssembly.add(Instruction{ POP, {} });
+            const auto num_words = Utils::ceiling_division(size, WordSize);
+            if (num_words > 0) {
+                bssembly.add(Comment{ "discard value of expression statement" });
+                for (usize i = 0; i < num_words; ++i) {
+                    bssembly.add(Instruction{ POP, {} });
+                }
             }
         }
 
@@ -915,11 +926,13 @@ namespace Emitter {
                     {SP, R0},
                     "save stack frame base pointer for main function into R0"
             });
-            assert(function_definition->body.occupied_stack_space.has_value() and
-                   "needed stack size for function must be known");
+            assert(function_definition->body.occupied_stack_space.has_value()
+                   and "needed stack size for function must be known");
             result.add(Instruction{
                     ADD,
-                    {SP, Immediate{ function_definition->body.occupied_stack_space.value() }, SP},
+                    {SP,
+                      Immediate{ Utils::round_up(function_definition->body.occupied_stack_space.value(), WordSize) },
+                      SP},
                     "reserve stack space for main function"
             });
         }
@@ -948,4 +961,4 @@ namespace Emitter {
         return {};
     }
 
-}// namespace Emitter
+} // namespace Emitter
