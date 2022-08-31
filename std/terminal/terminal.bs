@@ -1,41 +1,43 @@
 namespace std {
 
-    export function put_char(char: Char) ~> Nothing {
+    export function put_char(char: Char) {
         bsm {
-            copy *R0, R1 // put the value of char into R1
-            copy *CURSOR_POINTER, R2 // get the current cursor pointer value
-            copy R1, *R2 // write x onto the terminal
-            add R2, 4, R2 // increase the cursor pointer by 4
-            copy R2, *CURSOR_POINTER // write the cursor pointer back
-            copy TERMINAL_END, R45
-            comp R2, R45, R2
-            jump_lt R2, $end_of_put_char
+            COPY_BYTE *R0, R1 // put the value of char into R1
+            COPY *CURSOR_POINTER, R2 // get the current cursor pointer value
+            COPY_BYTE R1, *R2 // write the char onto the terminal
+            ADD R2, 1, R2 // increase the cursor pointer by 1
+            COPY R2, *CURSOR_POINTER // write the cursor pointer back
+            COPY TERMINAL_END, R45
+            COMP R2, R45, R2
+            JUMP_LT R2, $end_of_put_char
 
             // reset cursor to the terminal start
-            copy TERMINAL_START, R2
-            copy R2, *CURSOR_POINTER
+            COPY TERMINAL_START, R2
+            COPY R2, *CURSOR_POINTER
 
-        $end_of_put_char:
+            $end_of_put_char:
         }
     }
 
     function digit_to_char(digit: U32) ~> Char {
-        let result: Char = '0';
+        let result = '0';
         bsm {
             copy *R0, R1 // get value of digit
+            print R1
             add R1, 48, R1 // calculate ASCII code
+            print R1
             add R0, 4, R2 // get address of 'result'
-            copy R1, *R2 // store ASCII code into 'result'
+            copy_byte R1, *R2 // store ASCII code into 'result'
         }
         return result;
     }
 
-    export function print(n: mutable U32) ~> Nothing {
-        let factor: mutable U32 = 1000000000; // highest power of 10 representable as a U32
-        let started_output: mutable Bool = false;
+    export function print(n: mutable U32) {
+        let factor: mutable = 1000000000; // highest power of 10 representable as a U32
+        let started_output: mutable = false;
         while factor > 0 {
             if n >= factor {
-                let digit: U32 = n / factor;
+                let digit = n / factor;
                 std::put_char(digit_to_char(digit));
                 started_output = true;
                 n = n mod factor;
