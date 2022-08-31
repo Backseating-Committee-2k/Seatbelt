@@ -5,6 +5,7 @@
 #include "type_checker.hpp"
 #include "error.hpp"
 #include "return_type_checker.hpp"
+#include "utils.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -224,7 +225,8 @@ namespace TypeChecker {
             : type_container{ type_container },
               surrounding_function{ surrounding_function } {
             if (starting_offset > 0) {
-                claim_stack_space(starting_offset);
+                // alignment is 1, because we assume that the starting offset already has the right alignment
+                claim_stack_space(starting_offset, 1);
             }
         }
 
@@ -374,7 +376,7 @@ namespace TypeChecker {
             }
 
             assert(statement.variable_symbol != nullptr);
-            statement.variable_symbol->offset = claim_stack_space(statement.type->size());
+            statement.variable_symbol->offset = claim_stack_space(statement.type->size(), statement.type->alignment());
 
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
@@ -778,9 +780,10 @@ namespace TypeChecker {
             expression.value_type = ValueType::RValue;
         }
 
-        usize claim_stack_space(const usize size_of_type) {
-            const auto old_offset = offset;
-            offset += size_of_type;
+        usize claim_stack_space(const usize size_of_type, const usize alignment) {
+            // we have to make sure that the offset has the right alignment
+            const auto old_offset = Utils::round_up(offset, alignment);
+            offset = old_offset + size_of_type;
             if (offset > occupied_stack_space) {
                 occupied_stack_space = offset;
             }
@@ -812,7 +815,7 @@ namespace TypeChecker {
             }
             auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters, function_definition.get() };
             function_definition->body.accept(visitor);
-            function_definition->occupied_stack_space = visitor.occupied_stack_space;
+            function_definition->occupied_stack_space = Utils::round_up(visitor.occupied_stack_space, WordSize);
             function_definition->parameters_stack_space = size_of_parameters;
         }
 
