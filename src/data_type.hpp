@@ -30,6 +30,7 @@ public:
     virtual bool operator==(const DataType& other) const = 0;
     [[nodiscard]] virtual std::string to_string() const = 0;
     [[nodiscard]] virtual usize size() const = 0;
+    [[nodiscard]] virtual usize alignment() const = 0;
 
     [[nodiscard]] virtual usize num_words() const {
         assert(size() % 4 == 0);
@@ -64,13 +65,20 @@ struct ConcreteType final : public DataType {
     }
 
     [[nodiscard]] usize size() const override {
-        if (name == U32Identifier or name == BoolIdentifier or name == CharIdentifier) {
+        if (name == U32Identifier) {
             return 4;
+        } else if (name == BoolIdentifier or name == CharIdentifier) {
+            return 1;
         } else if (name == NothingIdentifier) {
             return 0;
         } else {
+            assert(false and "unknown data type");
             return {};
         }
+    }
+
+    [[nodiscard]] usize alignment() const override {
+        return std::max(size(), usize{ 1 });
     }
 
     [[nodiscard]] bool is_concrete_type() const override {
@@ -99,6 +107,10 @@ struct PointerType final : public DataType {
     }
 
     [[nodiscard]] usize size() const override {
+        return 4;
+    }
+
+    [[nodiscard]] usize alignment() const override {
         return 4;
     }
 
@@ -140,6 +152,10 @@ struct FunctionPointerType final : public DataType {
     }
 
     [[nodiscard]] usize size() const override {
+        return 4;
+    }
+
+    [[nodiscard]] usize alignment() const override {
         return 4;
     }
 
