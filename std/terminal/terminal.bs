@@ -23,9 +23,7 @@ namespace std {
         let result = '0';
         bsm {
             copy *R0, R1 // get value of digit
-            print R1
             add R1, 48, R1 // calculate ASCII code
-            print R1
             add R0, 4, R2 // get address of 'result'
             copy_byte R1, *R2 // store ASCII code into 'result'
         }
