@@ -42,7 +42,7 @@ bool TypeContainer::is_defined(const DataType& data_type) const {
         return find(data_type) != nullptr;
     }
     if (const auto pointer_type = dynamic_cast<const PointerType*>(&data_type)) {
-        return is_defined(*pointer_type->contained);
+        return is_defined(*(pointer_type->contained));
     }
     if (const auto function_pointer_type = dynamic_cast<const FunctionPointerType*>(&data_type)) {
         for (const auto& parameter_type : function_pointer_type->parameter_types) {
@@ -52,6 +52,9 @@ bool TypeContainer::is_defined(const DataType& data_type) const {
         }
         return is_defined(*function_pointer_type->return_type);
     }
+    if (const auto array_type = dynamic_cast<const ArrayType*>(&data_type)) {
+        return is_defined(*(array_type->contained));
+    }
     assert(false and "not implemented");
     return false;
 }
@@ -60,25 +63,29 @@ bool TypeContainer::is_defined(const DataType& data_type) const {
     return from_type_definition(std::make_unique<PointerType>(pointee_type, binding_mutability));
 }
 
-const DataType* TypeContainer::find(const DataType& data_type) const {
+[[nodiscard]] const DataType* TypeContainer::array_of(const DataType* contained, usize num_elements) {
+    return from_type_definition(std::make_unique<ArrayType>(contained, num_elements));
+}
+
+[[nodiscard]] const DataType* TypeContainer::find(const DataType& data_type) const {
     using std::ranges::find_if;
     const auto find_iterator = find_if(m_data_types, [&](const auto& other) { return data_type == *other; });
     const auto data_type_found = (find_iterator != std::cend(m_data_types));
     return data_type_found ? find_iterator->get() : nullptr;
 }
 
-const DataType* TypeContainer::get_u32() const {
+[[nodiscard]] const DataType* TypeContainer::get_u32() const {
     return m_u32;
 }
 
-const DataType* TypeContainer::get_bool() const {
+[[nodiscard]] const DataType* TypeContainer::get_bool() const {
     return m_bool;
 }
 
-const DataType* TypeContainer::get_char() const {
+[[nodiscard]] const DataType* TypeContainer::get_char() const {
     return m_char;
 }
 
-const DataType* TypeContainer::get_nothing() const {
+[[nodiscard]] const DataType* TypeContainer::get_nothing() const {
     return m_nothing;
 }

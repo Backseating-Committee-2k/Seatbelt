@@ -48,6 +48,10 @@ public:
     [[nodiscard]] virtual bool is_function_pointer_type() const {
         return false;
     }
+
+    [[nodiscard]] virtual bool is_array_type() const {
+        return false;
+    }
 };
 
 struct ConcreteType final : public DataType {
@@ -86,6 +90,36 @@ struct ConcreteType final : public DataType {
     }
 
     std::string_view name;
+};
+
+struct ArrayType final : public DataType {
+    ArrayType(const DataType* contained, usize num_elements) : contained{ contained }, num_elements{ num_elements } { }
+
+    [[nodiscard]] bool operator==(const DataType& other) const override {
+        if (const auto other_pointer = dynamic_cast<const ArrayType*>(&other)) {
+            return num_elements == other_pointer->num_elements and contained == other_pointer->contained;
+        }
+        return false;
+    }
+
+    [[nodiscard]] std::string to_string() const override {
+        return fmt::format("[{}; {}]", contained->to_string(), num_elements);
+    }
+
+    [[nodiscard]] usize size() const override {
+        return contained->size() * num_elements;
+    }
+
+    [[nodiscard]] usize alignment() const override {
+        return contained->alignment();
+    }
+
+    [[nodiscard]] bool is_array_type() const override {
+        return true;
+    }
+
+    const DataType* contained;
+    usize num_elements;
 };
 
 struct PointerType final : public DataType {

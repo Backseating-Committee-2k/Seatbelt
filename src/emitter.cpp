@@ -203,6 +203,22 @@ namespace Emitter {
             bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
         }
 
+        void visit(Parser::Expressions::ArrayLiteral& expression) override {
+            std::visit(
+                    overloaded{ [&](const std::vector<std::unique_ptr<Expression>>& values) {
+                                   for (const auto& value : values) {
+                                       value->accept(*this);
+                                   }
+                               },
+                                [&](const std::pair<std::unique_ptr<Expression>, usize>& pair) {
+                                    for (usize i = 0; i < pair.second; ++i) {
+                                        pair.first->accept(*this);
+                                    }
+                                } },
+                    expression.values
+            );
+        }
+
         void visit(Name& expression) override {
             assert(expression.data_type && "data type must be known at this point");
             const auto is_function = expression.possible_overloads.has_value();
@@ -834,6 +850,7 @@ namespace Emitter {
                         {R0, Immediate{ *(statement.variable_symbol->offset) }, R2},
                         "get target address"
                 });
+                assert(statement.initial_value->data_type->alignment() <= WordSize and "not implemented");
                 bssembly.emit_mem_copy(
                         R1, R2, statement.initial_value->data_type->size(),
                         statement.initial_value->data_type->alignment()

@@ -263,13 +263,14 @@ namespace Parser {
             const FunctionDefinition* surrounding_function{ nullptr };
             const LabelDefinition* target_label{ nullptr };
         };
-    }// namespace Statements
+    } // namespace Statements
 
     namespace Expressions {
 
         struct Integer;
         struct Char;
         struct Bool;
+        struct ArrayLiteral;
         struct Name;
         struct UnaryOperator;
         struct BinaryOperator;
@@ -284,6 +285,7 @@ namespace Parser {
             virtual void visit(Char& expression) = 0;
             virtual void visit(Bool& expression) = 0;
             virtual void visit(Name& expression) = 0;
+            virtual void visit(ArrayLiteral& expression) = 0;
             virtual void visit(UnaryOperator& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
@@ -334,6 +336,21 @@ namespace Parser {
             explicit Bool(BoolLiteral value) : value{ value } { }
 
             BoolLiteral value;
+        };
+
+        struct ArrayLiteral : public ExpressionAcceptor<ArrayLiteral> {
+            ArrayLiteral(
+                    LeftSquareBracket left_square_bracket_token,
+                    std::variant<
+                            std::vector<std::unique_ptr<Expression>>,
+                            std::pair<std::unique_ptr<Expression>, usize>> values
+            )
+                : left_square_bracket_token{ left_square_bracket_token },
+                  values{ std::move(values) } { }
+
+            LeftSquareBracket left_square_bracket_token;
+            std::variant<std::vector<std::unique_ptr<Expression>>, std::pair<std::unique_ptr<Expression>, usize>>
+                    values;
         };
 
         struct Name : public ExpressionAcceptor<Name> {
@@ -417,7 +434,7 @@ namespace Parser {
         };
 
 
-    }// namespace Expressions
+    } // namespace Expressions
 
     struct FunctionDefinition {
         Identifier name;
@@ -430,8 +447,8 @@ namespace Parser {
         std::string namespace_name{};
         bool is_entry_point{ false };
         std::vector<Statements::LabelDefinition*> contained_labels{};
-        std::optional<usize> occupied_stack_space{};  // total size of the needed stack space (in bytes)
-        std::optional<usize> parameters_stack_space{};// size of all parameters (in bytes)
+        std::optional<usize> occupied_stack_space{};   // total size of the needed stack space (in bytes)
+        std::optional<usize> parameters_stack_space{}; // size of all parameters (in bytes)
 
         [[nodiscard]] bool is_exported() const {
             return export_token.has_value();
@@ -452,4 +469,4 @@ namespace Parser {
 
     [[nodiscard]] Program parse(const Lexer::TokenList& tokens, TypeContainer& type_container);
 
-}// namespace Parser
+} // namespace Parser

@@ -52,6 +52,8 @@ public:
                 SINGLE_CHAR_TOKEN(';', Semicolon)
                 SINGLE_CHAR_TOKEN('{', LeftCurlyBracket)
                 SINGLE_CHAR_TOKEN('}', RightCurlyBracket)
+                SINGLE_CHAR_TOKEN('[', LeftSquareBracket)
+                SINGLE_CHAR_TOKEN(']', RightSquareBracket)
                 SINGLE_CHAR_TOKEN(',', Comma)
                 SINGLE_CHAR_TOKEN('@', At)
                 case '!':

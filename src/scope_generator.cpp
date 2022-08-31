@@ -248,6 +248,10 @@ namespace ScopeGenerator {
             expression.surrounding_scope = scope;
         }
 
+        void visit(Parser::Expressions::ArrayLiteral& expression) override {
+            expression.surrounding_scope = scope;
+        }
+
         void visit(Parser::Expressions::Name& expression) override {
             using std::ranges::find_if, Lexer::Tokens::Identifier;
             expression.surrounding_scope = scope;
@@ -416,6 +420,7 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::Integer&) override { }
         void visit(Parser::Expressions::Char&) override { }
         void visit(Parser::Expressions::Bool&) override { }
+        void visit(Parser::Expressions::ArrayLiteral&) override { }
         void visit(Parser::Expressions::Name&) override { }
         void visit(Parser::Expressions::UnaryOperator&) override { }
         void visit(Parser::Expressions::BinaryOperator&) override { }

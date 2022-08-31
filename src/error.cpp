@@ -80,6 +80,10 @@ struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
         token = expression.value;
     }
 
+    void visit(Parser::Expressions::ArrayLiteral& expression) override {
+        token = expression.left_square_bracket_token;
+    }
+
     void visit(Parser::Expressions::Name& expression) override {
         assert(not expression.name_tokens.empty() and "a name cannot consist of zero tokens");
         token = expression.name_tokens.front();
@@ -191,4 +195,4 @@ namespace Error {
     void warning(const Parser::Expressions::Expression& expression, std::string_view message) {
         Error::warning(get_first_token(expression), message);
     }
-}// namespace Error
+} // namespace Error
