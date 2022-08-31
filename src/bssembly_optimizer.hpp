@@ -29,8 +29,8 @@ inline void optimize(Bssembler::Bssembly& bssembly) {
             continue;
         }
 
-        if (instructions[0]->mnemonic == COPY and instructions[1]->mnemonic == PUSH and
-            instructions[2]->mnemonic == POP) {
+        if (instructions[0]->mnemonic == COPY and instructions[1]->mnemonic == PUSH
+            and instructions[2]->mnemonic == POP) {
             auto copy_target = instructions[0]->arguments.back();
             auto push_source = instructions[1]->arguments.front();
             if (copy_target == push_source) {

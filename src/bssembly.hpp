@@ -457,7 +457,12 @@ namespace Bssembler {
             m_instructions.emplace_back(std::forward<decltype(instruction)>(instruction));
         }
 
-        void emit_mem_copy(const Register source_pointer, const Register destination_pointer, usize size) {
+        void emit_mem_copy(
+                const Register source_pointer,
+                const Register destination_pointer,
+                const usize size,
+                const usize alignment
+        ) {
             if (size == 0 or source_pointer == destination_pointer) {
                 return;
             }
@@ -474,40 +479,32 @@ namespace Bssembler {
             }
             assert(temp_register != source_pointer and temp_register != destination_pointer);
 
-            Register source_address = R0;
-            for (int i = static_cast<int>(R1); i < static_cast<int>(R253); ++i) {
-                const auto current = static_cast<Register>(i);
-                if (current != source_pointer and current != destination_pointer and current != temp_register) {
-                    source_address = current;
-                    break;
-                }
-            }
-            assert(source_address != source_pointer and source_address != destination_pointer
-                   and source_address != temp_register);
+            assert(alignment <= size);
+            assert(size % alignment == 0);
 
-            add(Instruction{
-                    COPY,
-                    {source_pointer, source_address}
-            });
-            // TODO: optimize by utilizing COPY and COPY_HALFWORD instead of always using COPY_BYTE
-            for (usize i = 0; i < size; ++i) {
-                add(Instruction{
-                        COPY_BYTE,
-                        {Pointer{ source_address }, temp_register},
-                        "fetch byte"
-                });
-                add(Instruction{
-                        OFFSET_COPY_BYTE,
-                        {temp_register, Immediate{ i }, Pointer{ destination_pointer }},
-                        "copy byte"
-                });
-                if (i < size - 1) {
-                    add(Instruction{
-                            ADD,
-                            {source_address, 1, source_address},
-                            "increase source pointer"
-                    });
+            const auto num_copy_instructions = size / alignment;
+
+            const auto instruction = [&]() {
+                switch (alignment) {
+                    case 1: return OFFSET_COPY_BYTE;
+                    case HalfwordSize: return OFFSET_COPY_HALFWORD;
+                    case WordSize: return OFFSET_COPY;
+                    default:
+                        assert(false and "unreachable");
+                        return OFFSET_COPY;
                 }
+            }();
+            for (usize i = 0; i < num_copy_instructions; ++i) {
+                add(Instruction{
+                        instruction,
+                        {Pointer{ source_pointer }, Immediate{ i * alignment }, temp_register},
+                        "fetch data"
+                });
+                add(Instruction{
+                        instruction,
+                        {temp_register, Immediate{ i * alignment }, Pointer{ destination_pointer }},
+                        "write data"
+                });
             }
         }
 

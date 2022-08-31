@@ -543,7 +543,7 @@ namespace Emitter {
                         "calculate target address"
                 });
                 bssembly.add(Comment{ "mem-copy the argument" });
-                bssembly.emit_mem_copy(R1, R2, argument->data_type->size());
+                bssembly.emit_mem_copy(R1, R2, argument->data_type->size(), argument->data_type->alignment());
                 assert(argument->data_type->size() <= WordSize and "not implemented");
                 bssembly.add(Instruction{ POP, {}, "discard argument value" });
                 current_offset += argument->data_type->size();
@@ -608,6 +608,7 @@ namespace Emitter {
             assert(expression.assignee->is_lvalue());
 
             const auto size = expression.data_type->size();
+            const auto alignment = expression.data_type->alignment();
             if (size > 0) {
                 bssembly.add(Comment{ "evaluate the right-hand-side of the assignment (put result on the stack)" });
                 expression.value->accept(*this); // puts value on the stack
@@ -619,7 +620,7 @@ namespace Emitter {
                         {SP, Immediate{ size }, R1},
                         "calculate address of value"
                 });
-                bssembly.emit_mem_copy(R1, R2, size);
+                bssembly.emit_mem_copy(R1, R2, size, alignment);
 
                 // Since assignments are expressions, they have a resulting value. This value must lie on the
                 // stack after the assignment has been evaluated. Since we only copied the value, it is still
@@ -833,7 +834,10 @@ namespace Emitter {
                         {R0, Immediate{ *(statement.variable_symbol->offset) }, R2},
                         "get target address"
                 });
-                bssembly.emit_mem_copy(R1, R2, statement.initial_value->data_type->size());
+                bssembly.emit_mem_copy(
+                        R1, R2, statement.initial_value->data_type->size(),
+                        statement.initial_value->data_type->alignment()
+                );
                 assert(statement.initial_value->data_type->size() <= WordSize and "not implemented");
                 bssembly.add(Instruction{ POP, {}, "discard initial value" });
             }
