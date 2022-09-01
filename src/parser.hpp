@@ -5,6 +5,7 @@
 #pragma once
 
 #include "data_type.hpp"
+#include "error.hpp"
 #include "lexer.hpp"
 #include "overloaded.hpp"
 #include "parameter_list.hpp"
@@ -40,6 +41,21 @@ namespace Parser {
 
     namespace Expressions {
         struct Expression;
+    }
+
+    struct IndexOperator { };
+
+    using BinaryOperatorType = std::variant<Token, IndexOperator>;
+
+    [[nodiscard]] inline std::string_view binary_operator_type_to_string_view(const BinaryOperatorType& operator_type) {
+        if (const auto operator_token = std::get_if<Token>(&operator_type)) {
+            return Error::token_location(*operator_token).view();
+        } else if (std::holds_alternative<IndexOperator>(operator_type)) {
+            return "[]";
+        } else {
+            assert(false and "unreachable");
+            return "";
+        }
     }
 
     namespace Statements {
@@ -371,14 +387,18 @@ namespace Parser {
         };
 
         struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {
-            BinaryOperator(std::unique_ptr<Expression> lhs, std::unique_ptr<Expression> rhs, Token operator_token)
+            BinaryOperator(
+                    std::unique_ptr<Expression> lhs,
+                    std::unique_ptr<Expression> rhs,
+                    BinaryOperatorType operator_type
+            )
                 : lhs{ std::move(lhs) },
                   rhs{ std::move(rhs) },
-                  operator_token{ operator_token } { }
+                  operator_type{ operator_type } { }
 
             std::unique_ptr<Expression> lhs;
             std::unique_ptr<Expression> rhs;
-            Token operator_token;
+            BinaryOperatorType operator_type;
         };
 
         struct FunctionCall : public ExpressionAcceptor<FunctionCall> {

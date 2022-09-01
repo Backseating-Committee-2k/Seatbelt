@@ -148,24 +148,34 @@ namespace Parser {
                 advance();
                 return std::make_unique<Expressions::UnaryOperator>(at_token, right_associative_unary_operator());
             }
-            return function_call();
+            return function_call_or_index_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> function_call() {
-            using Expressions::FunctionCall;
+        [[nodiscard]] std::unique_ptr<Expression> function_call_or_index_operator() {
+            using Expressions::FunctionCall, Expressions::BinaryOperator, Parser::IndexOperator;
 
             auto accumulator = dereferencing();
-            while (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
-                std::vector<std::unique_ptr<Expression>> arguments;
-                while (not end_of_file() and not current_is<RightParenthesis>()) {
-                    arguments.push_back(expression());
-                    if (not maybe_consume<Comma>()) {
-                        break;
+            while (is_one_of<LeftParenthesis, LeftSquareBracket>(current())) {
+                if (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
+                    std::vector<std::unique_ptr<Expression>> arguments;
+                    while (not end_of_file() and not current_is<RightParenthesis>()) {
+                        arguments.push_back(expression());
+                        if (not maybe_consume<Comma>()) {
+                            break;
+                        }
                     }
+                    consume<RightParenthesis>("expected \")\" at end of parameter list");
+                    accumulator = std::make_unique<FunctionCall>(
+                            std::move(accumulator), *left_parenthesis, std::move(arguments)
+                    );
+                } else if (maybe_consume<LeftSquareBracket>()) {
+                    auto index = expression();
+                    consume<RightSquareBracket>("expected \"]\"");
+                    accumulator =
+                            std::make_unique<BinaryOperator>(std::move(accumulator), std::move(index), IndexOperator{});
+                } else {
+                    assert(false and "unreachable");
                 }
-                consume<RightParenthesis>("expected \")\" at end of parameter list");
-                accumulator =
-                        std::make_unique<FunctionCall>(std::move(accumulator), *left_parenthesis, std::move(arguments));
             }
             return accumulator;
         }
@@ -505,7 +515,6 @@ namespace Parser {
             consume<RightSquareBracket>("expected \"]\"");
 
             const auto parsed_number = get_number_from_integer_literal<u32>(num_elements_literal);
-            fmt::print(stderr, "num elements = {}\n", parsed_number.value);
 
             return std::make_unique<ArrayType>(
                     m_type_container->from_type_definition(std::move(contained)), parsed_number.value

@@ -23,6 +23,11 @@ static constexpr std::string_view BoolIdentifier{ "Bool" };
 static constexpr std::string_view NothingIdentifier{ "Nothing" };
 static constexpr std::string_view FunctionPointerKeyword{ "Function" };
 
+struct ConcreteType;
+struct ArrayType;
+struct PointerType;
+struct FunctionPointerType;
+
 struct DataType {
 public:
     virtual ~DataType() = default;
@@ -31,6 +36,7 @@ public:
     [[nodiscard]] virtual std::string to_string() const = 0;
     [[nodiscard]] virtual usize size() const = 0;
     [[nodiscard]] virtual usize alignment() const = 0;
+    [[nodiscard]] virtual usize size_when_pushed() const = 0;
 
     [[nodiscard]] virtual usize num_words() const {
         assert(size() % 4 == 0);
@@ -51,6 +57,22 @@ public:
 
     [[nodiscard]] virtual bool is_array_type() const {
         return false;
+    }
+
+    [[nodiscard]] virtual std::optional<const ConcreteType*> as_concrete_type() const {
+        return {};
+    }
+
+    [[nodiscard]] virtual std::optional<const ArrayType*> as_array_type() const {
+        return {};
+    }
+
+    [[nodiscard]] virtual std::optional<const PointerType*> as_pointer_type() const {
+        return {};
+    }
+
+    [[nodiscard]] virtual std::optional<const FunctionPointerType*> as_function_pointer_Type() const {
+        return {};
     }
 };
 
@@ -85,8 +107,17 @@ struct ConcreteType final : public DataType {
         return std::max(size(), usize{ 1 });
     }
 
+    [[nodiscard]] usize size_when_pushed() const override {
+        assert(size() <= WordSize);
+        return size() == 0 ? 0 : WordSize;
+    }
+
     [[nodiscard]] bool is_concrete_type() const override {
         return true;
+    }
+
+    [[nodiscard]] std::optional<const ConcreteType*> as_concrete_type() const override {
+        return this;
     }
 
     std::string_view name;
@@ -114,8 +145,16 @@ struct ArrayType final : public DataType {
         return contained->alignment();
     }
 
+    [[nodiscard]] usize size_when_pushed() const override {
+        return num_elements * contained->size_when_pushed();
+    }
+
     [[nodiscard]] bool is_array_type() const override {
         return true;
+    }
+
+    [[nodiscard]] std::optional<const ArrayType*> as_array_type() const override {
+        return this;
     }
 
     const DataType* contained;
@@ -148,8 +187,16 @@ struct PointerType final : public DataType {
         return 4;
     }
 
+    [[nodiscard]] usize size_when_pushed() const override {
+        return WordSize;
+    }
+
     [[nodiscard]] bool is_pointer_type() const override {
         return true;
+    }
+
+    [[nodiscard]] std::optional<const PointerType*> as_pointer_type() const override {
+        return this;
     }
 
     const DataType* contained;
@@ -193,8 +240,16 @@ struct FunctionPointerType final : public DataType {
         return 4;
     }
 
+    [[nodiscard]] usize size_when_pushed() const override {
+        return WordSize;
+    }
+
     [[nodiscard]] bool is_function_pointer_type() const override {
         return true;
+    }
+
+    [[nodiscard]] std::optional<const FunctionPointerType*> as_function_pointer_Type() const override {
+        return this;
     }
 
     std::vector<const DataType*> parameter_types;

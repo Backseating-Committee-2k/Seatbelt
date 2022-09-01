@@ -191,9 +191,19 @@ namespace TypeChecker {
 
     [[nodiscard]] const DataType*
     get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression, TypeContainer& type_container) {
-        return get_resulting_data_type(
-                expression.lhs->data_type, expression.operator_token, expression.rhs->data_type, type_container
-        );
+        if (const auto operator_token = std::get_if<Token>(&expression.operator_type)) {
+            return get_resulting_data_type(
+                    expression.lhs->data_type, *operator_token, expression.rhs->data_type, type_container
+            );
+        } else if (const auto index_operator = std::get_if<Parser::IndexOperator>(&expression.operator_type)) {
+            if (expression.lhs->data_type->is_array_type() and expression.rhs->data_type == type_container.get_u32()) {
+                return (*(expression.lhs->data_type->as_array_type()))->contained;
+            }
+            return nullptr;
+        } else {
+            assert(false and "not implemented");
+            return nullptr;
+        }
     }
 
     template<typename... Types>
@@ -579,22 +589,37 @@ namespace TypeChecker {
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
 
-            // both operands are required to be rvalues
-            expression.lhs->value_type = ValueType::RValue;
-            expression.rhs->value_type = ValueType::RValue;
+            if (std::holds_alternative<Token>(expression.operator_type)) {
+                // both operands are required to be rvalues
+                expression.lhs->value_type = ValueType::RValue;
+                expression.rhs->value_type = ValueType::RValue;
+
+                // the result also is an rvalue
+                expression.value_type = ValueType::RValue;
+            } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
+                // for index operators, the left operand must be an lvalue
+                if (not expression.lhs->is_lvalue()) {
+                    Error::error(*expression.lhs, "index operator required left operand to be an lvalue");
+                }
+                // the right operator must be an rvalue, though
+                expression.rhs->value_type = ValueType::RValue;
+
+                // the result of the index operator is an lvalue (mutability is inherited from the left operand)
+                expression.value_type = expression.lhs->value_type;
+            } else {
+                assert(false and "not implemented");
+            }
 
             if (const auto resulting_type = get_resulting_data_type(expression, *type_container)) {
                 expression.data_type = resulting_type;
-                expression.value_type = ValueType::RValue;
                 return;
             }
             Error::error(
-                    expression.operator_token,
-                    fmt::format(
-                            R"(operator "{}" can not be applied to operands of type "{}" and "{}")",
-                            Error::token_location(expression.operator_token).view(),
-                            expression.lhs->data_type->to_string(), expression.rhs->data_type->to_string()
-                    )
+                    expression, fmt::format(
+                                        R"(operator "{}" can not be applied to operands of type "{}" and "{}")",
+                                        Parser::binary_operator_type_to_string_view(expression.operator_type),
+                                        expression.lhs->data_type->to_string(), expression.rhs->data_type->to_string()
+                                )
             );
         }
 
@@ -810,6 +835,7 @@ namespace TypeChecker {
             // only visit the body
             usize size_of_parameters = 0;
             for (const auto& parameter : function_definition->parameters) {
+                size_of_parameters = Utils::round_up(size_of_parameters, parameter.type->alignment());
                 size_of_parameters += parameter.type->size();
             }
             auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters, function_definition.get() };
@@ -843,6 +869,7 @@ namespace TypeChecker {
                     );
                 }
                 parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
+                offset = Utils::round_up(offset, parameter.type->alignment());
                 parameter.variable_symbol->offset = offset;
                 offset += parameter.type->size();
             }

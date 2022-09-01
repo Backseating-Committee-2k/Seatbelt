@@ -41,8 +41,8 @@ namespace ScopeGenerator {
                     // if the namespace the name expression occurred in is different from the namespace
                     // in which we found the function overload, then the lookup is only valid if the function
                     // has been exported
-                    if (name.surrounding_scope->surrounding_namespace.starts_with(namespace_qualifier) or
-                        overload.definition->is_exported()) {
+                    if (name.surrounding_scope->surrounding_namespace.starts_with(namespace_qualifier)
+                        or overload.definition->is_exported()) {
                         possible_overloads.push_back(&overload);
                     }
                 }
@@ -220,8 +220,8 @@ namespace ScopeGenerator {
             const auto find_iterator = std::find_if(
                     std::cbegin(function->contained_labels), std::cend(function->contained_labels),
                     [&](const auto label_definition) {
-                        return label_definition->identifier.location.view() ==
-                               statement.label_identifier.location.view();
+                        return label_definition->identifier.location.view()
+                               == statement.label_identifier.location.view();
                     }
             );
             const auto found = find_iterator != std::cend(function->contained_labels);
@@ -249,7 +249,19 @@ namespace ScopeGenerator {
         }
 
         void visit(Parser::Expressions::ArrayLiteral& expression) override {
+            using Parser::Expressions::Expression;
             expression.surrounding_scope = scope;
+            std::visit(
+                    overloaded{ [&](const std::vector<std::unique_ptr<Expression>>& values) {
+                                   for (const auto& value : values) {
+                                       value->accept(*this);
+                                   }
+                               },
+                                [&](const std::pair<std::unique_ptr<Expression>, usize>& pair) {
+                                    pair.first->accept(*this);
+                                } },
+                    expression.values
+            );
         }
 
         void visit(Parser::Expressions::Name& expression) override {
@@ -457,8 +469,8 @@ namespace ScopeGenerator {
                                                        .definition{ function_definition.get() } };
 
             if (found) {
-                assert(std::holds_alternative<FunctionSymbol>(find_iterator->second) &&
-                       "other cases not implemented yet");
+                assert(std::holds_alternative<FunctionSymbol>(find_iterator->second)
+                       && "other cases not implemented yet");
                 auto& function_symbol = std::get<FunctionSymbol>(find_iterator->second);
                 auto& new_overload = function_symbol.overloads.emplace_back(std::move(function_overload));
                 function_definition->corresponding_symbol = &new_overload;
@@ -499,4 +511,4 @@ namespace ScopeGenerator {
         visit_function_bodies(program, type_container, global_scope);
     }
 
-}// namespace ScopeGenerator
+} // namespace ScopeGenerator
