@@ -176,38 +176,25 @@ namespace Emitter {
 
         void visit(Integer& expression) override {
             assert(not expression.emittable_string.empty());
-            bssembly.add(Instruction{
-                    COPY,
-                    {Immediate{ expression.emittable_string }, R1},
-                    "put immediate into register"
-            });
-            bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
+            bssembly.add(Instruction{ PUSH, { Immediate{ expression.emittable_string } }, "push immediate onto stack" }
+            );
         }
 
         void visit(Char& expression) override {
-            bssembly.add(Instruction{
-                    COPY,
-                    {Immediate{ char_token_to_u8(expression.value) }, R1},
-                    "put immediate into register"
-            });
-            bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
+            bssembly.add(Instruction{ PUSH,
+                                      { Immediate{ char_token_to_u8(expression.value) } },
+                                      "push immediate onto stack" });
         }
 
         void visit(Bool& expression) override {
             const u8 value = expression.value.location.view() == "true" ? 1 : 0;
-            bssembly.add(Instruction{
-                    COPY,
-                    {Immediate{ value }, R1},
-                    "put immediate into register"
-            });
-            bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
+            bssembly.add(Instruction{ PUSH, { Immediate{ value } }, "push immediate onto stack" });
         }
 
         void visit(Parser::Expressions::ArrayLiteral& expression) override {
             std::visit(
                     overloaded{ [&](const std::vector<std::unique_ptr<Expression>>& values) {
                                    for (const auto& value : values) {
-                                       bssembly.add(Comment{ "value of array" });
                                        value->accept(*this);
                                    }
                                },
@@ -526,7 +513,7 @@ namespace Emitter {
                         "get address of array element"
                 });
                 if (expression.is_lvalue()) {
-                    bssembly.add(Instruction{ PUSH, {R1}, "push address of array element"});
+                    bssembly.add(Instruction{ PUSH, { R1 }, "push address of array element" });
                 } else {
                     bssembly.push_value_onto_stack(R1, expression.data_type);
                 }
