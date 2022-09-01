@@ -443,11 +443,9 @@ namespace Bssembler {
     };
 
     class Bssembly {
-    private:
+    public:
         using InstructionVariant = std::variant<NewLine, Comment, Instruction, Label, InlineBssembly>;
         using InstructionVector = std::vector<InstructionVariant>;
-
-    public:
         using iterator = InstructionVector::iterator;
         using const_iterator = InstructionVector::const_iterator;
 
@@ -701,7 +699,7 @@ namespace Bssembler {
             return m_instructions[index];
         }
 
-        void replace(usize from, usize to, std::initializer_list<InstructionVariant> replacement) {
+        void replace(usize from, usize to, std::span<InstructionVariant> replacement) {
             m_instructions.erase(
                     m_instructions.begin() + static_cast<decltype(m_instructions)::difference_type>(from),
                     m_instructions.begin() + static_cast<decltype(m_instructions)::difference_type>(to)
@@ -711,6 +709,10 @@ namespace Bssembler {
                 m_instructions.insert(m_instructions.begin() + position, instruction);
                 ++position;
             }
+        }
+
+        [[nodiscard]] InstructionVector& instruction_vector() {
+            return m_instructions;
         }
 
     private:

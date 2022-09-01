@@ -322,7 +322,7 @@ int main(int, char** argv) {
     }
 
     usize size_before = bssembly.size();
-    optimize(bssembly);
+    optimize(bssembly, command_line_parser.get<'v'>());
     usize size_after = bssembly.size();
     if (command_line_parser.get<'v'>()) {
         fmt::print(
