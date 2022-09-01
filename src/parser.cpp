@@ -7,6 +7,7 @@
 #include "namespace.hpp"
 #include "type_container.hpp"
 #include "types.hpp"
+#include "utils.hpp"
 #include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
@@ -20,6 +21,12 @@
 #include <vector>
 
 namespace Parser {
+
+    template<std::integral T>
+    struct ParsedNumber {
+        T value;
+        usize base;
+    };
 
     using Expressions::Expression;
 
@@ -111,9 +118,10 @@ namespace Parser {
         template<typename FirstGroup, typename... RemainingGroups>
         [[nodiscard]] std::unique_ptr<Expression> binary_operator(FirstGroup first, RemainingGroups... remaining) {
             using Expressions::BinaryOperator;
-            auto accumulator = binary_operator(remaining...);// fold expression leads to parsing the last group first
-            while (auto current_token = maybe_consume_one_of(first)) {// try to consume any of the tokens of first group
-                auto next_operand = binary_operator(remaining...);    // same as above, but now for right-hand side
+            auto accumulator = binary_operator(remaining...); // fold expression leads to parsing the last group first
+            while (auto current_token =
+                           maybe_consume_one_of(first)) {          // try to consume any of the tokens of first group
+                auto next_operand = binary_operator(remaining...); // same as above, but now for right-hand side
 
                 // nest the parsed expressions to accomplish left-associativity
                 accumulator = std::make_unique<BinaryOperator>(
@@ -140,24 +148,34 @@ namespace Parser {
                 advance();
                 return std::make_unique<Expressions::UnaryOperator>(at_token, right_associative_unary_operator());
             }
-            return function_call();
+            return function_call_or_index_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> function_call() {
-            using Expressions::FunctionCall;
+        [[nodiscard]] std::unique_ptr<Expression> function_call_or_index_operator() {
+            using Expressions::FunctionCall, Expressions::BinaryOperator, Parser::IndexOperator;
 
             auto accumulator = dereferencing();
-            while (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
-                std::vector<std::unique_ptr<Expression>> arguments;
-                while (not end_of_file() and not current_is<RightParenthesis>()) {
-                    arguments.push_back(expression());
-                    if (not maybe_consume<Comma>()) {
-                        break;
+            while (is_one_of<LeftParenthesis, LeftSquareBracket>(current())) {
+                if (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
+                    std::vector<std::unique_ptr<Expression>> arguments;
+                    while (not end_of_file() and not current_is<RightParenthesis>()) {
+                        arguments.push_back(expression());
+                        if (not maybe_consume<Comma>()) {
+                            break;
+                        }
                     }
+                    consume<RightParenthesis>("expected \")\" at end of parameter list");
+                    accumulator = std::make_unique<FunctionCall>(
+                            std::move(accumulator), *left_parenthesis, std::move(arguments)
+                    );
+                } else if (maybe_consume<LeftSquareBracket>()) {
+                    auto index = expression();
+                    consume<RightSquareBracket>("expected \"]\"");
+                    accumulator =
+                            std::make_unique<BinaryOperator>(std::move(accumulator), std::move(index), IndexOperator{});
+                } else {
+                    assert(false and "unreachable");
                 }
-                consume<RightParenthesis>("expected \")\" at end of parameter list");
-                accumulator =
-                        std::make_unique<FunctionCall>(std::move(accumulator), *left_parenthesis, std::move(arguments));
             }
             return accumulator;
         }
@@ -173,9 +191,39 @@ namespace Parser {
             return accumulator;
         }
 
+        [[nodiscard]] std::unique_ptr<Expression> array_literal() {
+            auto left_square_bracket_token = consume<LeftSquareBracket>();
+            auto first_value = expression();
+            if (maybe_consume<Semicolon>()) {
+                // array literal of the form [value; count]
+                if (not current_is<IntegerLiteral>()) {
+                    Error::error(current(), "expected number of array elements");
+                }
+                auto parsed_number = get_number_from_integer_literal<u32>(consume<IntegerLiteral>());
+                consume<RightSquareBracket>("expected \"]\"");
+                return std::make_unique<Expressions::ArrayLiteral>(
+                        left_square_bracket_token, std::pair{ std::move(first_value), parsed_number.value }
+                );
+            } else {
+                auto values = std::vector<std::unique_ptr<Expression>>{};
+                values.push_back(std::move(first_value));
+                while (not maybe_consume<RightSquareBracket>()) {
+                    consume<Comma>("expected \",\"");
+                    if (maybe_consume<RightSquareBracket>()) {
+                        break;
+                    }
+                    values.push_back(expression());
+                }
+                return std::make_unique<Expressions::ArrayLiteral>(left_square_bracket_token, std::move(values));
+            }
+        }
+
         [[nodiscard]] std::unique_ptr<Expression> primary() {
             using namespace Expressions;
 
+            if (current_is<LeftSquareBracket>()) {
+                return array_literal();
+            }
             if (const auto type_size_token = maybe_consume<TypeSize>()) {
                 consume<LeftParenthesis>("expected \"(\"");
                 auto type_definition = data_type();
@@ -363,8 +411,8 @@ namespace Parser {
             consume_semicolon();
 
             auto increment = std::unique_ptr<Expression>{};
-            if ((uses_parentheses and not current_is<RightParenthesis>()) or
-                (not uses_parentheses and not current_is<LeftCurlyBracket>())) {
+            if ((uses_parentheses and not current_is<RightParenthesis>())
+                or (not uses_parentheses and not current_is<LeftCurlyBracket>())) {
                 increment = expression();
             }
 
@@ -435,13 +483,42 @@ namespace Parser {
         }
 
         [[nodiscard]] std::unique_ptr<DataType> data_type() {
-            if (current_is<Arrow>()) {
+            if (current_is<LeftSquareBracket>()) {
+                return array_type();
+            } else if (current_is<Arrow>()) {
                 return pointer_type();
             } else if (current_is<CapitalizedFunction>()) {
                 return function_pointer_type();
             } else {
                 return primitive_type();
             }
+        }
+
+        template<std::integral T>
+        [[nodiscard]] static ParsedNumber<T> get_number_from_integer_literal(const IntegerLiteral& literal) {
+            auto number_string = Utils::strip_underscores(literal.location.view());
+            const auto base = Utils::get_base(literal.location.view());
+            auto number_string_without_prefix =
+                    (base == 10 ? std::string_view{ number_string } : std::string_view{ number_string }.substr(2));
+            if (not Utils::validate_integer<T>(number_string_without_prefix, base)) {
+                Error::error(literal, "integer literal out of bounds");
+            }
+            return ParsedNumber<T>{ .value{ Utils::parse_number<T>(number_string_without_prefix, base) },
+                                    .base{ base } };
+        }
+
+        [[nodiscard]] std::unique_ptr<DataType> array_type() {
+            consume<LeftSquareBracket>();
+            auto contained = data_type();
+            consume<Semicolon>("expected \";\"");
+            auto num_elements_literal = consume<IntegerLiteral>("number of array elements expected");
+            consume<RightSquareBracket>("expected \"]\"");
+
+            const auto parsed_number = get_number_from_integer_literal<u32>(num_elements_literal);
+
+            return std::make_unique<ArrayType>(
+                    m_type_container->from_type_definition(std::move(contained)), parsed_number.value
+            );
         }
 
         [[nodiscard]] std::unique_ptr<DataType> pointer_type() {
@@ -624,4 +701,4 @@ namespace Parser {
         return parser_state.parse();
     }
 
-}// namespace Parser
+} // namespace Parser

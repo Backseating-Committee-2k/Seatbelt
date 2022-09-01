@@ -31,16 +31,29 @@ inline void optimize(Bssembler::Bssembly& bssembly) {
 
         if (instructions[0]->mnemonic == COPY and instructions[1]->mnemonic == PUSH
             and instructions[2]->mnemonic == POP) {
-            auto copy_target = instructions[0]->arguments.back();
-            auto push_source = instructions[1]->arguments.front();
+            const auto copy_target = instructions[0]->arguments.back();
+            const auto push_source = instructions[1]->arguments.front();
+            const auto pop_target = instructions[2]->arguments.back();
             if (copy_target == push_source) {
-                bssembly.replace(
-                        i, i + 3,
-                        {
-                                Instruction{
-                                            COPY, { instructions[0]->arguments.front(), instructions[2]->arguments.front() }}
+                if (copy_target == pop_target) {
+                    bssembly.replace(
+                            i, i + 3,
+                            {
+                                    Instruction{COPY,
+                                                { instructions[0]->arguments.front(),
+                                                instructions[2]->arguments.front() }},
+                    }
+                    );
+                } else {
+                    bssembly.replace(
+                            i + 1, i + 3,
+                            {
+                                    Instruction{COPY,
+                                                { instructions[0]->arguments.front(),
+                                                instructions[2]->arguments.front() }},
+                    }
+                    );
                 }
-                );
             }
         }
     }

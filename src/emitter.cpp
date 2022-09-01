@@ -203,6 +203,23 @@ namespace Emitter {
             bssembly.add(Instruction{ PUSH, { R1 }, "push immediate onto stack" });
         }
 
+        void visit(Parser::Expressions::ArrayLiteral& expression) override {
+            std::visit(
+                    overloaded{ [&](const std::vector<std::unique_ptr<Expression>>& values) {
+                                   for (const auto& value : values) {
+                                       bssembly.add(Comment{ "value of array" });
+                                       value->accept(*this);
+                                   }
+                               },
+                                [&](const std::pair<std::unique_ptr<Expression>, usize>& pair) {
+                                    for (usize i = 0; i < pair.second; ++i) {
+                                        pair.first->accept(*this);
+                                    }
+                                } },
+                    expression.values
+            );
+        }
+
         void visit(Name& expression) override {
             assert(expression.data_type && "data type must be known at this point");
             const auto is_function = expression.possible_overloads.has_value();
@@ -333,165 +350,198 @@ namespace Emitter {
             }
         }
 
+        void short_circuiting_and(BinaryOperator& expression, Token operator_token) {
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()) });
+            const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
+            bssembly.add(Instruction{
+                    JUMP_EQ,
+                    {R1, Immediate{ end_of_evaluation }},
+                    "skip rest of evaluation if value is false"
+            });
+            bssembly.add(Instruction{ PUSH,
+                                      { R1 },
+                                      fmt::format(
+                                              "push left operand for {}-operator onto the stack",
+                                              Error::token_location(operator_token).view()
+                                      ) });
+            expression.rhs->accept(*this);
+            bssembly.add(Instruction{
+                    POP,
+                    { R2 },
+                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+            assert(expression.lhs->data_type == type_container->get_bool());
+            assert(expression.rhs->data_type == type_container->get_bool());
+            std::visit(BinaryOperatorEmitter{ this }, operator_token);
+            const auto after_push = label_generator->next_label("after_push");
+            bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
+            bssembly.add(Bssembler::Label{ end_of_evaluation });
+            bssembly.add(Instruction{
+                    COPY,
+                    {R1, R3},
+                    "store \"false\" as result"
+            });
+            bssembly.add(Bssembler::Label{ after_push });
+        }
+
+        void short_circuiting_or(BinaryOperator& expression, Token operator_token) {
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()) });
+            const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
+            bssembly.add(Instruction{
+                    JUMP_GT,
+                    {R1, Immediate{ end_of_evaluation }},
+                    "skip rest of evaluation if value is true"
+            });
+            bssembly.add(Instruction{ PUSH,
+                                      { R1 },
+                                      fmt::format(
+                                              "push left operand for {}-operator onto the stack",
+                                              Error::token_location(operator_token).view()
+                                      ) });
+            expression.rhs->accept(*this);
+            bssembly.add(Instruction{
+                    POP,
+                    { R2 },
+                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+            assert(expression.lhs->data_type == type_container->get_bool());
+            assert(expression.rhs->data_type == type_container->get_bool());
+            std::visit(BinaryOperatorEmitter{ this }, operator_token);
+            const auto after_push = label_generator->next_label("after_push");
+            bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
+            bssembly.add(Bssembler::Label{ end_of_evaluation });
+            bssembly.add(Instruction{
+                    COPY,
+                    {R1, R3},
+                    "store \"true\" as result"
+            });
+            bssembly.add(Bssembler::Label{ after_push });
+        }
+
+        void non_short_circuiting_binary_operator(BinaryOperator& expression, Token operator_token) {
+            expression.rhs->accept(*this);
+
+            bssembly.add(Instruction{
+                    POP,
+                    { R2 },
+                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()) });
+
+            const auto either_is_a_pointer = (expression.lhs->data_type == type_container->get_u32()
+                                              and expression.rhs->data_type->is_pointer_type())
+                                             or (expression.lhs->data_type->is_pointer_type()
+                                                 and expression.rhs->data_type == type_container->get_u32());
+            const auto both_are_pointers =
+                    (expression.lhs->data_type->is_pointer_type() and expression.rhs->data_type->is_pointer_type());
+
+            if (either_is_a_pointer) {
+                // one operand is a pointer, the other is a U32
+                const auto first_is_pointer = expression.lhs->data_type->is_pointer_type();
+                const auto& pointer = first_is_pointer ? expression.lhs : expression.rhs;
+                const auto pointer_type = dynamic_cast<const PointerType*>(pointer->data_type);
+                assert(pointer_type != nullptr);
+                assert(is<Plus>(operator_token) or first_is_pointer);
+                const auto size = pointer_type->contained->size();
+                const std::string_view number_register = (first_is_pointer ? "R2" : "R1");
+                bssembly.add(Instruction{
+                        COPY,
+                        {Immediate{ size }, R4},
+                        fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string())
+                });
+                bssembly.add(Instruction{
+                        MULT,
+                        {Immediate{ number_register }, R4, R3, Immediate{ number_register }},
+                        "multiply operand with size"
+                });
+            }
+
+            std::visit(BinaryOperatorEmitter{ this }, operator_token);
+
+            if (both_are_pointers and is<Minus>(operator_token)) {
+                const auto pointer_type = dynamic_cast<const PointerType*>(expression.lhs->data_type);
+                assert(pointer_type != nullptr and "this must be a pointer type");
+                const auto size = pointer_type->contained->size();
+                bssembly.add(Instruction{
+                        COPY,
+                        {Immediate{ size }, R5},
+                        fmt::format("get the size of the data type \"{}\"", pointer_type->to_string())
+                });
+                bssembly.add(Instruction{
+                        DIVMOD,
+                        {R3, R5, R3, R4},
+                        "divide the result of pointer subtraction by the size of the data type"
+                });
+            }
+        }
+
         void visit(BinaryOperator& expression) override {
             using namespace Lexer::Tokens;
 
             expression.lhs->accept(*this);
-            if (is<And>(expression.operator_token)) {
-                bssembly.add(Instruction{ POP,
-                                          { R1 },
-                                          fmt::format(
-                                                  R"(store lhs for {}-operator in R1)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
-                bssembly.add(Instruction{
-                        JUMP_EQ,
-                        {R1, Immediate{ end_of_evaluation }},
-                        "skip rest of evaluation if value is false"
-                });
-                bssembly.add(Instruction{ PUSH,
-                                          { R1 },
-                                          fmt::format(
-                                                  "push left operand for {}-operator onto the stack",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
+
+            if (const auto operator_token = std::get_if<Token>(&expression.operator_type)) {
+                if (is<And>(*operator_token)) {
+                    short_circuiting_and(expression, *operator_token);
+                } else if (is<Or>(*operator_token)) {
+                    short_circuiting_or(expression, *operator_token);
+                } else {
+                    non_short_circuiting_binary_operator(expression, *operator_token);
+                }
+                bssembly.add(Instruction{ PUSH, { R3 }, "push result onto stack" });
+            } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
+                assert(expression.lhs->is_lvalue());
+                assert(expression.lhs->data_type->is_array_type());
+                bssembly.add(Comment{ "evaluate index of index operator" });
                 expression.rhs->accept(*this);
-                bssembly.add(Instruction{ POP,
-                                          { R2 },
-                                          fmt::format(
-                                                  R"(store rhs for {}-operator in R2)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                bssembly.add(Instruction{ POP,
-                                          { R1 },
-                                          fmt::format(
-                                                  R"(store lhs for {}-operator in R2)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                assert(expression.lhs->data_type == type_container->get_bool());
-                assert(expression.rhs->data_type == type_container->get_bool());
-                std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
-                const auto after_push = label_generator->next_label("after_push");
-                bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
-                bssembly.add(Bssembler::Label{ end_of_evaluation });
+                bssembly.add(Instruction{ POP, { R1 }, "get index value" });
                 bssembly.add(Instruction{
                         COPY,
-                        {R1, R3},
-                        "store \"false\" as result"
+                        {Immediate{ (*(expression.lhs->data_type->as_array_type()))->contained->size() }, R2},
+                        "get size of contained data type"
                 });
-                bssembly.add(Bssembler::Label{ after_push });
-            } else if (is<Or>(expression.operator_token)) {
-                bssembly.add(Instruction{ POP,
-                                          { R1 },
-                                          fmt::format(
-                                                  R"(store lhs for {}-operator in R1)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
                 bssembly.add(Instruction{
-                        JUMP_GT,
-                        {R1, Immediate{ end_of_evaluation }},
-                        "skip rest of evaluation if value is true"
+                        MULT,
+                        {R1, R2, R4, R3},
+                        "multiply index with size of contained data type"
                 });
-                bssembly.add(Instruction{ PUSH,
-                                          { R1 },
-                                          fmt::format(
-                                                  "push left operand for {}-operator onto the stack",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                expression.rhs->accept(*this);
-                bssembly.add(Instruction{ POP,
-                                          { R2 },
-                                          fmt::format(
-                                                  R"(store rhs for {}-operator in R2)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                bssembly.add(Instruction{ POP,
-                                          { R1 },
-                                          fmt::format(
-                                                  R"(store lhs for {}-operator in R2)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                assert(expression.lhs->data_type == type_container->get_bool());
-                assert(expression.rhs->data_type == type_container->get_bool());
-                std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
-                const auto after_push = label_generator->next_label("after_push");
-                bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
-                bssembly.add(Bssembler::Label{ end_of_evaluation });
+                bssembly.add(Instruction{ POP, { R1 }, "get address of array" });
                 bssembly.add(Instruction{
-                        COPY,
-                        {R1, R3},
-                        "store \"true\" as result"
+                        ADD,
+                        {R1, R3, R1},
+                        "get address of array element"
                 });
-                bssembly.add(Bssembler::Label{ after_push });
+                if (expression.is_lvalue()) {
+                    bssembly.add(Instruction{ PUSH, {R1}, "push address of array element"});
+                } else {
+                    bssembly.push_value_onto_stack(R1, expression.data_type);
+                }
             } else {
-                expression.rhs->accept(*this);
-
-                bssembly.add(Instruction{ POP,
-                                          { R2 },
-                                          fmt::format(
-                                                  R"(store rhs for {}-operator in R2)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-                bssembly.add(Instruction{ POP,
-                                          { R1 },
-                                          fmt::format(
-                                                  R"(store lhs for {}-operator in R1)",
-                                                  Error::token_location(expression.operator_token).view()
-                                          ) });
-
-                const auto either_is_a_pointer = (expression.lhs->data_type == type_container->get_u32()
-                                                  and expression.rhs->data_type->is_pointer_type())
-                                                 or (expression.lhs->data_type->is_pointer_type()
-                                                     and expression.rhs->data_type == type_container->get_u32());
-                const auto both_are_pointers =
-                        (expression.lhs->data_type->is_pointer_type() and expression.rhs->data_type->is_pointer_type());
-
-                if (either_is_a_pointer) {
-                    // one operand is a pointer, the other is a U32
-                    const auto first_is_pointer = expression.lhs->data_type->is_pointer_type();
-                    const auto& pointer = first_is_pointer ? expression.lhs : expression.rhs;
-                    const auto pointer_type = dynamic_cast<const PointerType*>(pointer->data_type);
-                    assert(pointer_type != nullptr);
-                    assert(is<Plus>(expression.operator_token) or first_is_pointer);
-                    const auto size = pointer_type->contained->size();
-                    const std::string_view number_register = (first_is_pointer ? "R2" : "R1");
-                    bssembly.add(Instruction{
-                            COPY,
-                            {Immediate{ size }, R4},
-                            fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string())
-                    });
-                    bssembly.add(Instruction{
-                            MULT,
-                            {Immediate{ number_register }, R4, R3, Immediate{ number_register }},
-                            "multiply operand with size"
-                    });
-                }
-
-                std::visit(BinaryOperatorEmitter{ this }, expression.operator_token);
-
-                if (both_are_pointers and is<Minus>(expression.operator_token)) {
-                    const auto pointer_type = dynamic_cast<const PointerType*>(expression.lhs->data_type);
-                    assert(pointer_type != nullptr and "this must be a pointer type");
-                    const auto size = pointer_type->contained->size();
-                    bssembly.add(Instruction{
-                            COPY,
-                            {Immediate{ size }, R5},
-                            fmt::format("get the size of the data type \"{}\"", pointer_type->to_string())
-                    });
-                    bssembly.add(Instruction{
-                            DIVMOD,
-                            {R3, R5, R3, R4},
-                            "divide the result of pointer subtraction by the size of the data type"
-                    });
-                }
+                assert(false and "not implemented");
             }
-            bssembly.add(Instruction{ PUSH, { R3 }, "push result onto stack" });
         }
 
         void visit(FunctionCall& expression) override {
             bssembly.add(Comment{ "evaluate function call" });
+
+            /* If we call a function whose return type is too big to fit into a register, we
+             * pass a pointer as hidden first argument. This pointer is then used to store the return
+             * value. This implicitly increases the size of the arguments. */
+            const auto return_value_into_pointer = expression.data_type->size_when_pushed() > WordSize;
 
             /*
              * Structure of stack before call-instruction:
@@ -500,7 +550,18 @@ namespace Emitter {
              * old stack frame base pointer
              * return address
              * jump address
+             * stack space for the return value (only if it doesn't fit into a single register)
              */
+            if (return_value_into_pointer) {
+                const auto size_when_pushed = expression.data_type->size_when_pushed();
+                assert(size_when_pushed % WordSize == 0);
+                bssembly.add(Instruction{
+                        ADD,
+                        {SP, Immediate{ size_when_pushed }, SP},
+                        "reserve stack space for the return value"
+                });
+            }
+
             expression.callee->accept(*this); // evaluate callee => jump address is pushed
             bssembly.add(Instruction{
                     ADD,
@@ -509,7 +570,7 @@ namespace Emitter {
             });
             bssembly.add(Instruction{ PUSH, { R0 }, "push the current stack frame base pointer" });
 
-            usize arguments_size = 0;
+            usize arguments_size = (return_value_into_pointer ? WordSize : 0);
             for (const auto& argument : expression.arguments) {
                 const auto type = argument->data_type;
                 arguments_size = Utils::round_up(arguments_size, type->alignment());
@@ -525,7 +586,8 @@ namespace Emitter {
                     )
             });
             bssembly.add(Comment{ "evaluate all arguments one by one and put them into the reserved stack space" });
-            usize current_offset = 0;
+            if (return_value_into_pointer) { }
+            usize current_offset = (return_value_into_pointer ? WordSize : 0);
             for (const auto& argument : expression.arguments) {
                 if (argument->data_type->size() == 0) {
                     continue;
@@ -563,12 +625,25 @@ namespace Emitter {
                     {SP, Immediate{ arguments_size }, R0},
                     "set stack frame base pointer for callee"
             });
+
+            if (return_value_into_pointer) {
+                bssembly.add(Instruction{
+                        SUB,
+                        {R0, Immediate{ 12 + expression.data_type->size_when_pushed() }, R1},
+                        "calculate address of return value"
+                });
+                bssembly.add(Instruction{
+                        COPY,
+                        {R1, Pointer{ R0 }},
+                        "pass the address for the return value as hidden first parameter"
+                });
+            }
+
             bssembly.add(Instruction{
                     SUB,
                     {R0, Immediate{ 8 }, R1},
                     "calculate address of placeholder for return address"
             });
-
             const auto call_return_label = label_generator->next_label("return_address");
             bssembly.add(Instruction{
                     COPY,
@@ -595,21 +670,22 @@ namespace Emitter {
                                            "this is where the control flow returns to after the function call" });
             bssembly.add(Instruction{ POP, {}, "pop the callee address off of the stack" });
 
-            const auto size = expression.data_type->size();
-            const auto num_words = Utils::ceiling_division(size, WordSize);
-
-            assert(num_words <= 1 and "not implemented");
-            if (num_words == 1) {
+            /* If the return value is not returned through a pointer and its size is bigger than zero,
+             * we have to put the return value onto the stack. */
+            if (expression.data_type->size() > 0 and not return_value_into_pointer) {
                 bssembly.add(Instruction{ PUSH, { R1 }, "push the return value of the called function" });
             }
+            /* If the return value is returned though a pointer, it now resides in the area we previously
+             * reserved. This is the top of the stack.
+             * The return value resides there in "expanded" form. E.g. an array like [Bool; 4] occupies
+             * 4 * WordSize = 16 bytes on the stack. */
         }
 
         void visit(Assignment& expression) override {
             assert(expression.assignee->is_lvalue());
 
-            const auto size = expression.data_type->size();
-            const auto alignment = expression.data_type->alignment();
-            if (size > 0) {
+            const auto size_when_pushed = expression.data_type->size_when_pushed();
+            if (size_when_pushed > 0) {
                 bssembly.add(Comment{ "evaluate the right-hand-side of the assignment (put result on the stack)" });
                 expression.value->accept(*this); // puts value on the stack
                 bssembly.add(Comment{ "evaluate the assignee to get the address to store the value at" });
@@ -617,10 +693,11 @@ namespace Emitter {
                 bssembly.add(Instruction{ POP, { R2 }, "get address of assignee" });
                 bssembly.add(Instruction{
                         SUB,
-                        {SP, Immediate{ size }, R1},
+                        {SP, Immediate{ size_when_pushed }, R1},
                         "calculate address of value"
                 });
-                bssembly.emit_mem_copy(R1, R2, size, alignment);
+                //bssembly.emit_mem_copy(R1, R2, size, alignment);
+                bssembly.copy_from_stack_into_pointer(R1, R2, expression.value->data_type);
 
                 // Since assignments are expressions, they have a resulting value. This value must lie on the
                 // stack after the assignment has been evaluated. Since we only copied the value, it is still
@@ -810,7 +887,21 @@ namespace Emitter {
         void visit(ReturnStatement& statement) override {
             if (statement.return_value) {
                 statement.return_value->accept(*this); // evaluate return value => result is pushed
-                bssembly.add(Instruction{ POP, { R1 }, "put return value into R1" });
+
+                const auto return_value_into_pointer =
+                        (statement.return_value->data_type->size_when_pushed() > WordSize);
+                if (return_value_into_pointer) {
+                    bssembly.add(Instruction{
+                            COPY,
+                            {Pointer{ R0 }, R1},
+                            "get address where to store the return value at"
+                    });
+                    const auto size_when_pushed = statement.return_value->data_type->size_when_pushed();
+                    assert(size_when_pushed % WordSize == 0);
+                    bssembly.pop_from_stack_into_pointer(R1, size_when_pushed);
+                } else {
+                    bssembly.add(Instruction{ POP, { R1 }, "put return value into R1" });
+                }
             }
             bssembly.add(Instruction{ JUMP, { Immediate{ return_label } }, "immediately exit the current function" });
         }
@@ -825,7 +916,7 @@ namespace Emitter {
                 statement.initial_value->accept(*this); // initial value is evaluated and pushed
                 bssembly.add(Instruction{
                         SUB,
-                        {SP, Immediate{ statement.initial_value->data_type->size() }, R1},
+                        {SP, Immediate{ statement.initial_value->data_type->size_when_pushed() }, R1},
                         "get address of initial value"
                 });
                 assert(statement.variable_symbol->offset.has_value() and "offset must have been set before");
@@ -834,12 +925,8 @@ namespace Emitter {
                         {R0, Immediate{ *(statement.variable_symbol->offset) }, R2},
                         "get target address"
                 });
-                bssembly.emit_mem_copy(
-                        R1, R2, statement.initial_value->data_type->size(),
-                        statement.initial_value->data_type->alignment()
-                );
-                assert(statement.initial_value->data_type->size() <= WordSize and "not implemented");
-                bssembly.add(Instruction{ POP, {}, "discard initial value" });
+                assert(statement.initial_value->data_type->alignment() <= WordSize and "unreachable");
+                bssembly.pop_from_stack_into_pointer(R2, statement.initial_value->data_type);
             }
         }
 
@@ -856,9 +943,10 @@ namespace Emitter {
 
         void visit(ExpressionStatement& statement) override {
             statement.expression->accept(*this);
-            const auto size = statement.expression->data_type->size();
-            const auto num_words = Utils::ceiling_division(size, WordSize);
-            if (num_words > 0) {
+            const auto size_when_pushed = statement.expression->data_type->size_when_pushed();
+            assert(size_when_pushed % WordSize == 0);
+            if (size_when_pushed > 0) {
+                const auto num_words = size_when_pushed / WordSize;
                 bssembly.add(Comment{ "discard value of expression statement" });
                 for (usize i = 0; i < num_words; ++i) {
                     bssembly.add(Instruction{ POP, {} });

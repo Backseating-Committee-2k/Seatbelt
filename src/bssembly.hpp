@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "data_type.hpp"
 #include "overloaded.hpp"
 #include "types.hpp"
 #include <cassert>
@@ -484,16 +485,7 @@ namespace Bssembler {
 
             const auto num_copy_instructions = size / alignment;
 
-            const auto instruction = [&]() {
-                switch (alignment) {
-                    case 1: return OFFSET_COPY_BYTE;
-                    case HalfwordSize: return OFFSET_COPY_HALFWORD;
-                    case WordSize: return OFFSET_COPY;
-                    default:
-                        assert(false and "unreachable");
-                        return OFFSET_COPY;
-                }
-            }();
+            const auto instruction = offset_copy_instruction_from_size(alignment);
             for (usize i = 0; i < num_copy_instructions; ++i) {
                 add(Instruction{
                         instruction,
@@ -505,6 +497,139 @@ namespace Bssembler {
                         {temp_register, Immediate{ i * alignment }, Pointer{ destination_pointer }},
                         "write data"
                 });
+            }
+        }
+
+        void pop_from_stack_into_pointer(const Register pointer, const usize size) {
+            using enum Register;
+            using enum Mnemonic;
+
+            assert(size % WordSize == 0);
+            Register temp_register = (pointer == R1 ? R2 : R1);
+            assert(temp_register != pointer);
+            for (usize i = 0; i < size; i += WordSize) {
+                const auto offset = size - i - WordSize;
+                add(Instruction{ POP, { temp_register } });
+                add(Instruction{
+                        OFFSET_COPY,
+                        {temp_register, Immediate{ offset }, Pointer{ pointer }}
+                });
+            }
+        }
+
+        /**
+         * This function copies data from the stack (in expanded form) into an address given by a pointer (in non-
+         * expanded form).
+         * Example: When a array like [Bool; 5] lies on the stack (i.e. as a result of a function call), it occupies
+         *          5 * WordSize = 20 bytes. When stored inside the stack frame of a function, it is stored in non-
+         *          expanded form and only takes up 5 * type_size(Bool) = 5 bytes.
+         * @param destination_pointer Register holding the target address.
+         * @param stack_pointer Register holding the address where the stack data starts.
+         * @param destination_offset Internal value used to control recursion.
+         * @param stack_offset Internal value used to control recursion.
+         */
+        void copy_from_stack_into_pointer(
+                const Register stack_pointer,
+                const Register destination_pointer,
+                const DataType* data_type,
+                const usize stack_offset = 0,
+                const usize destination_offset = 0
+        ) {
+            using enum Register;
+            using enum Mnemonic;
+
+            Register temp_register = R0;
+            for (int i = static_cast<int>(R1); i < static_cast<int>(R253); ++i) {
+                const auto current = static_cast<Register>(i);
+                if (current != stack_pointer and current != destination_pointer) {
+                    temp_register = current;
+                    break;
+                }
+            }
+            assert(temp_register != stack_pointer and temp_register != destination_pointer);
+
+            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+                or data_type->is_function_pointer_type()) {
+                assert(data_type->size() <= WordSize);
+                if (data_type->size() > 0) {
+                    add(Instruction{
+                            OFFSET_COPY,
+                            {Pointer{ stack_pointer }, Immediate{ stack_offset }, temp_register}
+                    });
+                    const auto instruction = offset_copy_instruction_from_size(data_type->size());
+                    add(Instruction{
+                            instruction,
+                            {temp_register, Immediate{ destination_offset }, Pointer{ destination_pointer }}
+                    });
+                }
+            } else if (data_type->is_array_type()) {
+                const auto array_type = *(data_type->as_array_type());
+                const auto size = array_type->contained->size();
+                const auto size_when_pushed = array_type->contained->size_when_pushed();
+                for (usize i = 0; i < array_type->num_elements; ++i) {
+                    copy_from_stack_into_pointer(
+                            stack_pointer, destination_pointer, array_type->contained,
+                            stack_offset + i * size_when_pushed, destination_offset + i * size
+                    );
+                }
+            } else {
+                assert(false and "not implemented");
+            }
+        }
+
+        void pop_from_stack_into_pointer(const Register pointer, const DataType* data_type, const usize offset = 0) {
+            using enum Register;
+            using enum Mnemonic;
+
+            Register temp_register = (pointer == R1 ? R2 : R1);
+            assert(temp_register != pointer);
+
+            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+                or data_type->is_function_pointer_type()) {
+                assert(data_type->size() <= WordSize);
+                if (data_type->size() > 0) {
+                    add(Instruction{ POP, { temp_register } });
+                    const auto instruction = offset_copy_instruction_from_size(data_type->size());
+                    add(Instruction{
+                            instruction,
+                            {temp_register, Immediate{ offset }, Pointer{ pointer }}
+                    });
+                }
+            } else if (data_type->is_array_type()) {
+                const auto array_type = *(data_type->as_array_type());
+                for (usize i = 0; i < array_type->num_elements; ++i) {
+                    const usize index = array_type->num_elements - i - 1;
+                    const auto new_offset = offset + index * array_type->contained->size();
+                    pop_from_stack_into_pointer(pointer, array_type->contained, new_offset);
+                }
+            } else {
+                assert(false and "not implemented");
+            }
+        }
+
+        void push_value_onto_stack(const Register source_pointer, const DataType* data_type, const usize offset = 0) {
+            using enum Register;
+            using enum Mnemonic;
+
+            const auto temp_register = (source_pointer == R1 ? R2 : R1);
+
+            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+                or data_type->is_function_pointer_type()) {
+                assert(data_type->size() <= WordSize);
+                const auto instruction = offset_copy_instruction_from_size(data_type->size());
+                add(Instruction{
+                        instruction,
+                        {Pointer{ source_pointer }, Immediate{ offset }, temp_register}
+                });
+                add(Instruction{ PUSH, { temp_register } });
+            } else if (data_type->is_array_type()) {
+                const auto array_type = *(data_type->as_array_type());
+                const auto size = array_type->contained->size();
+                for (usize i = 0; i < array_type->num_elements; ++i) {
+                    push_value_onto_stack(source_pointer, array_type->contained, offset + i * size);
+                }
+            } else {
+                assert(false and "not implemented");
             }
         }
 
@@ -585,6 +710,22 @@ namespace Bssembler {
             for (const auto& instruction : replacement) {
                 m_instructions.insert(m_instructions.begin() + position, instruction);
                 ++position;
+            }
+        }
+
+    private:
+        [[nodiscard]] Mnemonic offset_copy_instruction_from_size(const usize size) {
+            using enum Mnemonic;
+            switch (size) {
+                case WordSize:
+                    return OFFSET_COPY;
+                case HalfwordSize:
+                    return OFFSET_COPY_HALFWORD;
+                case 1:
+                    return OFFSET_COPY_BYTE;
+                default:
+                    assert(false and "unreachable");
+                    return OFFSET_COPY;
             }
         }
 

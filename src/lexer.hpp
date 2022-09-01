@@ -36,6 +36,8 @@
     x(RightParenthesis) \
     x(LeftCurlyBracket) \
     x(RightCurlyBracket) \
+    x(LeftSquareBracket) \
+    x(RightSquareBracket) \
     x(Let) \
     x(Equals) \
     x(IntegerLiteral) \
@@ -94,13 +96,13 @@ namespace Lexer {
 #define x(TokenType) , TokenType
         using Token = decltype(cut_head_off_(std::declval<std::variant<std::monostate TOKEN_LIST>>()));
 #undef x
-    }// namespace Tokens
+    } // namespace Tokens
 
     using TokenList = std::vector<Tokens::Token>;
 
     [[nodiscard]] TokenList tokenize(SourceCode source_code);
 
-}// namespace Lexer
+} // namespace Lexer
 
 template<typename T>
 [[nodiscard]] bool is(const Lexer::Tokens::Token& token) {

@@ -20,6 +20,7 @@ public:
     void register_type(std::unique_ptr<DataType> data_type);
     [[nodiscard]] bool is_defined(const DataType& data_type) const;
     [[nodiscard]] const DataType* pointer_to(const DataType* pointee_type, Mutability binding_mutability);
+    [[nodiscard]] const DataType* array_of(const DataType* contained, usize num_elements);
 
     [[nodiscard]] const DataType* get_u32() const;
     [[nodiscard]] const DataType* get_bool() const;

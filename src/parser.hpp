@@ -5,6 +5,7 @@
 #pragma once
 
 #include "data_type.hpp"
+#include "error.hpp"
 #include "lexer.hpp"
 #include "overloaded.hpp"
 #include "parameter_list.hpp"
@@ -40,6 +41,21 @@ namespace Parser {
 
     namespace Expressions {
         struct Expression;
+    }
+
+    struct IndexOperator { };
+
+    using BinaryOperatorType = std::variant<Token, IndexOperator>;
+
+    [[nodiscard]] inline std::string_view binary_operator_type_to_string_view(const BinaryOperatorType& operator_type) {
+        if (const auto operator_token = std::get_if<Token>(&operator_type)) {
+            return Error::token_location(*operator_token).view();
+        } else if (std::holds_alternative<IndexOperator>(operator_type)) {
+            return "[]";
+        } else {
+            assert(false and "unreachable");
+            return "";
+        }
     }
 
     namespace Statements {
@@ -263,13 +279,14 @@ namespace Parser {
             const FunctionDefinition* surrounding_function{ nullptr };
             const LabelDefinition* target_label{ nullptr };
         };
-    }// namespace Statements
+    } // namespace Statements
 
     namespace Expressions {
 
         struct Integer;
         struct Char;
         struct Bool;
+        struct ArrayLiteral;
         struct Name;
         struct UnaryOperator;
         struct BinaryOperator;
@@ -284,6 +301,7 @@ namespace Parser {
             virtual void visit(Char& expression) = 0;
             virtual void visit(Bool& expression) = 0;
             virtual void visit(Name& expression) = 0;
+            virtual void visit(ArrayLiteral& expression) = 0;
             virtual void visit(UnaryOperator& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
@@ -336,6 +354,21 @@ namespace Parser {
             BoolLiteral value;
         };
 
+        struct ArrayLiteral : public ExpressionAcceptor<ArrayLiteral> {
+            ArrayLiteral(
+                    LeftSquareBracket left_square_bracket_token,
+                    std::variant<
+                            std::vector<std::unique_ptr<Expression>>,
+                            std::pair<std::unique_ptr<Expression>, usize>> values
+            )
+                : left_square_bracket_token{ left_square_bracket_token },
+                  values{ std::move(values) } { }
+
+            LeftSquareBracket left_square_bracket_token;
+            std::variant<std::vector<std::unique_ptr<Expression>>, std::pair<std::unique_ptr<Expression>, usize>>
+                    values;
+        };
+
         struct Name : public ExpressionAcceptor<Name> {
             explicit Name(std::span<const Lexer::Tokens::Token> name_tokens) : name_tokens{ name_tokens } { }
 
@@ -354,14 +387,18 @@ namespace Parser {
         };
 
         struct BinaryOperator : public ExpressionAcceptor<BinaryOperator> {
-            BinaryOperator(std::unique_ptr<Expression> lhs, std::unique_ptr<Expression> rhs, Token operator_token)
+            BinaryOperator(
+                    std::unique_ptr<Expression> lhs,
+                    std::unique_ptr<Expression> rhs,
+                    BinaryOperatorType operator_type
+            )
                 : lhs{ std::move(lhs) },
                   rhs{ std::move(rhs) },
-                  operator_token{ operator_token } { }
+                  operator_type{ operator_type } { }
 
             std::unique_ptr<Expression> lhs;
             std::unique_ptr<Expression> rhs;
-            Token operator_token;
+            BinaryOperatorType operator_type;
         };
 
         struct FunctionCall : public ExpressionAcceptor<FunctionCall> {
@@ -417,7 +454,7 @@ namespace Parser {
         };
 
 
-    }// namespace Expressions
+    } // namespace Expressions
 
     struct FunctionDefinition {
         Identifier name;
@@ -430,8 +467,8 @@ namespace Parser {
         std::string namespace_name{};
         bool is_entry_point{ false };
         std::vector<Statements::LabelDefinition*> contained_labels{};
-        std::optional<usize> occupied_stack_space{};  // total size of the needed stack space (in bytes)
-        std::optional<usize> parameters_stack_space{};// size of all parameters (in bytes)
+        std::optional<usize> occupied_stack_space{};   // total size of the needed stack space (in bytes)
+        std::optional<usize> parameters_stack_space{}; // size of all parameters (in bytes)
 
         [[nodiscard]] bool is_exported() const {
             return export_token.has_value();
@@ -452,4 +489,4 @@ namespace Parser {
 
     [[nodiscard]] Program parse(const Lexer::TokenList& tokens, TypeContainer& type_container);
 
-}// namespace Parser
+} // namespace Parser

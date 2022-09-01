@@ -9,44 +9,13 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <concepts>
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <limits>
 #include <ranges>
 #include <string_view>
 #include <variant>
-
-[[nodiscard]] u8 char_to_digit(char c, const u64 base) {
-    constexpr auto valid_digits =
-            std::array{ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-    assert(base <= 16);
-    c = static_cast<char>(std::toupper(c));
-    for (usize i = 0; i < base; ++i) {
-        if (c == valid_digits[i]) {
-            if (i < 10) {
-                return static_cast<u8>(c - '0');
-            } else {
-                return static_cast<u8>(c - 'A' + 10);
-            }
-        }
-    }
-    assert(false and "invalid input character");
-    return 0;
-}
-
-[[nodiscard]] bool validate_integer(const std::string_view text, const u64 base) {
-    u64 result = 0;
-    u64 factor = 1;
-    for (char c : std::ranges::reverse_view(text)) {
-        const auto digit = char_to_digit(c, base);
-        result += digit * factor;
-        factor *= base;
-        if (result > std::numeric_limits<u32>::max()) {
-            return false;
-        }
-    }
-    return true;
-}
 
 [[nodiscard]] u32 octal_to_decimal(std::string_view text) {
     if (text.starts_with("0o")) {
@@ -71,6 +40,17 @@ namespace TypeChecker {
             return concrete->name;
         }
         return {};
+    }
+
+    [[nodiscard]] const DataType*
+    get_resulting_data_type_for_arrays(const ArrayType* lhs, const Token& token, const ArrayType* rhs) {
+        if (lhs->num_elements != rhs->num_elements) {
+            return nullptr;
+        }
+        if (lhs->contained != rhs->contained) {
+            return nullptr;
+        }
+        return is<Lexer::Tokens::Equals>(token) ? lhs : nullptr;
     }
 
     [[nodiscard]] const DataType* get_resulting_data_type_for_function_pointers(
@@ -114,12 +94,12 @@ namespace TypeChecker {
         if (is_one_of<EqualsEquals, ExclamationEquals, GreaterThan, GreaterOrEquals, LessThan, LessOrEquals>(token)) {
             return type_container.get_bool();
         }
-        if (is<Equals>(token) and
-            (lhs->binding_mutability == Mutability::Const or rhs->binding_mutability == Mutability::Mutable)) {
+        if (is<Equals>(token)
+            and (lhs->binding_mutability == Mutability::Const or rhs->binding_mutability == Mutability::Mutable)) {
             return lhs;
         }
         if (is<Minus>(token)) {
-            return type_container.get_u32();// TODO: this should be a unique data type (e. g. "Distance")
+            return type_container.get_u32(); // TODO: this should be a unique data type (e. g. "Distance")
         }
         return nullptr;
     }
@@ -134,8 +114,14 @@ namespace TypeChecker {
         assert(lhs != nullptr);
         assert(rhs != nullptr);
 
-        const auto first_function_pointer = dynamic_cast<const FunctionPointerType*>(lhs); // maybe nullptr
-        const auto second_function_pointer = dynamic_cast<const FunctionPointerType*>(rhs);// maybe nullptr
+        const auto first_array_type = dynamic_cast<const ArrayType*>(lhs);  // maybe nullptr
+        const auto second_array_type = dynamic_cast<const ArrayType*>(rhs); // maybe nullptr
+        if (first_array_type != nullptr and second_array_type != nullptr) {
+            return get_resulting_data_type_for_arrays(first_array_type, token, second_array_type);
+        }
+
+        const auto first_function_pointer = dynamic_cast<const FunctionPointerType*>(lhs);  // maybe nullptr
+        const auto second_function_pointer = dynamic_cast<const FunctionPointerType*>(rhs); // maybe nullptr
 
         if (first_function_pointer != nullptr and second_function_pointer != nullptr) {
             return get_resulting_data_type_for_function_pointers(
@@ -149,8 +135,8 @@ namespace TypeChecker {
 
         const auto same_type = (lhs == rhs);
 
-        const auto first_pointer = dynamic_cast<const PointerType*>(lhs); // maybe nullptr
-        const auto second_pointer = dynamic_cast<const PointerType*>(rhs);// maybe nullptr
+        const auto first_pointer = dynamic_cast<const PointerType*>(lhs);  // maybe nullptr
+        const auto second_pointer = dynamic_cast<const PointerType*>(rhs); // maybe nullptr
         if (first_pointer != nullptr and second_pointer != nullptr) {
             return get_resulting_data_type_for_pointers(first_pointer, token, second_pointer, type_container);
         }
@@ -165,8 +151,8 @@ namespace TypeChecker {
             return type_container.get_bool();
         }
         if (is_one_of<GreaterThan, GreaterOrEquals, LessThan, LessOrEquals>(token)) {
-            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value() or
-                concrete_types[0].value() != U32Identifier) {
+            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()
+                or concrete_types[0].value() != U32Identifier) {
                 return nullptr;
             }
             return type_container.get_bool();
@@ -205,9 +191,19 @@ namespace TypeChecker {
 
     [[nodiscard]] const DataType*
     get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression, TypeContainer& type_container) {
-        return get_resulting_data_type(
-                expression.lhs->data_type, expression.operator_token, expression.rhs->data_type, type_container
-        );
+        if (const auto operator_token = std::get_if<Token>(&expression.operator_type)) {
+            return get_resulting_data_type(
+                    expression.lhs->data_type, *operator_token, expression.rhs->data_type, type_container
+            );
+        } else if (const auto index_operator = std::get_if<Parser::IndexOperator>(&expression.operator_type)) {
+            if (expression.lhs->data_type->is_array_type() and expression.rhs->data_type == type_container.get_u32()) {
+                return (*(expression.lhs->data_type->as_array_type()))->contained;
+            }
+            return nullptr;
+        } else {
+            assert(false and "not implemented");
+            return nullptr;
+        }
     }
 
     template<typename... Types>
@@ -362,7 +358,7 @@ namespace TypeChecker {
 
             // get the type of the initial value
             statement.initial_value->accept(*this);
-            statement.initial_value->value_type = ValueType::RValue;// initial value must be an rvalue
+            statement.initial_value->value_type = ValueType::RValue; // initial value must be an rvalue
 
             if (not type_deduction) {
                 auto& type = statement.type_definition;
@@ -422,24 +418,12 @@ namespace TypeChecker {
              *                   responsibility of the type checker, but this way
              *                   we can prevent the need of checking/converting
              *                   the number twice. */
-            auto number_string = std::string{};
-            for (const auto c : expression.value.location.view()) {
-                if (c != '_') {
-                    number_string += c;
-                }
-            }
-            u64 base = 10;
-            if (number_string.starts_with("0x")) {
-                base = 16;
-            } else if (number_string.starts_with("0o")) {
-                base = 8;
-            } else if (number_string.starts_with("0b")) {
-                base = 2;
-            }
+            auto number_string = Utils::strip_underscores(expression.value.location.view());
+            const auto base = Utils::get_base(expression.value.location.view());
             const auto digits_view =
                     (base == 10 ? std::string_view{ number_string }
                                 : std::string_view{ number_string.begin() + 2, number_string.end() });
-            if (not validate_integer(digits_view, base)) {
+            if (not Utils::validate_integer<u32>(digits_view, base)) {
                 Error::error(expression.value, "integer literal out of bounds");
             }
             // The bssembler language does not support octal literals. We convert those to decimal first.
@@ -457,6 +441,31 @@ namespace TypeChecker {
 
         void visit(Parser::Expressions::Bool& expression) override {
             expression.data_type = type_container->get_bool();
+            expression.value_type = ValueType::RValue;
+        }
+
+        void visit(Parser::Expressions::ArrayLiteral& expression) override {
+            using namespace Parser::Expressions;
+            std::visit(
+                    overloaded{ [&](std::vector<std::unique_ptr<Expression>>& values) {
+                                   for (auto& value : values) {
+                                       value->accept(*this);
+                                   }
+                                   assert(not values.empty() and "empty arrays are not allowed");
+                                   const auto type = values.front()->data_type;
+                                   for (usize i = 1; i < values.size(); ++i) {
+                                       if (values[i]->data_type != type) {
+                                           Error::error(*values[i], "conflicting data types in array literal");
+                                       }
+                                   }
+                                   expression.data_type = type_container->array_of(type, values.size());
+                               },
+                                [&](std::pair<std::unique_ptr<Expression>, usize>& pair) {
+                                    pair.first->accept(*this);
+                                    expression.data_type = type_container->array_of(pair.first->data_type, pair.second);
+                                } },
+                    expression.values
+            );
             expression.value_type = ValueType::RValue;
         }
 
@@ -503,7 +512,7 @@ namespace TypeChecker {
                 }
                 assert(expression.possible_overloads.has_value() and "overloads have to be determined beforehand");
                 if (const auto function_symbol = std::get_if<FunctionSymbol>(symbol)) {
-                    const auto& overloads = *expression.possible_overloads;//function_symbol->overloads;
+                    const auto& overloads = *expression.possible_overloads; //function_symbol->overloads;
                     assert(not overloads.empty() and "there shall never be a function with zero overloads");
                     if (overloads.size() > 1) {
                         Error::error(name_token, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
@@ -580,22 +589,37 @@ namespace TypeChecker {
             expression.lhs->accept(*this);
             expression.rhs->accept(*this);
 
-            // both operands are required to be rvalues
-            expression.lhs->value_type = ValueType::RValue;
-            expression.rhs->value_type = ValueType::RValue;
+            if (std::holds_alternative<Token>(expression.operator_type)) {
+                // both operands are required to be rvalues
+                expression.lhs->value_type = ValueType::RValue;
+                expression.rhs->value_type = ValueType::RValue;
+
+                // the result also is an rvalue
+                expression.value_type = ValueType::RValue;
+            } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
+                // for index operators, the left operand must be an lvalue
+                if (not expression.lhs->is_lvalue()) {
+                    Error::error(*expression.lhs, "index operator required left operand to be an lvalue");
+                }
+                // the right operator must be an rvalue, though
+                expression.rhs->value_type = ValueType::RValue;
+
+                // the result of the index operator is an lvalue (mutability is inherited from the left operand)
+                expression.value_type = expression.lhs->value_type;
+            } else {
+                assert(false and "not implemented");
+            }
 
             if (const auto resulting_type = get_resulting_data_type(expression, *type_container)) {
                 expression.data_type = resulting_type;
-                expression.value_type = ValueType::RValue;
                 return;
             }
             Error::error(
-                    expression.operator_token,
-                    fmt::format(
-                            R"(operator "{}" can not be applied to operands of type "{}" and "{}")",
-                            Error::token_location(expression.operator_token).view(),
-                            expression.lhs->data_type->to_string(), expression.rhs->data_type->to_string()
-                    )
+                    expression, fmt::format(
+                                        R"(operator "{}" can not be applied to operands of type "{}" and "{}")",
+                                        Parser::binary_operator_type_to_string_view(expression.operator_type),
+                                        expression.lhs->data_type->to_string(), expression.rhs->data_type->to_string()
+                                )
             );
         }
 
@@ -684,11 +708,11 @@ namespace TypeChecker {
                         }
 
                         using std::ranges::views::transform;
-                        const auto range = overload->definition->parameters |
-                                           transform([](const auto& parameter) { return parameter.type; });
+                        const auto range = overload->definition->parameters
+                                           | transform([](const auto& parameter) { return parameter.type; });
                         auto parameter_types = std::vector(
                                 cbegin(range), cend(range)
-                        );// no curly braces because of constructor ambiguity
+                        ); // no curly braces because of constructor ambiguity
 
                         name->data_type = type_container->from_type_definition(std::make_unique<FunctionPointerType>(
                                 std::move(parameter_types), overload->definition->return_type
@@ -811,6 +835,7 @@ namespace TypeChecker {
             // only visit the body
             usize size_of_parameters = 0;
             for (const auto& parameter : function_definition->parameters) {
+                size_of_parameters = Utils::round_up(size_of_parameters, parameter.type->alignment());
                 size_of_parameters += parameter.type->size();
             }
             auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters, function_definition.get() };
@@ -844,6 +869,7 @@ namespace TypeChecker {
                     );
                 }
                 parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
+                offset = Utils::round_up(offset, parameter.type->alignment());
                 parameter.variable_symbol->offset = offset;
                 offset += parameter.type->size();
             }
@@ -851,8 +877,8 @@ namespace TypeChecker {
             auto signature = fmt::format(
                     "{}({})", function_definition->name.location.view(),
                     fmt::join(
-                            function_definition->parameters |
-                                    transform([](const auto& parameter) { return parameter.type->to_string(); }),
+                            function_definition->parameters
+                                    | transform([](const auto& parameter) { return parameter.type->to_string(); }),
                             ", "
                     )
             );
@@ -932,8 +958,8 @@ namespace TypeChecker {
                     overloaded{ [&](const std::unique_ptr<Parser::FunctionDefinition>& function) {
                                    auto return_type_checker = ReturnTypeChecker{};
                                    function->body.accept(return_type_checker);
-                                   if (function->return_type != type_container.get_nothing() and
-                                       not return_type_checker.all_code_paths_return_a_value) {
+                                   if (function->return_type != type_container.get_nothing()
+                                       and not return_type_checker.all_code_paths_return_a_value) {
                                        Error::error(function->name, "not all code paths return a value\n");
                                    }
                                },
@@ -942,4 +968,4 @@ namespace TypeChecker {
             );
         }
     }
-}// namespace TypeChecker
+} // namespace TypeChecker
