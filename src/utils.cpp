@@ -26,7 +26,7 @@ namespace Utils {
         return 0;
     }
 
-    [[nodiscard]] std::string Utils::strip_underscores(const std::string_view text) {
+    [[nodiscard]] std::string strip_underscores(const std::string_view text) {
         auto result = std::string{};
         for (const auto c : text) {
             if (c != '_') {
@@ -36,7 +36,7 @@ namespace Utils {
         return result;
     }
 
-    [[nodiscard]] usize Utils::get_base(std::string_view number_string) {
+    [[nodiscard]] usize get_base(std::string_view number_string) {
         if (number_string.starts_with("0x")) {
             return 16;
         } else if (number_string.starts_with("0o")) {
