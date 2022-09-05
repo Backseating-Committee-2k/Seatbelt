@@ -247,41 +247,9 @@ namespace Emitter {
                 const auto size = expression.data_type->size();
                 const auto num_words = Utils::ceiling_division(size, WordSize);
                 assert(num_words > 0 and "not implemented");
-
-                // how many bytes in the last word are occupied?
-                const auto occupied_in_last_word = (size % WordSize == 0 ? WordSize : size % WordSize);
-
                 bssembly.add(Comment{
                         fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) });
-                for (usize i = 0; i < num_words; ++i) {
-                    if (i != num_words - 1 or occupied_in_last_word == WordSize) {
-                        bssembly.add(Instruction{
-                                COPY,
-                                {Pointer{ R1 }, R2}
-                        });
-                    } else if (occupied_in_last_word == 1) {
-                        bssembly.add(Instruction{
-                                COPY_BYTE,
-                                {Pointer{ R1 }, R2}
-                        });
-                    } else if (occupied_in_last_word == 2) {
-                        bssembly.add(Instruction{
-                                COPY_HALFWORD,
-                                {Pointer{ R1 }, R2}
-                        });
-                    } else if (occupied_in_last_word == 3) {
-                        assert(false and "not implemented");
-                    } else {
-                        assert(false and "unreachable");
-                    }
-                    bssembly.add(Instruction{ PUSH, { R2 } });
-                    if (i < num_words - 1) {
-                        bssembly.add(Instruction{
-                                ADD,
-                                {R1, Immediate{ 4 }, R1}
-                        });
-                    }
-                }
+                bssembly.push_value_onto_stack(R1, expression.data_type);
             }
         }
 
@@ -583,18 +551,19 @@ namespace Emitter {
                 argument->accept(*this); // evaluate argument => result will be pushed
                 bssembly.add(Instruction{
                         SUB,
-                        {SP, Immediate{ argument->data_type->size() }, R1},
+                        {SP, Immediate{ argument->data_type->size_when_pushed() }, R1},
                         "calculate address of argument value"
                 });
                 bssembly.add(Instruction{
                         SUB,
-                        {SP, Immediate{ WordSize + arguments_size_with_padding - current_offset }, R2},
+                        {SP,
+                          Immediate{ argument->data_type->size_when_pushed() + arguments_size_with_padding
+                          - current_offset },
+                          R2},
                         "calculate target address"
                 });
                 bssembly.add(Comment{ "mem-copy the argument" });
-                bssembly.emit_mem_copy(R1, R2, argument->data_type->size(), argument->data_type->alignment());
-                assert(argument->data_type->size() <= WordSize and "not implemented");
-                bssembly.add(Instruction{ POP, {}, "discard argument value" });
+                bssembly.pop_from_stack_into_pointer(R2, argument->data_type);
                 current_offset += argument->data_type->size();
             }
 
