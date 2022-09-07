@@ -242,10 +242,10 @@ namespace Emitter {
                 bssembly.add(Instruction{ PUSH, { R1 }, "push the address of variable onto the stack" });
             } else {
                 // we have an rvalue
-                // TODO: rewrite to utilize a mem-copy
 
                 const auto size = expression.data_type->size();
-                const auto num_words = Utils::ceiling_division(size, WordSize);
+                // the following variable is marked [[maybe_unused]] because it is needed for the assertion
+                [[maybe_unused]] const auto num_words = Utils::ceiling_division(size, WordSize);
                 assert(num_words > 0 and "not implemented");
                 bssembly.add(Comment{
                         fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) });
