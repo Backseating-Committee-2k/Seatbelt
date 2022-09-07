@@ -392,4 +392,4 @@ namespace Lexer {
         return LexerState{ source_code }.tokenize();
     }
 
-}// namespace Lexer
+} // namespace Lexer

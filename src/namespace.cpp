@@ -16,8 +16,8 @@ using Parser::Expressions::Name;
     auto result = fmt::format(
             "{}{}", expression.surrounding_scope->surrounding_namespace,
             fmt::join(
-                    expression.name_tokens | take(expression.name_tokens.size() - 1) |
-                            transform([](auto token) { return Error::token_location(token).view(); }),
+                    expression.name_tokens | take(expression.name_tokens.size() - 1)
+                            | transform([](auto token) { return Error::token_location(token).view(); }),
                     ""
             )
     );
@@ -28,8 +28,8 @@ using Parser::Expressions::Name;
     using std::ranges::views::transform, std::ranges::views::take;
     return fmt::format(
             "::{}", fmt::join(
-                            expression.name_tokens | take(expression.name_tokens.size() - 1) |
-                                    transform([](auto token) { return Error::token_location(token).view(); }),
+                            expression.name_tokens | take(expression.name_tokens.size() - 1)
+                                    | transform([](auto token) { return Error::token_location(token).view(); }),
                             ""
                     )
     );

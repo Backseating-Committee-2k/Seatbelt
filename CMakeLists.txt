@@ -19,16 +19,10 @@ FetchContent_Declare(
 FetchContent_Declare(
         Arguably
         GIT_REPOSITORY https://github.com/mgerhold/arguably
-        GIT_TAG v0.1.8
+        GIT_TAG v0.1.9
 )
 
-FetchContent_Declare(
-        googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG 58d77fa8070e8cec2dc1ed015d66b454c8d78850
-)
-
-FetchContent_MakeAvailable(fmt ctre Arguably googletest)
+FetchContent_MakeAvailable(fmt ctre Arguably)
 
 if (MSVC)
     # enable code analysis
@@ -41,7 +35,7 @@ if (MSVC)
     string(REGEX REPLACE "-W3" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 endif ()
 
-set(TARGET_LIST Seatbelt fmt gmock gmock_main gtest gtest_main)
+set(TARGET_LIST Seatbelt fmt)
 
 add_executable(Seatbelt
         src/main.cpp
@@ -83,10 +77,18 @@ foreach (target ${TARGET_LIST})
     # set warning levels
     if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         message("MSVC build")
-        target_compile_options(${target} PUBLIC /W4 /WX /permissive- /fsanitize=address)
+        if (CMAKE_BUILD_TYPE STREQUAL "Release")
+            target_compile_options(${target} PUBLIC /W4 /WX /permissive-)
+        else ()
+            target_compile_options(${target} PUBLIC /W4 /WX /permissive- /fsanitize=address)
+        endif ()
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message("GCC build")
-        target_compile_options(${target} PUBLIC -Wall -Wextra -Werror -pedantic -Wconversion -pthread -fsanitize=address,undefined)
+        if (CMAKE_BUILD_TYPE STREQUAL "Release")
+            target_compile_options(${target} PUBLIC -Wall -Wextra -Werror -pedantic -Wconversion -pthread)
+        else ()
+            target_compile_options(${target} PUBLIC -Wall -Wextra -Werror -pedantic -Wconversion -pthread -fsanitize=address,undefined)
+        endif ()
         target_link_options(${target} PUBLIC -fsanitize=address,undefined)
     endif ()
 
@@ -104,6 +106,3 @@ foreach (target ${TARGET_LIST})
         message("Not enabling LTO for target ${target} (not a release build)")
     endif ()
 endforeach ()
-
-enable_testing()
-add_subdirectory(test)

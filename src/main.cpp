@@ -66,8 +66,8 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
     }
     const auto expected_main_function_return_type = type_container.get_nothing();
     const auto main_function_has_correct_signature =
-            (main_symbol->overloads.front().signature == "main()" and
-             main_symbol->overloads.front().definition->return_type == expected_main_function_return_type);
+            (main_symbol->overloads.front().signature == "main()"
+             and main_symbol->overloads.front().definition->return_type == expected_main_function_return_type);
     if (not main_function_has_correct_signature) {
         error(fmt::format("main function must not take any parameters and must return {}", NothingIdentifier));
     }
@@ -289,7 +289,8 @@ int main(int, char** argv) {
         using namespace std::string_view_literals;
         const auto import_paths_string = command_line_parser.get<'l'>();
         const auto paths_view = std::string_view{ import_paths_string };
-        for (const auto path_view : split(paths_view, ";"sv) | transform([](auto view) { return trim(view); })) {
+        for (const auto path_view :
+             split(paths_view, ";"sv) | transform([](auto view) { return trim(std::string_view{ view }); })) {
             import_paths.emplace_back(path_view);
         }
     }

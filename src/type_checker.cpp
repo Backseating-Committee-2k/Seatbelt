@@ -703,7 +703,7 @@ namespace TypeChecker {
                 for (const auto& overload : possible_overloads) {
                     if (overload->signature == signature) {
                         assert(overload->definition->return_type != nullptr and "return type has to be set before");
-                        for (const auto& parameter : overload->definition->parameters) {
+                        for ([[maybe_unused]] const auto& parameter : overload->definition->parameters) {
                             assert(parameter.type != nullptr and "parameter type has to be set before");
                         }
 
@@ -886,7 +886,7 @@ namespace TypeChecker {
             const auto identifier = function_definition->name.location.view();
 
             const auto find_iterator = global_scope->find(identifier);
-            const auto found = (find_iterator != std::cend(*global_scope));
+            [[maybe_unused]] const auto found = (find_iterator != std::cend(*global_scope));
             assert(found && "scope generator should have put the needed symbol into scope or throw an error");
             const auto& found_symbol = find_iterator->second;
             assert(std::holds_alternative<FunctionSymbol>(found_symbol));
