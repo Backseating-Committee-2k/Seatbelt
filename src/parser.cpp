@@ -148,14 +148,14 @@ namespace Parser {
                 advance();
                 return std::make_unique<Expressions::UnaryOperator>(at_token, right_associative_unary_operator());
             }
-            return function_call_or_index_operator();
+            return function_call_or_index_operator_or_dereferencing();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> function_call_or_index_operator() {
+        [[nodiscard]] std::unique_ptr<Expression> function_call_or_index_operator_or_dereferencing() {
             using Expressions::FunctionCall, Expressions::BinaryOperator, Parser::IndexOperator;
 
-            auto accumulator = dereferencing();
-            while (is_one_of<LeftParenthesis, LeftSquareBracket>(current())) {
+            auto accumulator = primary();
+            while (is_one_of<LeftParenthesis, LeftSquareBracket, ExclamationMark>(current())) {
                 if (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
                     std::vector<std::unique_ptr<Expression>> arguments;
                     while (not end_of_file() and not current_is<RightParenthesis>()) {
@@ -173,20 +173,14 @@ namespace Parser {
                     consume<RightSquareBracket>("expected \"]\"");
                     accumulator =
                             std::make_unique<BinaryOperator>(std::move(accumulator), std::move(index), IndexOperator{});
+                } else if (current_is<ExclamationMark>()) {
+                    const auto exclamation_mark_token = current();
+                    advance();
+                    accumulator =
+                            std::make_unique<Expressions::UnaryOperator>(exclamation_mark_token, std::move(accumulator));
                 } else {
                     assert(false and "unreachable");
                 }
-            }
-            return accumulator;
-        }
-
-        [[nodiscard]] std::unique_ptr<Expression> dereferencing() {
-            auto accumulator = primary();
-            while (current_is<ExclamationMark>()) {
-                const auto exclamation_mark_token = current();
-                advance();
-                accumulator =
-                        std::make_unique<Expressions::UnaryOperator>(exclamation_mark_token, std::move(accumulator));
             }
             return accumulator;
         }
