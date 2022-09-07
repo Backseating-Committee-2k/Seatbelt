@@ -28,4 +28,4 @@ namespace Error {
         return std::visit([](const auto& token) { return token.location; }, token);
     }
 
-}// namespace Error
+} // namespace Error

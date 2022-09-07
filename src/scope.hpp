@@ -19,7 +19,7 @@ namespace Parser {
     namespace Statements {
         struct VariableDefinition;
     }
-}// namespace Parser
+} // namespace Parser
 
 struct VariableSymbol {
     std::optional<usize> offset{};

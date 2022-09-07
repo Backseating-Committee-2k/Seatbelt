@@ -34,4 +34,4 @@ namespace Emitter {
         TypeContainer* type_container;
     };
 
-}// namespace Emitter
+} // namespace Emitter
