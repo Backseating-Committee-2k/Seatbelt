@@ -73,9 +73,15 @@ void ReturnTypeChecker::visit(Parser::Statements::DoWhileStatement& statement) {
 void ReturnTypeChecker::visit(Parser::Statements::ForStatement& statement) {
     statement.body.accept(*this);
 
-    // If the loop never terminates, we can pretend to give anything back because nobody can prove otherwise.
-    // (see loop-statement)
-    all_code_paths_return_a_value = not statement.condition;
+    // a for-loop is considered to be infinite if there is no condition, e.g. for ;; { /* ... */ }
+    const auto is_infinite_loop = not statement.condition;
+    if (is_infinite_loop and ending_reason != EndingReason::Break) {
+        // If the loop never terminates, we can pretend to give anything back because nobody can prove otherwise.
+        // (see loop-statement)
+        all_code_paths_return_a_value = true;
+    } else {
+        all_code_paths_return_a_value = false;
+    }
 
     ending_reason = EndingReason::DidNotEnd;
 }
