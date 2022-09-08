@@ -17,9 +17,9 @@
 namespace Optimizer {
     using namespace Bssembler;
 
-    class Optimizer {
+    class PeepholeOptimizer {
     public:
-        virtual ~Optimizer() = default;
+        virtual ~PeepholeOptimizer() = default;
 
         [[nodiscard]] virtual usize window_size() const = 0;
         [[nodiscard]] virtual std::optional<std::vector<Bssembly::InstructionVariant>> optimize(
@@ -27,7 +27,7 @@ namespace Optimizer {
         ) const = 0;
     };
 
-    class CopyPushPopOptimizer final : public Optimizer {
+    class CopyPushPopOptimizer final : public PeepholeOptimizer {
     public:
         CopyPushPopOptimizer() = default;
 
@@ -71,7 +71,7 @@ namespace Optimizer {
         }
     };
 
-    class PushImmediatePopOptimizer final : public Optimizer {
+    class PushImmediatePopOptimizer final : public PeepholeOptimizer {
     public:
         PushImmediatePopOptimizer() = default;
 
@@ -97,12 +97,16 @@ namespace Optimizer {
                 return std::vector<Bssembly::InstructionVariant>{
                     Instruction{COPY, { immediate, pop_target }, "PushImmediatePopOptimizer"}
                 };
+            } else if (instructions[0]->mnemonic == PUSH
+                and std::holds_alternative<Immediate>(instructions[0]->arguments.front())
+                and instructions[1]->mnemonic == POP and instructions[1]->arguments.empty()) {
+                return std::vector<Bssembly::InstructionVariant>{};
             }
             return {};
         }
     };
 
-    class UnnecessaryJumpOptimizer final : public Optimizer {
+    class UnnecessaryJumpOptimizer final : public PeepholeOptimizer {
     public:
         UnnecessaryJumpOptimizer() = default;
 
@@ -195,7 +199,7 @@ inline void optimize(Bssembler::Bssembly& bssembly, const bool verbose) {
     Optimizer::strip_insignificant_lines(bssembly);
     Optimizer::collapse_labels(bssembly);
 
-    auto optimizers = std::vector<std::unique_ptr<Optimizer::Optimizer>>{};
+    auto optimizers = std::vector<std::unique_ptr<Optimizer::PeepholeOptimizer>>{};
     optimizers.push_back(std::make_unique<Optimizer::CopyPushPopOptimizer>());
     optimizers.push_back(std::make_unique<Optimizer::PushImmediatePopOptimizer>());
     optimizers.push_back(std::make_unique<Optimizer::UnnecessaryJumpOptimizer>());

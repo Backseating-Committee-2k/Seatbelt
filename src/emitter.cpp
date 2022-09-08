@@ -61,8 +61,10 @@ namespace Emitter {
 
     struct EmitterVisitor : public ExpressionVisitor, public StatementVisitor {
 
-        // operands are already stored in R1 and R2, result has to be stored in R3
-        struct BinaryOperatorEmitter {
+        // This visitor emits instructions to handle binary operators for unsigned
+        // integral data types, including pointers.
+        // Operands are already stored in R1 and R2, result has to be stored in R3.
+        struct UnsignedIntegralBinaryOperatorEmitter {
             void operator()(const Plus&) const {
                 visitor->bssembly.add(Instruction{
                         ADD,
@@ -333,7 +335,7 @@ namespace Emitter {
                     fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
             assert(expression.lhs->data_type == type_container->get_bool());
             assert(expression.rhs->data_type == type_container->get_bool());
-            std::visit(BinaryOperatorEmitter{ this }, operator_token);
+            std::visit(UnsignedIntegralBinaryOperatorEmitter{ this }, operator_token);
             const auto after_push = label_generator->next_label("after_push");
             bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
             bssembly.add(Bssembler::Label{ end_of_evaluation });
@@ -373,7 +375,7 @@ namespace Emitter {
                     fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
             assert(expression.lhs->data_type == type_container->get_bool());
             assert(expression.rhs->data_type == type_container->get_bool());
-            std::visit(BinaryOperatorEmitter{ this }, operator_token);
+            std::visit(UnsignedIntegralBinaryOperatorEmitter{ this }, operator_token);
             const auto after_push = label_generator->next_label("after_push");
             bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
             bssembly.add(Bssembler::Label{ end_of_evaluation });
@@ -388,34 +390,47 @@ namespace Emitter {
         void non_short_circuiting_binary_operator(BinaryOperator& expression, Token operator_token) {
             expression.rhs->accept(*this);
 
-            bssembly.add(Instruction{
-                    POP,
-                    { R2 },
-                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
-            bssembly.add(Instruction{
-                    POP,
-                    { R1 },
-                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()) });
+            const auto size = expression.lhs->data_type->size();
+            assert(expression.rhs->data_type->size() == size);
 
-            const auto either_is_a_pointer = (expression.lhs->data_type == type_container->get_u32()
-                                              and expression.rhs->data_type->is_pointer_type())
-                                             or (expression.lhs->data_type->is_pointer_type()
-                                                 and expression.rhs->data_type == type_container->get_u32());
+            if (size == 0) {
+                // do nothing
+            } else if (size <= WordSize) {
+                bssembly.add(Instruction{
+                        POP,
+                        { R2 },
+                        fmt::format(
+                                R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()
+                        ) });
+                bssembly.add(Instruction{
+                        POP,
+                        { R1 },
+                        fmt::format(
+                                R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()
+                        ) });
+            } else {
+                assert(false and "not implemented");
+            }
+
+            const auto exactly_one_is_a_pointer = (expression.lhs->data_type == type_container->get_u32()
+                                                   and expression.rhs->data_type->is_pointer_type())
+                                                  or (expression.lhs->data_type->is_pointer_type()
+                                                      and expression.rhs->data_type == type_container->get_u32());
             const auto both_are_pointers =
                     (expression.lhs->data_type->is_pointer_type() and expression.rhs->data_type->is_pointer_type());
 
-            if (either_is_a_pointer) {
+            if (exactly_one_is_a_pointer) {
                 // one operand is a pointer, the other is a U32
                 const auto first_is_pointer = expression.lhs->data_type->is_pointer_type();
                 const auto& pointer = first_is_pointer ? expression.lhs : expression.rhs;
                 const auto pointer_type = dynamic_cast<const PointerType*>(pointer->data_type);
                 assert(pointer_type != nullptr);
                 assert(is<Plus>(operator_token) or first_is_pointer);
-                const auto size = pointer_type->contained->size();
+                const auto contained_size = pointer_type->contained->size();
                 const std::string_view number_register = (first_is_pointer ? "R2" : "R1");
                 bssembly.add(Instruction{
                         COPY,
-                        {Immediate{ size }, R4},
+                        {Immediate{ contained_size }, R4},
                         fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string())
                 });
                 bssembly.add(Instruction{
@@ -425,15 +440,28 @@ namespace Emitter {
                 });
             }
 
-            std::visit(BinaryOperatorEmitter{ this }, operator_token);
+            const auto is_same_type = (expression.lhs->data_type == expression.rhs->data_type);
+
+            if (exactly_one_is_a_pointer or both_are_pointers
+                or (is_same_type
+                    and (expression.lhs->data_type == type_container->get_u32()
+                         or expression.lhs->data_type == type_container->get_bool()
+                         or expression.lhs->data_type == type_container->get_char()))) {
+                std::visit(UnsignedIntegralBinaryOperatorEmitter{ this }, operator_token);
+            } else if (expression.lhs->data_type == type_container->get_nothing()
+                       and expression.rhs->data_type == type_container->get_nothing()) {
+                // do nothing
+            } else {
+                assert(false and "not implemented");
+            }
 
             if (both_are_pointers and is<Minus>(operator_token)) {
                 const auto pointer_type = dynamic_cast<const PointerType*>(expression.lhs->data_type);
                 assert(pointer_type != nullptr and "this must be a pointer type");
-                const auto size = pointer_type->contained->size();
+                const auto contained_size = pointer_type->contained->size();
                 bssembly.add(Instruction{
                         COPY,
-                        {Immediate{ size }, R5},
+                        {Immediate{ contained_size }, R5},
                         fmt::format("get the size of the data type \"{}\"", pointer_type->to_string())
                 });
                 bssembly.add(Instruction{
@@ -457,7 +485,25 @@ namespace Emitter {
                 } else {
                     non_short_circuiting_binary_operator(expression, *operator_token);
                 }
-                bssembly.add(Instruction{ PUSH, { R3 }, "push result onto stack" });
+                const auto size = expression.lhs->data_type->size();
+                assert(expression.rhs->data_type->size() == size);
+                if (size == 0) {
+                    assert(expression.lhs->data_type == type_container->get_nothing()
+                           and expression.rhs->data_type == type_container->get_nothing());
+                    const auto token = std::get_if<Token>(&expression.operator_type);
+                    assert(token != nullptr and "the type checker should've caught this");
+                    if (is<EqualsEquals>(*token)) {
+                        bssembly.add(Instruction{ PUSH, { Immediate{ 1 } }, "nothing == nothing yields true" });
+                    } else if (is<ExclamationEquals>(*token)) {
+                        bssembly.add(Instruction{ PUSH, { Immediate{ 0 } }, "nothing != nothing yields false" });
+                    } else {
+                        assert(false and "unreachable");
+                    }
+                } else if (size <= WordSize) {
+                    bssembly.add(Instruction{ PUSH, { R3 }, "push result onto stack" });
+                } else {
+                    assert(false and "not implemented");
+                }
             } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
                 assert(expression.lhs->is_lvalue());
                 assert(expression.lhs->data_type->is_array_type());
