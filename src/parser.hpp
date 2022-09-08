@@ -225,6 +225,7 @@ namespace Parser {
                     Let let_token,
                     Identifier name,
                     Equals equals_token,
+                    std::span<const Token> type_definition_tokens,
                     std::unique_ptr<DataType> type_definition,
                     std::unique_ptr<Expression> initial_value,
                     Mutability binding_mutability
@@ -232,6 +233,7 @@ namespace Parser {
                 : let_token{ let_token },
                   name{ name },
                   equals_token{ equals_token },
+                  type_definition_tokens{ type_definition_tokens },
                   type_definition{ std::move(type_definition) },
                   initial_value{ std::move(initial_value) },
                   binding_mutability{ binding_mutability } { }
@@ -239,6 +241,7 @@ namespace Parser {
             Let let_token;
             Identifier name;
             Equals equals_token;
+            std::span<const Token> type_definition_tokens;
             std::unique_ptr<DataType> type_definition;
             const DataType* type{ nullptr };
             std::unique_ptr<Expression> initial_value;
@@ -435,13 +438,19 @@ namespace Parser {
         };
 
         struct TypeSizeExpression : public ExpressionAcceptor<TypeSizeExpression> {
-            TypeSizeExpression(TypeSize type_size_token, std::unique_ptr<DataType> type_definition)
+            TypeSizeExpression(
+                    TypeSize type_size_token,
+                    std::unique_ptr<DataType> type_definition,
+                    std::span<const Token> contained_data_type_tokens
+            )
                 : type_size_token{ type_size_token },
-                  type_definition{ std::move(type_definition) } { }
+                  type_definition{ std::move(type_definition) },
+                  contained_data_type_tokens{ contained_data_type_tokens } { }
 
             TypeSize type_size_token;
             std::unique_ptr<DataType> type_definition;
             const DataType* contained_data_type{ nullptr };
+            std::span<const Token> contained_data_type_tokens;
         };
 
         struct ValueSizeExpression : public ExpressionAcceptor<ValueSizeExpression> {

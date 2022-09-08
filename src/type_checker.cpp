@@ -363,7 +363,12 @@ namespace TypeChecker {
             if (not type_deduction) {
                 auto& type = statement.type_definition;
                 if (not type_container->is_defined(*type)) {
-                    Error::error(statement.name, fmt::format("use of undeclared type \"{}\"", type->to_string()));
+                    assert(not statement.type_definition_tokens.empty()
+                           and "if this is empty, we use automatic type deduction");
+                    Error::error(
+                            statement.type_definition_tokens.front(),
+                            fmt::format("use of undeclared type \"{}\"", type->to_string())
+                    );
                 }
                 statement.type = type_container->from_type_definition(std::move(statement.type_definition));
             } else {
@@ -788,7 +793,7 @@ namespace TypeChecker {
         void visit(Parser::Expressions::TypeSizeExpression& expression) override {
             if (not type_container->is_defined(*(expression.type_definition))) {
                 Error::error(
-                        expression.type_size_token,
+                        expression.contained_data_type_tokens.front(),
                         fmt::format("use of undeclared type \"{}\"", expression.type_definition->to_string())
                 );
             }
