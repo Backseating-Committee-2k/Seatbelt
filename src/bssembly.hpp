@@ -700,6 +700,7 @@ namespace Bssembler {
         }
 
         void replace(usize from, usize to, std::span<InstructionVariant> replacement) {
+            // TODO: this is REALLY inefficient and should be optimized!
             m_instructions.erase(
                     m_instructions.begin() + static_cast<decltype(m_instructions)::difference_type>(from),
                     m_instructions.begin() + static_cast<decltype(m_instructions)::difference_type>(to)
