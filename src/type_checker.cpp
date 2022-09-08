@@ -910,11 +910,14 @@ namespace TypeChecker {
 
             assert(function_definition->return_type_definition and "function return type must have been set before");
             if (not type_container->is_defined(*(function_definition->return_type_definition))) {
+                assert(not function_definition->return_type_definition_tokens.empty()
+                       and "parser must have set this value");
                 Error::error(
-                        function_definition->name, fmt::format(
-                                                           "use of undeclared type \"{}\"",
-                                                           function_definition->return_type_definition->to_string()
-                                                   )
+                        function_definition->return_type_definition_tokens.front(),
+                        fmt::format(
+                                "use of undeclared type \"{}\"",
+                                function_definition->return_type_definition->to_string()
+                        )
                 );
             }
 

@@ -460,6 +460,7 @@ namespace Parser {
         Identifier name;
         ParameterList parameters;
         std::unique_ptr<DataType> return_type_definition;
+        std::span<const Token> return_type_definition_tokens{};
         std::optional<Export> export_token{};
         const DataType* return_type{ nullptr };
         Statements::Block body;

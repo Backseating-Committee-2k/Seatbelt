@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -176,8 +177,9 @@ namespace Parser {
                 } else if (current_is<ExclamationMark>()) {
                     const auto exclamation_mark_token = current();
                     advance();
-                    accumulator =
-                            std::make_unique<Expressions::UnaryOperator>(exclamation_mark_token, std::move(accumulator));
+                    accumulator = std::make_unique<Expressions::UnaryOperator>(
+                            exclamation_mark_token, std::move(accumulator)
+                    );
                 } else {
                     assert(false and "unreachable");
                 }
@@ -291,8 +293,12 @@ namespace Parser {
             }
             consume<RightParenthesis>("expected \")\"");
             std::unique_ptr<DataType> return_type_definition = std::make_unique<ConcreteType>(NothingIdentifier);
+            auto return_type_tokens = std::span<const Token>{};
             if (maybe_consume<TildeArrow>()) {
+                const auto return_type_definition_start = &current();
                 return_type_definition = data_type();
+                const auto return_type_definition_end = &current();
+                return_type_tokens = std::span<const Token>{ return_type_definition_start, return_type_definition_end };
             } else if (not current_is<LeftCurlyBracket>()) {
                 // this is irrelevant for the parsing logic, but it yields a better error message
                 Error::error(
@@ -307,6 +313,7 @@ namespace Parser {
                     .name{ name },
                     .parameters{ std::move(parameters) },
                     .return_type_definition{ std::move(return_type_definition) },
+                    .return_type_definition_tokens{ return_type_tokens },
                     .export_token{ export_token },
                     .return_type{},
                     .body{ std::move(body) },
