@@ -222,9 +222,12 @@ namespace Parser {
             }
             if (const auto type_size_token = maybe_consume<TypeSize>()) {
                 consume<LeftParenthesis>("expected \"(\"");
+                const auto type_tokens_start = &current();
                 auto type_definition = data_type();
+                const auto type_tokens_end = &current();
+                const auto type_tokens = std::span<const Token>{ type_tokens_start, type_tokens_end };
                 consume<RightParenthesis>("expected \")\"");
-                return std::make_unique<TypeSizeExpression>(*type_size_token, std::move(type_definition));
+                return std::make_unique<TypeSizeExpression>(*type_size_token, std::move(type_definition), type_tokens);
             }
             if (const auto value_size_token = maybe_consume<ValueSize>()) {
                 consume<LeftParenthesis>("expected \"(\"");
@@ -292,7 +295,7 @@ namespace Parser {
                 }
             }
             consume<RightParenthesis>("expected \")\"");
-            std::unique_ptr<DataType> return_type_definition = std::make_unique<ConcreteType>(NothingIdentifier);
+            std::unique_ptr<DataType> return_type_definition = std::make_unique<ConcreteType>(NothingIdentifier, true);
             auto return_type_tokens = std::span<const Token>{};
             if (maybe_consume<TildeArrow>()) {
                 const auto return_type_definition_start = &current();
@@ -557,7 +560,7 @@ namespace Parser {
 
         [[nodiscard]] std::unique_ptr<DataType> primitive_type() {
             auto identifier = consume<Identifier>("type identifier expected");
-            return std::make_unique<ConcreteType>(identifier.location.view());
+            return std::make_unique<ConcreteType>(identifier.location.view(), false);
         }
 
         [[nodiscard]] std::unique_ptr<Statements::VariableDefinition> variable_definition() {
@@ -565,6 +568,7 @@ namespace Parser {
             const auto identifier = consume<Identifier>("expected variable name");
             auto type_definition = std::unique_ptr<DataType>{};
             auto is_mutable = false;
+            auto type_tokens = std::span<const Token>{};
             if (not current_is<Equals>()) {
                 consume<Colon>("expected \":\"");
                 // either automatic type deduction with mutable binding, or annotated type
@@ -572,18 +576,22 @@ namespace Parser {
                 if (not is_mutable) {
                     maybe_consume<Const>();
                 }
+
                 if (not current_is<Equals>()) {
                     // type is annotated
+                    const auto type_tokens_start = &current();
                     type_definition = data_type();
+                    const auto type_tokens_end = &current();
+                    type_tokens = std::span<const Token>{ type_tokens_start, type_tokens_end };
                 }
             }
-            const auto mutability = is_mutable ? Mutability::Mutable : Mutability::Const;
+            const auto mutability = (is_mutable ? Mutability::Mutable : Mutability::Const);
             auto equals_token = consume<Equals>("expected variable initialization");
             auto initial_value = expression();
             consume_semicolon();
             return std::make_unique<Statements::VariableDefinition>(
-                    let_token, identifier, equals_token, std::move(type_definition), std::move(initial_value),
-                    mutability
+                    let_token, identifier, equals_token, type_tokens, std::move(type_definition),
+                    std::move(initial_value), mutability
             );
         }
 

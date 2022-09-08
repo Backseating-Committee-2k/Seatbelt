@@ -77,7 +77,7 @@ public:
 };
 
 struct ConcreteType final : public DataType {
-    explicit ConcreteType(std::string_view name) : name{ name } { }
+    ConcreteType(std::string_view name, bool has_been_defined) : name{ name }, has_been_defined{ has_been_defined } { }
 
     bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const ConcreteType*>(&other)) {
@@ -121,6 +121,7 @@ struct ConcreteType final : public DataType {
     }
 
     std::string_view name;
+    bool has_been_defined;
 };
 
 struct ArrayType final : public DataType {
