@@ -914,8 +914,10 @@ namespace Emitter {
                             .offset.value();
             bssembly.add(Comment{
                     fmt::format("new variable called \"{}\" with offset {}", statement.name.location.view(), offset) });
+
+            statement.initial_value->accept(*this); // initial value is evaluated and pushed
+
             if (statement.initial_value->data_type->size() > 0) {
-                statement.initial_value->accept(*this); // initial value is evaluated and pushed
                 bssembly.add(Instruction{
                         SUB,
                         {SP, Immediate{ statement.initial_value->data_type->size_when_pushed() }, R1},
