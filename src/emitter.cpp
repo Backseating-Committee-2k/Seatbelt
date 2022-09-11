@@ -918,19 +918,14 @@ namespace Emitter {
             statement.initial_value->accept(*this); // initial value is evaluated and pushed
 
             if (statement.initial_value->data_type->size() > 0) {
-                bssembly.add(Instruction{
-                        SUB,
-                        {SP, Immediate{ statement.initial_value->data_type->size_when_pushed() }, R1},
-                        "get address of initial value"
-                });
                 assert(statement.variable_symbol->offset.has_value() and "offset must have been set before");
                 bssembly.add(Instruction{
                         ADD,
-                        {R0, Immediate{ *(statement.variable_symbol->offset) }, R2},
+                        {R0, Immediate{ *(statement.variable_symbol->offset) }, R1},
                         "get target address"
                 });
                 assert(statement.initial_value->data_type->alignment() <= WordSize and "unreachable");
-                bssembly.pop_from_stack_into_pointer(R2, statement.initial_value->data_type);
+                bssembly.pop_from_stack_into_pointer(R1, statement.initial_value->data_type);
             }
         }
 
