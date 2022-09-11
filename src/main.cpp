@@ -5,6 +5,7 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "scope_generator.hpp"
+#include "stack_layout_generator.hpp"
 #include "type_checker.hpp"
 #include "type_container.hpp"
 #include <algorithm>
@@ -304,6 +305,7 @@ int main(int, char** argv) {
     auto global_scope = Scope{ nullptr, "" };
     ScopeGenerator::generate(program, type_container, global_scope);
     TypeChecker::check(program, type_container, global_scope);
+    StackLayoutGenerator::generate_stack_layout(program);
 
     check_main_function(
             SourceCode{
