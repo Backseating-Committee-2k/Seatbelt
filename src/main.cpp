@@ -89,9 +89,6 @@ using ImportsMap = std::unordered_map<std::string, ImportTask>;
 using SourceFileContainer = std::vector<std::pair<std::string, std::string>>;
 using TokenListsContainer = std::vector<Lexer::TokenList>;
 
-template<typename T>
-struct PrintType;
-
 [[nodiscard]] std::filesystem::path get_relative_import_path(const std::span<const Lexer::Tokens::Token> tokens) {
     auto path = std::filesystem::path{};
     for (const auto& token : tokens) {
