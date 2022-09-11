@@ -69,7 +69,8 @@ add_executable(Seatbelt
         src/overloaded.hpp
         src/bssembly_optimizer.hpp
         src/utils.hpp
-        src/utils.cpp)
+        src/utils.cpp
+        src/stack_layout_generator.hpp)
 
 target_link_libraries(Seatbelt fmt ctre Arguably)
 

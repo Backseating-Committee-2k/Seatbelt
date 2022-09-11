@@ -213,26 +213,14 @@ namespace TypeChecker {
 
     struct TypeCheckerVisitor : public Parser::Statements::StatementVisitor,
                                 public Parser::Expressions::ExpressionVisitor {
-        TypeCheckerVisitor(
-                TypeContainer* type_container,
-                usize starting_offset,
-                const Parser::FunctionDefinition* surrounding_function
-        )
+        TypeCheckerVisitor(TypeContainer* type_container, const Parser::FunctionDefinition* surrounding_function)
             : type_container{ type_container },
-              surrounding_function{ surrounding_function } {
-            if (starting_offset > 0) {
-                // alignment is 1, because we assume that the starting offset already has the right alignment
-                claim_stack_space(starting_offset, 1);
-            }
-        }
+              surrounding_function{ surrounding_function } { }
 
         void visit(Parser::Statements::Block& statement) override {
-            const auto old_offset = offset;
             for (auto& sub_statement : statement.statements) {
                 sub_statement->accept(*this);
             }
-            statement.occupied_stack_space = occupied_stack_space;
-            offset = old_offset;
         }
 
         void visit(Parser::Statements::IfStatement& statement) override {
@@ -300,7 +288,6 @@ namespace TypeChecker {
 
         void visit(Parser::Statements::ForStatement& statement) override {
             using Parser::Statements::VariableDefinition;
-            const auto old_offset = offset;
             if (statement.initializer) {
                 statement.initializer->accept(*this);
             }
@@ -326,7 +313,6 @@ namespace TypeChecker {
                 statement.increment->value_type = ValueType::RValue;
             }
             statement.body.accept(*this);
-            offset = old_offset;
         }
 
         void visit(Parser::Statements::ReturnStatement& statement) override {
@@ -375,9 +361,6 @@ namespace TypeChecker {
                 // when doing type deduction, we use the type of the initial value as type for the variable
                 statement.type = statement.initial_value->data_type;
             }
-
-            assert(statement.variable_symbol != nullptr);
-            statement.variable_symbol->offset = claim_stack_space(statement.type->size(), statement.type->alignment());
 
             assert(statement.type and statement.initial_value->data_type and "missing type information");
 
@@ -809,19 +792,7 @@ namespace TypeChecker {
             expression.value_type = ValueType::RValue;
         }
 
-        usize claim_stack_space(const usize size_of_type, const usize alignment) {
-            // we have to make sure that the offset has the right alignment
-            const auto old_offset = Utils::round_up(offset, alignment);
-            offset = old_offset + size_of_type;
-            if (offset > occupied_stack_space) {
-                occupied_stack_space = offset;
-            }
-            return old_offset;
-        }
-
         TypeContainer* type_container;
-        usize offset{ 0 };
-        usize occupied_stack_space{ 0 };
         const Parser::FunctionDefinition* surrounding_function;
     };
 
@@ -838,15 +809,8 @@ namespace TypeChecker {
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             // the actual signature of the function must have been visited before, we now
             // only visit the body
-            usize size_of_parameters = 0;
-            for (const auto& parameter : function_definition->parameters) {
-                size_of_parameters = Utils::round_up(size_of_parameters, parameter.type->alignment());
-                size_of_parameters += parameter.type->size();
-            }
-            auto visitor = TypeCheckerVisitor{ type_container, size_of_parameters, function_definition.get() };
+            auto visitor = TypeCheckerVisitor{ type_container, function_definition.get() };
             function_definition->body.accept(visitor);
-            function_definition->occupied_stack_space = Utils::round_up(visitor.occupied_stack_space, WordSize);
-            function_definition->parameters_stack_space = size_of_parameters;
         }
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }

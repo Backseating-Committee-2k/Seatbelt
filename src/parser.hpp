@@ -155,13 +155,13 @@ namespace Parser {
         };
 
         struct BreakStatement : public StatementAcceptor<BreakStatement> {
-            BreakStatement(Lexer::Tokens::Break break_token) : break_token{ break_token } { }
+            explicit BreakStatement(Lexer::Tokens::Break break_token) : break_token{ break_token } { }
 
             Lexer::Tokens::Break break_token;
         };
 
         struct ContinueStatement : public StatementAcceptor<ContinueStatement> {
-            ContinueStatement(Lexer::Tokens::Continue continue_token) : continue_token{ continue_token } { }
+            explicit ContinueStatement(Lexer::Tokens::Continue continue_token) : continue_token{ continue_token } { }
 
             Lexer::Tokens::Continue continue_token;
         };
