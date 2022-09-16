@@ -59,6 +59,8 @@ namespace Parser {
         }
 
         [[nodiscard]] Program parse_body() {
+            const auto is_global_namespace = m_namespaces_stack.empty();
+
             auto program = Program{};
             while (not end_of_file()) {
                 if (current_is<Namespace>()) {
@@ -76,8 +78,10 @@ namespace Parser {
                     program.push_back(custom_type_definition());
                 } else if (current_is<Import>()) {
                     Error::error(current(), "imports must precede all other top level statements of a source file");
-                } else {
+                } else if (is_global_namespace) {
                     Error::error(current(), "unexpected token");
+                } else {
+                    break;
                 }
             }
             return program;
@@ -443,6 +447,7 @@ namespace Parser {
                 );
             }
 
+            auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
             return std::make_unique<CustomTypeDefinition>(CustomTypeDefinition{
                     .export_token{ export_token },
                     .type_token{ type_token },
@@ -450,7 +455,8 @@ namespace Parser {
                     .restricted_token{ restricted_token },
                     .left_curly_bracket{ left_curly_bracket },
                     .alternatives{ std::move(alternatives) },
-                    .right_curly_bracket{ right_curly_bracket } });
+                    .right_curly_bracket{ right_curly_bracket },
+                    .namespace_name{ namespace_name } });
         }
 
         [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {

@@ -378,6 +378,7 @@ namespace Parser {
 
             std::span<const Lexer::Tokens::Token> name_tokens;
             std::optional<std::vector<const FunctionOverload*>> possible_overloads{};
+            std::optional<std::vector<const TypeOverload*>> possible_type_overloads{};
             std::optional<const VariableSymbol*> variable_symbol{};
         };
 
@@ -508,6 +509,7 @@ namespace Parser {
         LeftCurlyBracket left_curly_bracket;
         std::map<u32, VariantDefinition> alternatives;
         RightCurlyBracket right_curly_bracket;
+        std::string namespace_name{};
 
         [[nodiscard]] bool is_restricted() const {
             return restricted_token.has_value();

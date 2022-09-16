@@ -418,8 +418,6 @@ namespace ScopeGenerator {
             function_definition->body.accept(visitor);
         }
 
-        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
-
         void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
             visit_function_bodies(namespace_definition->contents, *type_container, *(namespace_definition->scope));
         }
@@ -514,8 +512,38 @@ namespace ScopeGenerator {
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
-        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
-            // TODO: do we have to do something here?
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
+            using namespace std::string_view_literals;
+            using std::ranges::find_if;
+
+            if (type_definition->is_exported() and type_definition->namespace_name == "::") {
+                Error::error(
+                        *(type_definition->export_token), "exporting functions from the global namespace is not allowed"
+                );
+            }
+
+            auto identifier = type_definition->name.has_value() ? (*(type_definition->name)).location.view() : ""sv;
+            auto find_iterator = find_if(*global_scope, [&](const auto& pair) { return pair.first == identifier; });
+            const auto found = (find_iterator != std::end(*global_scope));
+            auto type_overload = TypeOverload{ .namespace_name{ type_definition->namespace_name },
+                                               .definition{ type_definition.get() } };
+
+            if (found) {
+                if (std::holds_alternative<FunctionSymbol>(find_iterator->second)) {
+                    const auto& function_overloads = std::get<FunctionSymbol>(find_iterator->second).overloads;
+                    for (const auto& overload : function_overloads) {
+                        if (overload.namespace_name == type_definition->namespace_name) {
+                            assert(type_definition->name.has_value());
+                            Error::error(*(type_definition->name), "a type cannot be named identically to a function");
+                        }
+                    }
+                }
+                assert(std::holds_alternative<CustomTypeSymbol>(find_iterator->second));
+                auto& type_symbol = std::get<CustomTypeSymbol>(find_iterator->second);
+                type_symbol.overloads.push_back(type_overload);
+            } else {
+                (*global_scope)[identifier] = CustomTypeSymbol{ .overloads{ type_overload } };
+            }
         }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
