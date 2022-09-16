@@ -400,17 +400,24 @@ namespace Parser {
             const auto left_curly_bracket = consume<LeftCurlyBracket>("expected \"{\"");
 
             auto alternatives = std::map<u32, VariantDefinition>{};
+
             u32 next_tag = 0;
+            bool has_custom_tags = false;
+            bool has_automatic_tags = false;
+
             while (not current_is<RightCurlyBracket>()) {
                 auto variant = variant_definition();
                 const auto has_custom_tag = static_cast<bool>(maybe_consume<Equals>());
                 u32 current_tag = next_tag;
                 if (has_custom_tag) {
+                    has_custom_tags = true;
                     const auto tag_literal = consume<IntegerLiteral>("expected tag literal");
                     current_tag = get_number_from_integer_literal<u32>(tag_literal).value;
                     if (alternatives.contains(current_tag)) {
                         Error::error(tag_literal, "duplicate tag literal");
                     }
+                } else {
+                    has_automatic_tags = true;
                 }
                 if (alternatives.contains(current_tag)) {
                     Error::error(current(), fmt::format("automatic tag \"{}\" is not applicable", current_tag));
@@ -427,6 +434,13 @@ namespace Parser {
 
             if (alternatives.empty()) {
                 Error::error(right_curly_bracket, "empty custom types are not allowed");
+            }
+
+            if (has_custom_tags and has_automatic_tags) {
+                Error::warning(
+                        right_curly_bracket,
+                        "custom type mixes custom tags and automatic tags which can lead to confusion"
+                );
             }
 
             return std::make_unique<CustomTypeDefinition>(CustomTypeDefinition{
