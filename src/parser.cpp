@@ -72,10 +72,12 @@ namespace Parser {
                     }
                 } else if (current_is<Function>() or (current_is<Export>() and peek_is<Function>())) {
                     program.push_back(function_definition());
+                } else if (current_is<Type>() or (current_is<Export>() and peek_is<Type>())) {
+                    program.push_back(custom_type_definition());
                 } else if (current_is<Import>()) {
                     Error::error(current(), "imports must precede all other top level statements of a source file");
                 } else {
-                    break;
+                    Error::error(current(), "unexpected token");
                 }
             }
             return program;
@@ -358,6 +360,83 @@ namespace Parser {
                     .export_token{ export_token },
                     .return_type{},
                     .body{ std::move(body) } });
+        }
+
+        [[nodiscard]] VariantMemberDefinition variant_member_definition() {
+            const auto name = consume<Identifier>("expected field name");
+            consume<Colon>("expected \":\"");
+            const auto type_tokens_start = &current();
+            auto type = data_type();
+            const auto type_tokens_end = &current();
+            const auto type_definition_tokens = std::span<const Token>{ type_tokens_start, type_tokens_end };
+            return VariantMemberDefinition{ .name{ name },
+                                            .type_definition{ std::move(type) },
+                                            .type_definition_tokens{ type_definition_tokens } };
+        }
+
+        [[nodiscard]] VariantDefinition variant_definition() {
+            const auto name = consume<Identifier>("variant identifier expected");
+            consume<LeftCurlyBracket>("expected \"{\"");
+            std::vector<VariantMemberDefinition> members;
+            while (not current_is<RightCurlyBracket>()) {
+                members.push_back(variant_member_definition());
+                if (not maybe_consume<Comma>()) {
+                    break;
+                }
+            }
+            consume<RightCurlyBracket>("expected \"}\"");
+            return VariantDefinition{
+                .name{ name },
+                .members{ std::move(members) },
+            };
+        }
+
+        [[nodiscard]] std::unique_ptr<CustomTypeDefinition> custom_type_definition() {
+            const auto export_token = maybe_consume<Export>();
+            assert(current_is<Type>() and "this should have been checked before");
+            const auto type_token = consume<Type>();
+            const auto name = consume<Identifier>("type identifier expected");
+            const auto restricted_token = maybe_consume<Restricted>();
+            const auto left_curly_bracket = consume<LeftCurlyBracket>("expected \"{\"");
+
+            auto alternatives = std::map<u32, VariantDefinition>{};
+            u32 next_tag = 0;
+            while (not current_is<RightCurlyBracket>()) {
+                auto variant = variant_definition();
+                const auto has_custom_tag = static_cast<bool>(maybe_consume<Equals>());
+                u32 current_tag = next_tag;
+                if (has_custom_tag) {
+                    const auto tag_literal = consume<IntegerLiteral>("expected tag literal");
+                    current_tag = get_number_from_integer_literal<u32>(tag_literal).value;
+                    if (alternatives.contains(current_tag)) {
+                        Error::error(tag_literal, "duplicate tag literal");
+                    }
+                }
+                if (alternatives.contains(current_tag)) {
+                    Error::error(current(), fmt::format("automatic tag \"{}\" is not applicable", current_tag));
+                }
+                alternatives[current_tag] = std::move(variant);
+                next_tag = current_tag + 1;
+
+                if (not maybe_consume<Comma>()) {
+                    break;
+                }
+            }
+
+            if (alternatives.empty()) {
+                Error::error(left_curly_bracket, "empty custom types are not allowed");
+            }
+
+            const auto right_curly_bracket = consume<RightCurlyBracket>("expected \"}\"");
+
+            return std::make_unique<CustomTypeDefinition>(CustomTypeDefinition{
+                    .export_token{ export_token },
+                    .type_token{ type_token },
+                    .name{ name },
+                    .restricted_token{ restricted_token },
+                    .left_curly_bracket{ left_curly_bracket },
+                    .alternatives{ std::move(alternatives) },
+                    .right_curly_bracket{ right_curly_bracket } });
         }
 
         [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {

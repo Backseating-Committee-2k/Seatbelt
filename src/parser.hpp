@@ -12,6 +12,7 @@
 #include "scope.hpp"
 #include <cassert>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -467,12 +468,55 @@ namespace Parser {
 
     struct FunctionDefinition;
     struct ImportStatement;
+    struct CustomTypeDefinition;
     struct NamespaceDefinition;
 
     template<typename... T>
     using PointerVariant = std::variant<std::unique_ptr<T>...>;
 
-    using Program = std::vector<PointerVariant<FunctionDefinition, ImportStatement, NamespaceDefinition>>;
+    using Program = std::vector<PointerVariant<FunctionDefinition, ImportStatement, CustomTypeDefinition, NamespaceDefinition>>;
+
+    struct ImportStatement {
+        Import import_token;
+        std::span<const Token> import_path_tokens;
+    };
+
+    struct NamespaceDefinition {
+        Namespace namespace_token;
+        Identifier name;
+        Program contents;
+        std::unique_ptr<Scope> scope;
+    };
+
+    struct VariantMemberDefinition {
+        Identifier name;
+        std::unique_ptr<DataType> type_definition;
+        std::span<const Token> type_definition_tokens;
+        const DataType* type{ nullptr };
+    };
+
+    struct VariantDefinition {
+        Identifier name;
+        std::vector<VariantMemberDefinition> members;
+    };
+
+    struct CustomTypeDefinition {
+        std::optional<Export> export_token;
+        Type type_token;
+        std::optional<Identifier> name;
+        std::optional<Restricted> restricted_token;
+        LeftCurlyBracket left_curly_bracket;
+        std::map<u32, VariantDefinition> alternatives;
+        RightCurlyBracket right_curly_bracket;
+
+        [[nodiscard]] bool is_restricted() const {
+            return restricted_token.has_value();
+        }
+
+        [[nodiscard]] bool is_exported() const {
+            return export_token.has_value();
+        }
+    };
 
     struct FunctionDefinition {
         Identifier name;
@@ -492,18 +536,6 @@ namespace Parser {
         [[nodiscard]] bool is_exported() const {
             return export_token.has_value();
         }
-    };
-
-    struct ImportStatement {
-        Import import_token;
-        std::span<const Token> import_path_tokens;
-    };
-
-    struct NamespaceDefinition {
-        Namespace namespace_token;
-        Identifier name;
-        Program contents;
-        std::unique_ptr<Scope> scope;
     };
 
     void concatenate_programs(Program& first, Program&& second);

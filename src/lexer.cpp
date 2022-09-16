@@ -361,6 +361,8 @@ private:
             KEYWORD("export", Export)
             KEYWORD("type_size", TypeSize)
             KEYWORD("value_size", ValueSize)
+            KEYWORD("type", Type)
+            KEYWORD("restricted", Restricted)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);
             }

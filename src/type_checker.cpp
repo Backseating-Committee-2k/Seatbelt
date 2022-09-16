@@ -805,14 +805,18 @@ namespace TypeChecker {
               type_container{ type_container },
               global_scope{ global_scope } { }
 
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
+
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
+            // TODO: register type
+        }
+
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             // the actual signature of the function must have been visited before, we now
             // only visit the body
             auto visitor = TypeCheckerVisitor{ type_container, function_definition.get() };
             function_definition->body.accept(visitor);
         }
-
-        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
             visit_top_level_statements(namespace_definition->contents, *type_container, *global_scope);
@@ -830,6 +834,8 @@ namespace TypeChecker {
         FunctionDefinitionVisitor(TypeContainer* type_container, const Scope* global_scope)
             : type_container{ type_container },
               global_scope{ global_scope } { }
+
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using std::ranges::find_if, std::ranges::views::transform;
@@ -905,8 +911,6 @@ namespace TypeChecker {
             // the body of the function is not recursively visited here since we have to first visit
             // all function signatures before visiting the bodies
         }
-
-        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
             visit_function_definitions(namespace_definition->contents, *type_container, *global_scope);

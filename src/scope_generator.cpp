@@ -512,6 +512,12 @@ namespace ScopeGenerator {
             : type_container{ type_container },
               scope{ scope } { }
 
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
+
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
+            // TODO: do we have to do something here?
+        }
+
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using namespace std::string_literals;
             using std::ranges::find_if;
@@ -546,8 +552,6 @@ namespace ScopeGenerator {
             function_definition->body.accept(label_visitor);
             function_definition->surrounding_scope = scope;
         }
-
-        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
             using std::ranges::find_if;
