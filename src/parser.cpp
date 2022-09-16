@@ -423,11 +423,11 @@ namespace Parser {
                 }
             }
 
-            if (alternatives.empty()) {
-                Error::error(left_curly_bracket, "empty custom types are not allowed");
-            }
-
             const auto right_curly_bracket = consume<RightCurlyBracket>("expected \"}\"");
+
+            if (alternatives.empty()) {
+                Error::error(right_curly_bracket, "empty custom types are not allowed");
+            }
 
             return std::make_unique<CustomTypeDefinition>(CustomTypeDefinition{
                     .export_token{ export_token },
