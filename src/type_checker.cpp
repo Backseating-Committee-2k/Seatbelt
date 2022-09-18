@@ -837,6 +837,10 @@ namespace TypeChecker {
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
+            // TODO: check types
+        }
+
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using std::ranges::find_if, std::ranges::views::transform;
             usize offset = 0;

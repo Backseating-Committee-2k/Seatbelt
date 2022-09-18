@@ -399,6 +399,12 @@ namespace ScopeGenerator {
             : type_container{ type_container },
               surrounding_scope{ surrounding_scope } { }
 
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
+
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
+            // TODO: something?
+        }
+
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             auto function_scope = surrounding_scope->create_child_scope();
             for (auto& parameter : function_definition->parameters) {
@@ -523,8 +529,8 @@ namespace ScopeGenerator {
             }
 
             auto identifier = type_definition->name.has_value() ? (*(type_definition->name)).location.view() : ""sv;
-            auto find_iterator = find_if(*global_scope, [&](const auto& pair) { return pair.first == identifier; });
-            const auto found = (find_iterator != std::end(*global_scope));
+            auto find_iterator = find_if(*scope, [&](const auto& pair) { return pair.first == identifier; });
+            const auto found = (find_iterator != std::end(*scope));
             auto type_overload = TypeOverload{ .namespace_name{ type_definition->namespace_name },
                                                .definition{ type_definition.get() } };
 
@@ -532,7 +538,7 @@ namespace ScopeGenerator {
                 if (std::holds_alternative<FunctionSymbol>(find_iterator->second)) {
                     const auto& function_overloads = std::get<FunctionSymbol>(find_iterator->second).overloads;
                     for (const auto& overload : function_overloads) {
-                        if (overload.namespace_name == type_definition->namespace_name) {
+                        if (overload.surrounding_namespace->name.location.view() == type_definition->namespace_name) {
                             assert(type_definition->name.has_value());
                             Error::error(*(type_definition->name), "a type cannot be named identically to a function");
                         }
@@ -542,7 +548,7 @@ namespace ScopeGenerator {
                 auto& type_symbol = std::get<CustomTypeSymbol>(find_iterator->second);
                 type_symbol.overloads.push_back(type_overload);
             } else {
-                (*global_scope)[identifier] = CustomTypeSymbol{ .overloads{ type_overload } };
+                (*scope)[identifier] = CustomTypeSymbol{ .overloads{ type_overload } };
             }
         }
 

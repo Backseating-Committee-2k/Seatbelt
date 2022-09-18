@@ -1040,10 +1040,6 @@ namespace Emitter {
         return result;
     }
 
-    Bssembly Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) {
-        return {};
-    }
-
     Bssembly Emitter::operator()(const std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
         auto result = Bssembly{};
         for (const auto& top_level_statement : namespace_definition->contents) {
