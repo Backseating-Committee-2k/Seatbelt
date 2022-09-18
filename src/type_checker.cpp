@@ -35,14 +35,14 @@
 namespace TypeChecker {
     using Lexer::Tokens::Token;
 
-    [[nodiscard]] std::optional<std::string_view> concrete_type(const DataType* data_type) {
+    [[nodiscard]] static std::optional<std::string_view> concrete_type(const DataType* data_type) {
         if (const auto concrete = dynamic_cast<const ConcreteType*>(data_type)) {
             return concrete->name;
         }
         return {};
     }
 
-    [[nodiscard]] const DataType*
+    [[nodiscard]] static const DataType*
     get_resulting_data_type_for_arrays(const ArrayType* lhs, const Token& token, const ArrayType* rhs) {
         if (lhs->num_elements != rhs->num_elements) {
             return nullptr;
@@ -53,7 +53,7 @@ namespace TypeChecker {
         return is<Lexer::Tokens::Equals>(token) ? lhs : nullptr;
     }
 
-    [[nodiscard]] const DataType* get_resulting_data_type_for_function_pointers(
+    [[nodiscard]] static const DataType* get_resulting_data_type_for_function_pointers(
             const FunctionPointerType* lhs,
             const Token& token,
             const FunctionPointerType* rhs,
@@ -81,7 +81,7 @@ namespace TypeChecker {
         return nullptr;
     }
 
-    [[nodiscard]] const DataType* get_resulting_data_type_for_pointers(
+    [[nodiscard]] static const DataType* get_resulting_data_type_for_pointers(
             const PointerType* lhs,
             const Token& token,
             const PointerType* rhs,
@@ -104,7 +104,7 @@ namespace TypeChecker {
         return nullptr;
     }
 
-    [[nodiscard]] const DataType* get_resulting_data_type(
+    [[nodiscard]] static const DataType* get_resulting_data_type(
             const DataType* lhs,
             const Token& token,
             const DataType* rhs,
@@ -189,7 +189,7 @@ namespace TypeChecker {
         return nullptr;
     }
 
-    [[nodiscard]] const DataType*
+    [[nodiscard]] static const DataType*
     get_resulting_data_type(const Parser::Expressions::BinaryOperator& expression, TypeContainer& type_container) {
         if (const auto operator_token = std::get_if<Token>(&expression.operator_type)) {
             return get_resulting_data_type(
@@ -796,12 +796,11 @@ namespace TypeChecker {
         const Parser::FunctionDefinition* surrounding_function;
     };
 
+    static void
+    visit_top_level_statements(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope);
+
     struct TypeCheckerTopLevelVisitor {
-        TypeCheckerTopLevelVisitor(
-                const Parser::Program* program,
-                TypeContainer* type_container,
-                const Scope* global_scope
-        )
+        TypeCheckerTopLevelVisitor(Parser::Program* program, TypeContainer* type_container, const Scope* global_scope)
             : program{ program },
               type_container{ type_container },
               global_scope{ global_scope } { }
@@ -815,10 +814,17 @@ namespace TypeChecker {
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
-        const Parser::Program* program;
+        void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
+            visit_top_level_statements(namespace_definition->contents, *type_container, *global_scope);
+        }
+
+        Parser::Program* program;
         TypeContainer* type_container;
         const Scope* global_scope;
     };
+
+    static void
+    visit_function_definitions(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope);
 
     struct FunctionDefinitionVisitor {
         FunctionDefinitionVisitor(TypeContainer* type_container, const Scope* global_scope)
@@ -854,8 +860,9 @@ namespace TypeChecker {
 
             const auto identifier = function_definition->name.location.view();
 
-            const auto find_iterator = global_scope->find(identifier);
-            [[maybe_unused]] const auto found = (find_iterator != std::cend(*global_scope));
+            const auto& scope = function_definition->surrounding_scope;
+            const auto find_iterator = scope->find(identifier);
+            [[maybe_unused]] const auto found = (find_iterator != std::cend(*scope));
             assert(found && "scope generator should have put the needed symbol into scope or throw an error");
             const auto& found_symbol = find_iterator->second;
             assert(std::holds_alternative<FunctionSymbol>(found_symbol));
@@ -865,13 +872,14 @@ namespace TypeChecker {
             for (const auto& overload : overloads) {
                 const auto duplicate_signature = (overload.signature == signature);
                 if (duplicate_signature) {
-                    const auto same_namespace = (overload.namespace_name == function_definition->namespace_name);
-                    if (same_namespace) {
-                        Error::error(
-                                function_definition->name,
-                                fmt::format("function overload for \"{}\" with ambiguous signature", identifier)
-                        );
-                    }
+                    assert(overload.surrounding_namespace
+                                   == function_definition->corresponding_symbol->surrounding_namespace
+                           and "functions in the same scope must be in the same namespace");
+
+                    Error::error(
+                            function_definition->name,
+                            fmt::format("function overload for \"{}\" with ambiguous signature", identifier)
+                    );
                 }
             }
 
@@ -898,15 +906,27 @@ namespace TypeChecker {
             // all function signatures before visiting the bodies
         }
 
-        void operator()(auto&) { }
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
+
+        void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
+            visit_function_definitions(namespace_definition->contents, *type_container, *global_scope);
+        }
 
         TypeContainer* type_container;
         const Scope* global_scope;
     };
 
-    void
+    static void
     visit_function_definitions(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
         auto visitor = FunctionDefinitionVisitor{ &type_container, &global_scope };
+        for (auto& top_level_statement : program) {
+            std::visit(visitor, top_level_statement);
+        }
+    }
+
+    static void
+    visit_top_level_statements(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
+        auto visitor = TypeCheckerTopLevelVisitor{ &program, &type_container, &global_scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);
         }
@@ -917,10 +937,7 @@ namespace TypeChecker {
         visit_function_definitions(program, type_container, global_scope);
 
         // then we have to check the bodies of the functions
-        auto visitor = TypeCheckerTopLevelVisitor{ &program, &type_container, &global_scope };
-        for (auto& top_level_statement : program) {
-            std::visit(visitor, top_level_statement);
-        }
+        visit_top_level_statements(program, type_container, global_scope);
 
         // For functions that return a value (different from nothing) we have to check if all code paths
         // actually do return a value. We run the check for all functions, though, because it also throws a warning

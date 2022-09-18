@@ -5,6 +5,7 @@
 #include "emitter.hpp"
 #include "error.hpp"
 #include "lexer.hpp"
+#include "namespace.hpp"
 #include "parser.hpp"
 #include "types.hpp"
 #include "utils.hpp"
@@ -215,7 +216,10 @@ namespace Emitter {
             if (is_function) {
                 assert(expression.possible_overloads.value().size() == 1);
                 const auto& overload = expression.possible_overloads.value().front();
-                const auto mangled_name = fmt::format("{}{}", overload->namespace_name, overload->signature);
+                const auto mangled_name = fmt::format(
+                        "{}{}", get_absolute_namespace_qualifier(*(overload->surrounding_namespace)),
+                        overload->signature
+                );
                 bssembly.add(Instruction{
                         COPY,
                         {Immediate{ fmt::format("$\"{}\"", mangled_name) }, R1},
@@ -987,9 +991,16 @@ namespace Emitter {
     Bssembly Emitter::operator()(const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
         assert(function_definition->occupied_stack_space.has_value() and "size of stack frame has to be known");
         assert(function_definition->parameters_stack_space.has_value() and "size of parameters has to be known");
+        assert(function_definition->surrounding_scope != nullptr and "this has to be set before");
+        assert(function_definition->surrounding_scope->surrounding_namespace != nullptr and "this has to be set before"
+        );
 
-        const auto mangled_name =
-                function_definition->namespace_name + function_definition->corresponding_symbol->signature;
+        const auto mangled_name = fmt::format(
+                "{}{}",
+                get_absolute_namespace_qualifier(*(function_definition->surrounding_scope->surrounding_namespace)),
+                function_definition->corresponding_symbol->signature
+        );
+
         auto result = Bssembly{};
         result.add(NewLine{});
         result.add(Bssembler::Label{ fmt::format("$\"{}\"", mangled_name) });
@@ -1050,6 +1061,14 @@ namespace Emitter {
 
     Bssembly Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) {
         return {};
+    }
+
+    Bssembly Emitter::operator()(const std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
+        auto result = Bssembly{};
+        for (const auto& top_level_statement : namespace_definition->contents) {
+            result += std::visit(*this, top_level_statement);
+        }
+        return result;
     }
 
 } // namespace Emitter

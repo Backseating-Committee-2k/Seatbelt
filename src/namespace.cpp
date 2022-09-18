@@ -12,26 +12,13 @@ using Parser::Expressions::Name;
 
 [[nodiscard]] std::string get_namespace_qualifier(const Name& expression) {
     using std::ranges::views::transform, std::ranges::views::take;
-    assert(expression.surrounding_scope->surrounding_namespace.ends_with("::"));
-    auto result = fmt::format(
-            "{}{}", expression.surrounding_scope->surrounding_namespace,
+    return fmt::format(
+            "{}{}", get_absolute_namespace_qualifier(*(expression.surrounding_scope->surrounding_namespace)),
             fmt::join(
                     expression.name_tokens | take(expression.name_tokens.size() - 1)
                             | transform([](auto token) { return Error::token_location(token).view(); }),
                     ""
             )
-    );
-    return result;
-}
-
-[[nodiscard]] std::string get_absolute_namespace_qualifier(const Name& expression) {
-    using std::ranges::views::transform, std::ranges::views::take;
-    return fmt::format(
-            "::{}", fmt::join(
-                            expression.name_tokens | take(expression.name_tokens.size() - 1)
-                                    | transform([](auto token) { return Error::token_location(token).view(); }),
-                            ""
-                    )
     );
 }
 
@@ -40,5 +27,19 @@ using Parser::Expressions::Name;
     for (const auto& space : namespaces_stack) {
         result += space + "::";
     }
+    return result;
+}
+
+[[nodiscard]] std::string get_absolute_namespace_qualifier(const Parser::NamespaceDefinition& namespace_definition) {
+    auto result = std::string{};
+    auto current_namespace = &namespace_definition;
+    while (true) {
+        result = fmt::format("{}::{}", current_namespace->name.location.view(), result);
+        if (current_namespace->scope->surrounding_scope == nullptr) {
+            break;
+        }
+        current_namespace = current_namespace->scope->surrounding_scope->surrounding_namespace;
+    }
+
     return result;
 }
