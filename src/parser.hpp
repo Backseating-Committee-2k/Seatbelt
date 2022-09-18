@@ -465,6 +465,15 @@ namespace Parser {
 
     } // namespace Expressions
 
+    struct FunctionDefinition;
+    struct ImportStatement;
+    struct NamespaceDefinition;
+
+    template<typename... T>
+    using PointerVariant = std::variant<std::unique_ptr<T>...>;
+
+    using Program = std::vector<PointerVariant<FunctionDefinition, ImportStatement, NamespaceDefinition>>;
+
     struct FunctionDefinition {
         Identifier name;
         ParameterList parameters;
@@ -474,11 +483,11 @@ namespace Parser {
         const DataType* return_type{ nullptr };
         Statements::Block body;
         FunctionOverload* corresponding_symbol{ nullptr };
-        std::string namespace_name{};
         bool is_entry_point{ false };
         std::vector<Statements::LabelDefinition*> contained_labels{};
         std::optional<usize> occupied_stack_space{};   // total size of the needed stack space (in bytes)
         std::optional<usize> parameters_stack_space{}; // size of all parameters (in bytes)
+        const Scope* surrounding_scope{ nullptr };
 
         [[nodiscard]] bool is_exported() const {
             return export_token.has_value();
@@ -490,13 +499,18 @@ namespace Parser {
         std::span<const Token> import_path_tokens;
     };
 
-    template<typename... T>
-    using PointerVariant = std::variant<std::unique_ptr<T>...>;
-
-    using Program = std::vector<PointerVariant<FunctionDefinition, ImportStatement>>;
+    struct NamespaceDefinition {
+        Namespace namespace_token;
+        Identifier name;
+        Program contents;
+        std::unique_ptr<Scope> scope;
+    };
 
     void concatenate_programs(Program& first, Program&& second);
 
-    [[nodiscard]] Program parse(const Lexer::TokenList& tokens, TypeContainer& type_container);
+    using NamespacesMap = std::unordered_map<std::string, NamespaceDefinition*>;
+
+    [[nodiscard]] std::pair<Program, NamespacesMap>
+    parse(const Lexer::TokenList& tokens, TypeContainer& type_container, NamespacesMap previous_namespaces);
 
 } // namespace Parser

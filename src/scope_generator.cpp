@@ -15,92 +15,151 @@
 
 namespace ScopeGenerator {
 
-    [[nodiscard]] std::vector<const FunctionOverload*> namespace_based_lookup(
-            std::string_view namespace_qualifier,
-            const Parser::Expressions::Name& name,
-            const FunctionSymbol& function
-    ) {
-        using std::ranges::count;
-        // We *did* find a function symbol with the correct function name (even though we
-        // do not know the function signature), but the function can only be a valid choice
-        // if it is within the correct namespace
+    [[nodiscard]] static std::optional<const Scope*>
+    get_relative_scope(const Scope* starting_scope, const Parser::Expressions::Name& name_expression) {
+        using std::ranges::find_if;
+        for (usize i = 0; i < name_expression.name_tokens.size() - 1; i += 2) {
+            const auto namespace_identifier = std::get<Parser::Identifier>(name_expression.name_tokens[i]);
+            const auto find_iterator = find_if(*starting_scope, [&](const auto& pair) {
+                return pair.first == namespace_identifier.location.view()
+                       and std::holds_alternative<NamespaceSymbol>(pair.second);
+            });
+            const auto found = (find_iterator != starting_scope->cend());
+            if (not found) {
+                return {};
+            }
+            starting_scope = std::get<NamespaceSymbol>(find_iterator->second).namespace_definition->scope.get();
+        }
+        return starting_scope;
+    }
 
-        auto remaining_namespaces = namespace_qualifier.empty() ? 0 : count(namespace_qualifier, ':') / 2;
-        const auto was_qualified_name = (name.name_tokens.size() > 1);
-        auto possible_overloads = std::vector<const FunctionOverload*>{};
-        while (true) {
-            // Function definitions are only allowed in the global scope. That means
-            // that we must be at the top of the scope stack right now.
-            for (const auto& overload : function.overloads) {
-                if (overload.namespace_name == namespace_qualifier) {
-                    // we found a possible overload!
+    [[nodiscard]] static const Scope* get_global_scope(const Scope* starting_scope) {
+        while (starting_scope->surrounding_scope != nullptr) {
+            starting_scope = starting_scope->surrounding_scope;
+        }
+        return starting_scope;
+    }
 
-                    // we cannot determine the return type of the function here because
-                    // we cannot do type-based overload resolution as of now
-
-                    // if the namespace the name expression occurred in is different from the namespace
-                    // in which we found the function overload, then the lookup is only valid if the function
-                    // has been exported
-                    if (name.surrounding_scope->surrounding_namespace.starts_with(namespace_qualifier)
-                        or overload.definition->is_exported()) {
-                        possible_overloads.push_back(&overload);
-                    }
+    [[nodiscard]] static std::vector<const FunctionOverload*>
+    get_function_overloads_in_scope(const Scope* scope, const Parser::Identifier name, bool exported_only) {
+        using std::ranges::find_if;
+        auto result = std::vector<const FunctionOverload*>{};
+        const auto find_iterator = find_if(*scope, [&](const auto& pair) {
+            return pair.first == name.location.view() and std::holds_alternative<FunctionSymbol>(pair.second);
+        });
+        const auto found = (find_iterator != scope->cend());
+        if (found) {
+            for (const auto& overload : std::get<FunctionSymbol>(find_iterator->second).overloads) {
+                if (not exported_only or overload.definition->is_exported()) {
+                    result.push_back(&overload);
                 }
             }
-
-            // if the name is a qualified name (i.e. with specified namespace) it is
-            // not valid to make a lookup in the outer namespaces (except for the
-            // global namespace, but that case is handled separately later on)
-            if (was_qualified_name) {
-                break;
-            }
-
-            if (remaining_namespaces == 1) {
-                break;
-            }
-            const auto max_pos = namespace_qualifier.length() >= 3 ? namespace_qualifier.length() - 3
-                                                                   : decltype(namespace_qualifier)::npos;
-            const auto end_index = namespace_qualifier.rfind(':', max_pos);
-            assert(end_index != decltype(namespace_qualifier)::npos);
-            namespace_qualifier = namespace_qualifier.substr(0, end_index + 1);
-            --remaining_namespaces;
         }
+        return result;
+    }
 
-        // if we couldn't find any overloads yet and this is a qualified name,
-        // then we can also look into the global namespace and try to find an
-        // exact match in there
-        const auto is_global_lookup_fallback = possible_overloads.empty();
+    [[nodiscard]] std::optional<const VariableSymbol*>
+    variable_lookup(const Scope* surrounding_scope, const Lexer::Tokens::Identifier& identifier) {
+        using std::ranges::find_if;
+        while (surrounding_scope != nullptr) {
+            const auto find_iterator = find_if(*surrounding_scope, [&](const auto& pair) {
+                return pair.first == identifier.location.view() and std::holds_alternative<VariableSymbol>(pair.second);
+            });
+            const auto found = (find_iterator != surrounding_scope->cend());
+            if (found) {
+                return &std::get<VariableSymbol>(find_iterator->second);
+            }
+            surrounding_scope = surrounding_scope->surrounding_scope;
+        }
+        return {};
+    }
 
-        const auto inside_global_namespace = name.surrounding_scope->surrounding_namespace == "::";
+    [[nodiscard]] std::vector<const FunctionOverload*>
+    function_lookup(const Scope* surrounding_scope, const Parser::Expressions::Name& name_expression) {
+        using std::ranges::find_if;
 
-        if (was_qualified_name) {
-            const auto global_name_qualifier = get_absolute_namespace_qualifier(name);
-            for (const auto& overload : function.overloads) {
-                if (overload.namespace_name == global_name_qualifier) {
-                    // we found a possible overload!
+        /* To do a correct function lookup, we have to start in a scope that corresponds to a namespace. E.g. if
+         * the name to be looked up is inside a function, we start in the scope that is owned by the namespace
+         * surrounding the name. Example:
+         *
+         * namespace test {
+         *     function f() {
+         *         g();
+         *     }
+         *
+         *     function g() { }
+         * }
+         *
+         * In the above snippet, the name g (when invoking the function) occurs in the scope that corresponds to the
+         * body of f, but the name lookup has to start in the scope that is owned by the `test`-namespace. */
+        surrounding_scope = surrounding_scope->surrounding_namespace->scope.get();
 
-                    // we cannot determine the return type of the function here because
-                    // we cannot do type-based overload resolution as of now
-                    if (is_global_lookup_fallback) {
-                        // during fall-back, only exported functions are valid
-                        if (overload.definition->is_exported()) {
-                            possible_overloads.push_back(&overload);
+        const auto is_qualified_name = (name_expression.name_tokens.size() > 1);
+        auto result = std::vector<const FunctionOverload*>{};
+        const auto name = std::get<Parser::Identifier>(name_expression.name_tokens.back());
+
+        const Scope* current_scope = surrounding_scope;
+        if (is_qualified_name) {
+            const auto maybe_relative_scope = get_relative_scope(surrounding_scope, name_expression);
+            auto found_relative_namespace = static_cast<bool>(maybe_relative_scope);
+
+            if (found_relative_namespace) {
+                current_scope = *maybe_relative_scope;
+                result = get_function_overloads_in_scope(current_scope, name, true);
+            } else {
+                // global namespace lookup fallback
+                const auto global_scope = get_global_scope(surrounding_scope);
+                const auto maybe_absolute_scope = get_relative_scope(global_scope, name_expression);
+                if (maybe_absolute_scope) {
+                    result = get_function_overloads_in_scope(*maybe_absolute_scope, name, true);
+                }
+            }
+            if (result.empty()) {
+                auto error_message = fmt::format("use of undeclared identifier \"{}\"", name.location.view());
+                /* Maybe the function in question exists, but is not exported. We do another lookup ignoring whether
+                 * the functions are exported or not, and if we find at least one possible overload, we can use this
+                 * for a better error message. */
+                if (found_relative_namespace) {
+                    using std::ranges::views::take, std::ranges::views::transform;
+                    current_scope = *maybe_relative_scope;
+                    result = get_function_overloads_in_scope(current_scope, name, false);
+                    if (not result.empty()) {
+                        error_message += "\nmaybe you're missing an export? possible candidates are:";
+                        for (const auto& overload : result | take(3)) {
+                            error_message = fmt::format(
+                                    "{}\n\t{}{}({})", error_message,
+                                    get_absolute_namespace_qualifier(*(overload->surrounding_namespace)),
+                                    name.location.view(),
+                                    fmt::join(
+                                            overload->definition->parameters | transform([](const auto& parameter) {
+                                                return parameter.type_definition->to_string();
+                                            }),
+                                            ", "
+                                    )
+                            );
                         }
-                    } else if (not inside_global_namespace) {
-                        Error::warning(
-                                name.name_tokens.back(),
-                                "absolute/relative namespace ambiguity can lead to "
-                                "confusion"
-                        );
+                        error_message += "\n";
                     }
                 }
+                Error::error(name, error_message);
+            }
+            return result;
+        } else {
+            while (current_scope != nullptr) {
+                const auto find_iterator = find_if(*current_scope, [&](const auto& pair) {
+                    return pair.first == name.location.view() and std::holds_alternative<FunctionSymbol>(pair.second);
+                });
+                const auto found = (find_iterator != current_scope->cend());
+                if (found) {
+                    for (const auto& overload : std::get<FunctionSymbol>(find_iterator->second).overloads) {
+                        result.push_back(&overload);
+                    }
+                    return result;
+                }
+                current_scope = current_scope->surrounding_scope;
             }
         }
-
-        if (possible_overloads.empty()) {
-            Error::error(name.name_tokens.back(), "no matching function overload found");
-        }
-        return possible_overloads;
+        return result;
     }
 
     struct ScopeGenerator : public Parser::Statements::StatementVisitor, public Parser::Expressions::ExpressionVisitor {
@@ -267,31 +326,28 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::Name& expression) override {
             using std::ranges::find_if, Lexer::Tokens::Identifier;
             expression.surrounding_scope = scope;
-            const Scope* current_scope = expression.surrounding_scope;
-            const auto namespace_qualifier = get_namespace_qualifier(expression);
 
-            // only the last token of the qualified name is relevant for lookup
-            const auto& identifier_token = expression.name_tokens.back();
-            const auto identifier = Error::token_location(identifier_token).view();
-
-            while (current_scope != nullptr) {
-                const auto find_iterator =
-                        find_if(*current_scope, [identifier](const auto& pair) { return pair.first == identifier; });
-                const auto identifier_found = find_iterator != std::cend(*current_scope);
-                if (identifier_found) {
-                    std::visit(
-                            overloaded{ [&](const VariableSymbol& variable) { expression.variable_symbol = &variable; },
-                                        [&](const FunctionSymbol& function) {
-                                            expression.possible_overloads =
-                                                    namespace_based_lookup(namespace_qualifier, expression, function);
-                                        } },
-                            find_iterator->second
-                    );
-                    return;
+            const auto maybe_is_variable = (expression.name_tokens.size() == 1);
+            const auto name = std::get<Identifier>(expression.name_tokens.back());
+            bool found = false;
+            if (maybe_is_variable) {
+                const auto maybe_variable_symbol = variable_lookup(expression.surrounding_scope, name);
+                if (maybe_variable_symbol) {
+                    expression.variable_symbol = *maybe_variable_symbol;
+                    found = true;
                 }
-                current_scope = current_scope->surrounding_scope;
             }
-            Error::error(identifier_token, "use of undeclared identifier");
+            if (not found) {
+                auto overloads = function_lookup(expression.surrounding_scope, expression);
+                if (not overloads.empty()) {
+                    expression.possible_overloads = std::move(overloads);
+                    found = true;
+                }
+            }
+
+            if (not found) {
+                Error::error(name, "use of undeclared identifier");
+            }
         }
 
         void visit(Parser::Expressions::UnaryOperator& expression) override {
@@ -336,14 +392,15 @@ namespace ScopeGenerator {
         TypeContainer* type_container;
     };
 
+    static void visit_function_bodies(Parser::Program& program, TypeContainer& type_container, Scope& global_scope);
+
     struct ScopeGeneratorBodyVisitor {
-        ScopeGeneratorBodyVisitor(Parser::Program* program, TypeContainer* type_container, Scope* global_scope)
-            : program{ program },
-              type_container{ type_container },
-              global_scope{ global_scope } { }
+        ScopeGeneratorBodyVisitor(TypeContainer* type_container, Scope* surrounding_scope)
+            : type_container{ type_container },
+              surrounding_scope{ surrounding_scope } { }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
-            auto function_scope = std::make_unique<Scope>(global_scope, function_definition->namespace_name);
+            auto function_scope = surrounding_scope->create_child_scope();
             for (auto& parameter : function_definition->parameters) {
                 if (function_scope->contains(parameter.name.location.view())) {
                     Error::error(
@@ -363,9 +420,12 @@ namespace ScopeGenerator {
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
-        Parser::Program* program;
+        void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
+            visit_function_bodies(namespace_definition->contents, *type_container, *(namespace_definition->scope));
+        }
+
         TypeContainer* type_container;
-        Scope* global_scope;
+        Scope* surrounding_scope;
     };
 
     /**
@@ -445,17 +505,18 @@ namespace ScopeGenerator {
         Parser::FunctionDefinition* surrounding_function;
     };
 
+    static void visit_function_definitions(Parser::Program& program, TypeContainer& type_container, Scope& scope);
+
     struct ScopeGeneratorTopLevelVisitor {
-        ScopeGeneratorTopLevelVisitor(Parser::Program* program, TypeContainer* type_container, Scope* global_scope)
-            : program{ program },
-              type_container{ type_container },
-              global_scope{ global_scope } { }
+        ScopeGeneratorTopLevelVisitor(TypeContainer* type_container, Scope* scope)
+            : type_container{ type_container },
+              scope{ scope } { }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using namespace std::string_literals;
             using std::ranges::find_if;
 
-            if (function_definition->export_token.has_value() and function_definition->namespace_name == "::") {
+            if (function_definition->export_token.has_value() and scope->surrounding_scope == nullptr) {
                 Error::error(
                         *(function_definition->export_token),
                         "exporting functions from the global namespace is not allowed"
@@ -463,9 +524,9 @@ namespace ScopeGenerator {
             }
 
             auto identifier = function_definition->name.location.view();
-            auto find_iterator = find_if(*global_scope, [&](const auto& pair) { return pair.first == identifier; });
-            const auto found = find_iterator != std::end(*global_scope);
-            auto function_overload = FunctionOverload{ .namespace_name{ function_definition->namespace_name },
+            auto find_iterator = find_if(*scope, [&](const auto& pair) { return pair.first == identifier; });
+            const auto found = (find_iterator != std::end(*scope));
+            auto function_overload = FunctionOverload{ .surrounding_namespace{ scope->surrounding_namespace },
                                                        .definition{ function_definition.get() } };
 
             if (found) {
@@ -474,33 +535,66 @@ namespace ScopeGenerator {
                 auto& function_symbol = std::get<FunctionSymbol>(find_iterator->second);
                 auto& new_overload = function_symbol.overloads.emplace_back(std::move(function_overload));
                 function_definition->corresponding_symbol = &new_overload;
-                assert(std::get<FunctionSymbol>((*global_scope)[identifier]).overloads.size() > 1);
+                assert(std::get<FunctionSymbol>((*scope)[identifier]).overloads.size() > 1);
             } else {
                 auto new_symbol = FunctionSymbol{ .overloads{ { std::move(function_overload) } } };
                 function_definition->corresponding_symbol = &new_symbol.overloads.back();
-                (*global_scope)[identifier] = std::move(new_symbol);
+                (*scope)[identifier] = std::move(new_symbol);
             }
 
             auto label_visitor = ScopeGeneratorLabelVisitor{ function_definition.get() };
             function_definition->body.accept(label_visitor);
+            function_definition->surrounding_scope = scope;
         }
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
-        Parser::Program* program;
+        void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
+            using std::ranges::find_if;
+
+            /* The parser already merged all namespaces with the same name. If we encounter a namespace definition
+             * we can be sure that it's the only one with the given name. If the symbol table of the current scope
+             * already contains a symbol with the same, this cannot be a namespace name (e.g. it may be a function
+             * symbol) and this name cannot be used for the namespace. */
+            const auto namespace_name = namespace_definition->name.location.view();
+            const auto find_iterator = find_if(*scope, [&](const auto& pair) {
+                const auto is_same_name = (pair.first == namespace_name);
+                if (is_same_name) {
+                    assert(not std::holds_alternative<NamespaceSymbol>(pair.second));
+                }
+                return is_same_name;
+            });
+            const auto found = (find_iterator != scope->cend());
+
+            if (found) {
+                Error::error(namespace_definition->name, fmt::format("redefinition of symbol \"{}\"", namespace_name));
+            }
+
+            /* If we are in the global namespace, we do not open a new child scope for this namespace, because
+             * it has already been opened inside the main function. */
+            const auto is_global_namespace = namespace_name.empty();
+            if (not is_global_namespace) {
+                (*scope)[namespace_name] = NamespaceSymbol{ .namespace_definition{ namespace_definition.get() } };
+                namespace_definition->scope = scope->create_child_scope();
+                namespace_definition->scope->surrounding_namespace = namespace_definition.get();
+            }
+
+            visit_function_definitions(namespace_definition->contents, *type_container, *(namespace_definition->scope));
+        }
+
         TypeContainer* type_container;
-        Scope* global_scope;
+        Scope* scope;
     };
 
-    void visit_function_definitions(Parser::Program& program, TypeContainer& type_container, Scope& global_scope) {
-        auto visitor = ScopeGeneratorTopLevelVisitor{ &program, &type_container, &global_scope };
+    void visit_function_definitions(Parser::Program& program, TypeContainer& type_container, Scope& scope) {
+        auto visitor = ScopeGeneratorTopLevelVisitor{ &type_container, &scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);
         }
     }
 
-    void visit_function_bodies(Parser::Program& program, TypeContainer& type_container, Scope& global_scope) {
-        auto visitor = ScopeGeneratorBodyVisitor{ &program, &type_container, &global_scope };
+    static void visit_function_bodies(Parser::Program& program, TypeContainer& type_container, Scope& global_scope) {
+        auto visitor = ScopeGeneratorBodyVisitor{ &type_container, &global_scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);
         }

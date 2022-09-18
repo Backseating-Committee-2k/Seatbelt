@@ -15,6 +15,7 @@
 
 namespace Parser {
     struct FunctionDefinition;
+    struct NamespaceDefinition;
 
     namespace Statements {
         struct VariableDefinition;
@@ -28,7 +29,7 @@ struct VariableSymbol {
 
 struct FunctionOverload {
     std::string signature{};
-    std::string_view namespace_name{};
+    const Parser::NamespaceDefinition* surrounding_namespace{ nullptr };
     Parser::FunctionDefinition* definition{ nullptr };
 };
 
@@ -36,10 +37,14 @@ struct FunctionSymbol {
     std::list<FunctionOverload> overloads;
 };
 
-using SymbolDescription = std::variant<VariableSymbol, FunctionSymbol>;
+struct NamespaceSymbol {
+    const Parser::NamespaceDefinition* namespace_definition{ nullptr };
+};
+
+using SymbolDescription = std::variant<VariableSymbol, FunctionSymbol, NamespaceSymbol>;
 
 struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
-    explicit Scope(const Scope* surrounding_scope, std::string_view surrounding_namespace)
+    explicit Scope(const Scope* surrounding_scope, const Parser::NamespaceDefinition* surrounding_namespace)
         : std::unordered_map<std::string_view, SymbolDescription>::unordered_map{},
           surrounding_scope{ surrounding_scope },
           surrounding_namespace{ surrounding_namespace } { }
@@ -49,7 +54,7 @@ struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
     }
 
     const Scope* surrounding_scope;
-    std::string_view surrounding_namespace;
+    const Parser::NamespaceDefinition* surrounding_namespace;
 };
 
 [[nodiscard]] const SymbolDescription* scope_lookup(const Scope* scope, std::string_view identifier);

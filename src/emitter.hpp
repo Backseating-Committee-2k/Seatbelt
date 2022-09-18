@@ -29,6 +29,8 @@ namespace Emitter {
 
         Bssembler::Bssembly operator()(const std::unique_ptr<Parser::ImportStatement>& function_definition);
 
+        Bssembler::Bssembly operator()(const std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition);
+
         const Parser::Program* program;
         LabelGenerator* label_generator;
         TypeContainer* type_container;

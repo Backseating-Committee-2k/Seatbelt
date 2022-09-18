@@ -101,6 +101,9 @@ namespace StackLayoutGenerator {
                                            Utils::round_up(visitor.occupied_stack_space, WordSize);
                                    function_definition->parameters_stack_space = size_of_parameters;
                                },
+                                [](const std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
+                                    generate_stack_layout(namespace_definition->contents);
+                                },
                                 [](const auto&) {} },
                     top_level_statement
             );

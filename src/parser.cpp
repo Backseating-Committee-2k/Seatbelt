@@ -16,7 +16,9 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -33,7 +35,12 @@ namespace Parser {
 
     class ParserState {
     public:
-        explicit ParserState(const Lexer::TokenList& tokens, TypeContainer* type_container)
+        ParserState(const Lexer::TokenList& tokens, TypeContainer* type_container, NamespacesMap previous_namespaces)
+            : m_tokens{ &tokens },
+              m_type_container{ type_container },
+              m_namespaces{ std::move(previous_namespaces) } { }
+
+        ParserState(const Lexer::TokenList& tokens, TypeContainer* type_container)
             : m_tokens{ &tokens },
               m_type_container{ type_container } { }
 
@@ -55,7 +62,14 @@ namespace Parser {
             auto program = Program{};
             while (not end_of_file()) {
                 if (current_is<Namespace>()) {
-                    concatenate_programs(program, parse_namespace());
+                    /* When a namespace is parsed but another namespace with the same name has been parsed before,
+                     * the parse_namespace()-function does not create a new AST node, but instead concatenates the
+                     * contents of the most recently parsed namespace onto the existing namespace. That's why the
+                     * function returns an optional. If the optional has no value, we do not have to do anything. */
+                    auto maybe_parsed = parse_namespace();
+                    if (maybe_parsed) {
+                        program.push_back(std::move(*maybe_parsed));
+                    }
                 } else if (current_is<Function>() or (current_is<Export>() and peek_is<Function>())) {
                     program.push_back(function_definition());
                 } else if (current_is<Import>()) {
@@ -67,25 +81,50 @@ namespace Parser {
             return program;
         }
 
+        [[nodiscard]] NamespacesMap&& move_out_namespaces_map() {
+            return std::move(m_namespaces);
+        }
+
     private:
         // this serves as a container for type tags
         template<typename... T>
         struct PrecedenceGroup { };
 
-        [[nodiscard]] Program parse_namespace() {
-            assert(current_is<Namespace>());
-            advance();
+        [[nodiscard]] std::optional<std::unique_ptr<NamespaceDefinition>> parse_namespace() {
+            using std::ranges::find_if;
+
+            const auto namespace_token = consume<Namespace>();
             usize count = 1;
-            m_namespaces_stack.emplace_back(consume<Identifier>("expected identifier").location.view());
+            const auto identifier = consume<Identifier>("expected identifier");
+            m_namespaces_stack.emplace_back(identifier.location.view());
             while (maybe_consume<DoubleColon>()) {
                 m_namespaces_stack.emplace_back(consume<Identifier>("expected identifier").location.view());
                 ++count;
             }
             consume<LeftCurlyBracket>("expected \"{\"");
+
+            const auto namespace_qualifier = get_namespace_qualifier(m_namespaces_stack);
             auto namespace_contents = parse_body();
+
+            const auto find_iterator =
+                    find_if(m_namespaces, [&](const auto& pair) { return pair.first == namespace_qualifier; });
+            const auto found = (find_iterator != m_namespaces.cend());
             m_namespaces_stack.resize(m_namespaces_stack.size() - count);
             consume<RightCurlyBracket>("expected \"}\"");
-            return namespace_contents;
+
+            if (found) {
+                const auto namespace_pointer = find_iterator->second;
+                concatenate_programs(namespace_pointer->contents, std::move(namespace_contents));
+                return {};
+            } else {
+                auto result = std::make_unique<NamespaceDefinition>(NamespaceDefinition{
+                        .namespace_token{ namespace_token },
+                        .name{ identifier },
+                        .contents{ std::move(namespace_contents) },
+                        .scope{} });
+                m_namespaces[namespace_qualifier] = result.get();
+                return result;
+            }
         }
 
         [[nodiscard]] std::unique_ptr<Expression> expression() {
@@ -311,7 +350,6 @@ namespace Parser {
                 );
             }
             auto body = block();
-            auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
             return std::make_unique<FunctionDefinition>(FunctionDefinition{
                     .name{ name },
                     .parameters{ std::move(parameters) },
@@ -319,8 +357,7 @@ namespace Parser {
                     .return_type_definition_tokens{ return_type_tokens },
                     .export_token{ export_token },
                     .return_type{},
-                    .body{ std::move(body) },
-                    .namespace_name{ std::move(namespace_name) } });
+                    .body{ std::move(body) } });
         }
 
         [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {
@@ -696,6 +733,7 @@ namespace Parser {
         const Lexer::TokenList* m_tokens;
         NamespacesStack m_namespaces_stack{};
         TypeContainer* m_type_container;
+        NamespacesMap m_namespaces{};
     };
 
     void concatenate_programs(Program& first, Program&& second) {
@@ -705,9 +743,17 @@ namespace Parser {
         }
     }
 
-    [[nodiscard]] Program parse(const Lexer::TokenList& tokens, TypeContainer& type_container) {
-        auto parser_state = ParserState{ tokens, &type_container };
-        return parser_state.parse();
+    [[nodiscard]] std::pair<Program, NamespacesMap>
+    parse(const Lexer::TokenList& tokens, TypeContainer& type_container) {
+        return parse(tokens, type_container, NamespacesMap{});
+    }
+
+    [[nodiscard]] std::pair<Program, NamespacesMap>
+    parse(const Lexer::TokenList& tokens, TypeContainer& type_container, NamespacesMap previous_namespaces) {
+        auto parser_state = ParserState{ tokens, &type_container, std::move(previous_namespaces) };
+        auto program = parser_state.parse();
+        auto namespaces_map = std::move(parser_state.move_out_namespaces_map());
+        return { std::move(program), std::move(namespaces_map) };
     }
 
 } // namespace Parser

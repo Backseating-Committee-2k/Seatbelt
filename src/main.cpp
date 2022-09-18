@@ -149,6 +149,8 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
 
     auto program = Parser::Program{};
 
+    auto known_namespaces = Parser::NamespacesMap{};
+
     while (true) {
         const auto find_iterator =
                 find_if(imports, [](const auto& pair) { return pair.second.status == ImportStatus::NotImported; });
@@ -201,7 +203,10 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
                 .filename{ current_source_file.first },
                 .text{ current_source_file.second },
         }));
-        auto current_program = Parser::parse(current_token_list, type_container);
+        auto&& [current_program, namespaces] =
+                Parser::parse(current_token_list, type_container, std::move(known_namespaces));
+
+        known_namespaces = std::move(namespaces);
 
         if (is_main_file) {
             imports.erase("");
@@ -256,6 +261,7 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
 
 int main(int, char** argv) {
     using namespace Lexer::Tokens;
+    using namespace std::string_view_literals;
 
     auto command_line_parser =
             arguably::create_parser()
@@ -299,7 +305,34 @@ int main(int, char** argv) {
 
     auto program = resolve_imports(command_line_parser, source_files, token_lists, type_container, import_paths);
 
-    auto global_scope = Scope{ nullptr, "" };
+    const auto create_location = [](const std::string_view text) {
+        return Location{
+            .source_code{ .filename{}, .text{ text } },
+            .offset_start_inclusive{ 0 },
+            .offset_end_exclusive{ text.length() }
+        };
+    };
+
+    auto global_namespace = std::make_unique<Parser::NamespaceDefinition>(Parser::NamespaceDefinition{
+            .namespace_token{ .location{ create_location("namespace"sv) } },
+            .name{ .location{ create_location(""sv) } },
+            .contents{ std::move(program) },
+            .scope{ std::make_unique<Scope>(nullptr, nullptr) } });
+    global_namespace->scope->surrounding_namespace = global_namespace.get();
+
+    program = Parser::Program{};
+    program.push_back(std::move(global_namespace));
+
+    assert(program.size() == 1 and "the program must exactly contain one namespace");
+    assert(std::holds_alternative<std::unique_ptr<Parser::NamespaceDefinition>>(program.front())
+           and "this must be a namespace");
+    assert(std::get<std::unique_ptr<Parser::NamespaceDefinition>>(program.front())->name.location.view().empty()
+           and "the global namespace must have an empty string view as name");
+    assert(std::get<std::unique_ptr<Parser::NamespaceDefinition>>(program.front())->scope.get() != nullptr
+           and "the global namespace must own the global scope");
+
+    auto& global_scope = *std::get<std::unique_ptr<Parser::NamespaceDefinition>>(program.front())->scope;
+
     ScopeGenerator::generate(program, type_container, global_scope);
     TypeChecker::check(program, type_container, global_scope);
     StackLayoutGenerator::generate_stack_layout(program);
