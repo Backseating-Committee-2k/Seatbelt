@@ -120,7 +120,8 @@ namespace Parser {
                 auto result = std::make_unique<NamespaceDefinition>(NamespaceDefinition{
                         .namespace_token{ namespace_token },
                         .name{ identifier },
-                        .contents{ std::move(namespace_contents) } });
+                        .contents{ std::move(namespace_contents) },
+                        .scope{} });
                 m_namespaces[namespace_qualifier] = result.get();
                 return result;
             }
