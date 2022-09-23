@@ -89,7 +89,9 @@ namespace StackLayoutGenerator {
         for (auto& top_level_statement : program) {
             std::visit(
                     overloaded{ [](const std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
-                                   usize size_of_parameters = 0;
+                                   usize size_of_parameters =
+                                           (function_definition->return_type->size_when_pushed() > WordSize ? WordSize
+                                                                                                            : 0);
                                    for (const auto& parameter : function_definition->parameters) {
                                        size_of_parameters =
                                                Utils::round_up(size_of_parameters, parameter.type->alignment());
