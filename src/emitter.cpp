@@ -288,23 +288,7 @@ namespace Emitter {
                 } else {
                     // rvalue: evaluating the operand yielded the address which we now have to dereference
                     bssembly.add(Instruction{ POP, { R1 }, "get address to dereference" });
-                    const auto num_words = expression.data_type->num_words();
-                    if (num_words > 0) {
-                        bssembly.add(Comment{ "push the dereferenced value onto the stack" });
-                        for (usize i = 0; i < num_words; ++i) {
-                            bssembly.add(Instruction{
-                                    COPY,
-                                    {Pointer{ R1 }, R2}
-                            });
-                            bssembly.add(Instruction{ PUSH, { R2 } });
-                            if (i < num_words - 1) {
-                                bssembly.add(Instruction{
-                                        ADD,
-                                        {R1, Immediate{ 4 }, R1}
-                                });
-                            }
-                        }
-                    }
+                    bssembly.push_value_onto_stack(R1, expression.data_type);
                 }
             } else {
                 assert(false and "not implemented");
