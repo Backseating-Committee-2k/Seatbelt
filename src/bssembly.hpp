@@ -614,12 +614,14 @@ namespace Bssembler {
             if (data_type->is_concrete_type() or data_type->is_pointer_type()
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
-                const auto instruction = offset_copy_instruction_from_size(data_type->size());
-                add(Instruction{
-                        instruction,
-                        {Pointer{ source_pointer }, Immediate{ offset }, temp_register}
-                });
-                add(Instruction{ PUSH, { temp_register } });
+                if (data_type->size() > 0) {
+                    const auto instruction = offset_copy_instruction_from_size(data_type->size());
+                    add(Instruction{
+                            instruction,
+                            {Pointer{ source_pointer }, Immediate{ offset }, temp_register}
+                    });
+                    add(Instruction{ PUSH, { temp_register } });
+                }
             } else if (data_type->is_array_type()) {
                 const auto array_type = *(data_type->as_array_type());
                 const auto size = array_type->contained->size();
