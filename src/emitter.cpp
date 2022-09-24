@@ -248,11 +248,6 @@ namespace Emitter {
                 bssembly.add(Instruction{ PUSH, { R1 }, "push the address of variable onto the stack" });
             } else {
                 // we have an rvalue
-
-                const auto size = expression.data_type->size();
-                // the following variable is marked [[maybe_unused]] because it is needed for the assertion
-                [[maybe_unused]] const auto num_words = Utils::ceiling_division(size, WordSize);
-                assert(num_words > 0 and "not implemented");
                 bssembly.add(Comment{
                         fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) });
                 bssembly.push_value_onto_stack(R1, expression.data_type);
@@ -876,21 +871,23 @@ namespace Emitter {
 
         void visit(ReturnStatement& statement) override {
             if (statement.return_value) {
-                statement.return_value->accept(*this); // evaluate return value => result is pushed
+                if (statement.return_value->data_type->size() > 0) {
+                    statement.return_value->accept(*this); // evaluate return value => result is pushed
 
-                const auto return_value_into_pointer =
-                        (statement.return_value->data_type->size_when_pushed() > WordSize);
-                if (return_value_into_pointer) {
-                    bssembly.add(Instruction{
-                            COPY,
-                            {Pointer{ R0 }, R1},
-                            "get address where to store the return value at"
-                    });
-                    const auto size_when_pushed = statement.return_value->data_type->size_when_pushed();
-                    assert(size_when_pushed % WordSize == 0);
-                    bssembly.pop_from_stack_into_pointer(R1, size_when_pushed);
-                } else {
-                    bssembly.add(Instruction{ POP, { R1 }, "put return value into R1" });
+                    const auto return_value_into_pointer =
+                            (statement.return_value->data_type->size_when_pushed() > WordSize);
+                    if (return_value_into_pointer) {
+                        bssembly.add(Instruction{
+                                COPY,
+                                {Pointer{ R0 }, R1},
+                                "get address where to store the return value at"
+                        });
+                        const auto size_when_pushed = statement.return_value->data_type->size_when_pushed();
+                        assert(size_when_pushed % WordSize == 0);
+                        bssembly.pop_from_stack_into_pointer(R1, size_when_pushed);
+                    } else {
+                        bssembly.add(Instruction{ POP, { R1 }, "put return value into R1" });
+                    }
                 }
             }
             bssembly.add(Instruction{ JUMP, { Immediate{ return_label } }, "immediately exit the current function" });
