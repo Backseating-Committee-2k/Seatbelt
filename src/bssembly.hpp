@@ -645,6 +645,14 @@ namespace Bssembler {
                 for (usize i = 0; i < array_type->num_elements; ++i) {
                     push_value_onto_stack(source_pointer, array_type->contained, offset + i * size);
                 }
+            } else if (data_type->is_struct_type()) {
+                const auto struct_type = *(data_type->as_struct_type());
+                usize current_offset = offset;
+                for (const auto& attribute : struct_type->members) {
+                    current_offset = Utils::round_up(current_offset, attribute.data_type->alignment());
+                    push_value_onto_stack(source_pointer, attribute.data_type, current_offset);
+                    current_offset += attribute.data_type->size();
+                }
             } else {
                 assert(false and "not implemented");
             }
