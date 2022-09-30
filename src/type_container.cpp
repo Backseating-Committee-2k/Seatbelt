@@ -9,10 +9,10 @@
 #include <ranges>
 
 TypeContainer::TypeContainer() {
-    m_u32 = from_type_definition(std::make_unique<ConcreteType>(U32Identifier, true));
-    m_char = from_type_definition(std::make_unique<ConcreteType>(CharIdentifier, true));
-    m_bool = from_type_definition(std::make_unique<ConcreteType>(BoolIdentifier, true));
-    m_nothing = from_type_definition(std::make_unique<ConcreteType>(NothingIdentifier, true));
+    m_u32 = from_type_definition(std::make_unique<PrimitiveType>(BasicType::U32));
+    m_char = from_type_definition(std::make_unique<PrimitiveType>(BasicType::Char));
+    m_bool = from_type_definition(std::make_unique<PrimitiveType>(BasicType::Bool));
+    m_nothing = from_type_definition(std::make_unique<PrimitiveType>(BasicType::Nothing));
 }
 
 [[nodiscard]] const DataType* TypeContainer::from_type_definition(std::unique_ptr<DataType> type_definition) {
@@ -38,13 +38,10 @@ void TypeContainer::register_type(std::unique_ptr<DataType> data_type) {
  * @return `true` if the type is defined, `false` otherwise.
  */
 bool TypeContainer::is_defined(const DataType& data_type) const {
-    if (const auto concrete_type = dynamic_cast<const ConcreteType*>(&data_type)) {
+    if (const auto primitive_type = dynamic_cast<const PrimitiveType*>(&data_type)) {
         const auto find_result = find(data_type);
         const auto found = (find_result != nullptr);
-        if (not found) {
-            return false;
-        }
-        return (dynamic_cast<const ConcreteType*>(find_result))->has_been_defined;
+        return found;
     }
     if (const auto pointer_type = dynamic_cast<const PointerType*>(&data_type)) {
         return is_defined(*(pointer_type->contained));

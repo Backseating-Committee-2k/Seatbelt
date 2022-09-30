@@ -14,6 +14,7 @@
 #include <fmt/core.h>
 #include <fstream>
 #include <iostream>
+#include <magic_enum.hpp>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -70,7 +71,10 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
             (main_symbol->overloads.front().signature == "main()"
              and main_symbol->overloads.front().definition->return_type == expected_main_function_return_type);
     if (not main_function_has_correct_signature) {
-        error(fmt::format("main function must not take any parameters and must return {}", NothingIdentifier));
+        error(fmt::format(
+                "main function must not take any parameters and must return {}",
+                magic_enum::enum_name(BasicType::Nothing)
+        ));
     }
     main_symbol->overloads.front().definition->is_entry_point = true;
 }

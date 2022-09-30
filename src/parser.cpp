@@ -10,8 +10,10 @@
 #include "utils.hpp"
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <magic_enum.hpp>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -24,6 +26,11 @@
 #include <vector>
 
 namespace Parser {
+
+    [[nodiscard]] static bool is_type_name(const Identifier& name) {
+        assert(not name.location.view().empty());
+        return std::isupper(name.location.view().front());
+    }
 
     template<std::integral T>
     struct ParsedNumber {
@@ -102,6 +109,9 @@ namespace Parser {
             const auto namespace_token = consume<Namespace>();
             usize count = 1;
             const auto identifier = consume<Identifier>("expected identifier");
+            if (is_type_name(identifier)) {
+                Error::error(identifier, "namespace name must not start with an uppercase character");
+            }
             m_namespaces_stack.emplace_back(identifier.location.view());
             while (maybe_consume<DoubleColon>()) {
                 m_namespaces_stack.emplace_back(consume<Identifier>("expected identifier").location.view());
@@ -304,8 +314,35 @@ namespace Parser {
                     consume<Identifier>("expected identifier");
                 }
                 const usize name_end = m_index;
-                return std::make_unique<Name>(std::span{ std::cbegin(*m_tokens) + name_start,
-                                                         std::cbegin(*m_tokens) + name_end });
+                const auto name = Name{
+                    std::span{std::cbegin(*m_tokens) + name_start, std::cbegin(*m_tokens) + name_end}
+                };
+                if (maybe_consume<LeftCurlyBracket>()) {
+                    // struct literal
+                    if (maybe_consume<RightCurlyBracket>()) {
+                        // empty struct literal
+                        return std::make_unique<StructLiteral>(name, std::vector<FieldInitializer>{});
+                    } else {
+                        // non-empty struct literal
+                        auto initializers = std::vector<FieldInitializer>{};
+                        while (true) {
+                            const auto field_name = consume<Identifier>("expected field name");
+                            consume<Colon>("expected \":\"");
+                            auto field_value = expression();
+                            initializers.push_back(FieldInitializer{ .field_name{ field_name },
+                                                                     .field_value{ std::move(field_value) } });
+                            if (not maybe_consume<Comma>()) {
+                                consume<RightCurlyBracket>("expected \"}\"");
+                                break;
+                            }
+                            if (maybe_consume<RightCurlyBracket>()) {
+                                break;
+                            }
+                        }
+                        return std::make_unique<StructLiteral>(name, std::move(initializers));
+                    }
+                }
+                return std::make_unique<Name>(name);
             }
             error("unexpected token");
             return nullptr;
@@ -318,12 +355,18 @@ namespace Parser {
             assert(current_is<Function>());
             advance();
             const auto name = consume<Identifier>("expected function name");
+            if (is_type_name(name)) {
+                Error::error(name, "function name must not start with an uppercase character");
+            }
             consume<LeftParenthesis>("expected \"(\"");
 
             // parameter list
             auto parameters = ParameterList{};
             while (not end_of_file() and not current_is<RightParenthesis>()) {
                 const auto parameter_name = consume<Identifier>("expected parameter name");
+                if (is_type_name(parameter_name)) {
+                    Error::error(parameter_name, "parameter name must not start with an uppercase character");
+                }
                 consume<Colon>("expected \":\"");
                 const auto is_mutable = static_cast<bool>(maybe_consume<Mutable>());
                 if (not is_mutable) {
@@ -334,13 +377,13 @@ namespace Parser {
                 parameters.push_back(Parameter{ .name{ parameter_name },
                                                 .type_definition{ std::move(type_definition) },
                                                 .binding_mutability{ mutability },
-                                                .type{} });
+                                                .data_type{} });
                 if (not maybe_consume<Comma>()) {
                     break;
                 }
             }
             consume<RightParenthesis>("expected \")\"");
-            std::unique_ptr<DataType> return_type_definition = std::make_unique<ConcreteType>(NothingIdentifier, true);
+            std::unique_ptr<DataType> return_type_definition = std::make_unique<PrimitiveType>(BasicType::Nothing);
             auto return_type_tokens = std::span<const Token>{};
             if (maybe_consume<TildeArrow>()) {
                 const auto return_type_definition_start = &current();
@@ -380,6 +423,9 @@ namespace Parser {
 
         [[nodiscard]] VariantDefinition variant_definition() {
             const auto name = consume<Identifier>("variant identifier expected");
+            if (not is_type_name(name)) {
+                Error::error(name, "alternatives of custom types must start with an uppercase character");
+            }
             consume<LeftCurlyBracket>("expected \"{\"");
             std::vector<VariantMemberDefinition> members;
             while (not current_is<RightCurlyBracket>()) {
@@ -400,6 +446,9 @@ namespace Parser {
             assert(current_is<Type>() and "this should have been checked before");
             const auto type_token = consume<Type>();
             const auto name = consume<Identifier>("type identifier expected");
+            if (not is_type_name(name)) {
+                Error::error(name, "type names must start with an uppercase character");
+            }
             const auto restricted_token = maybe_consume<Restricted>();
             const auto left_curly_bracket = consume<LeftCurlyBracket>("expected \"{\"");
 
@@ -408,6 +457,16 @@ namespace Parser {
             u32 next_tag = 0;
             bool has_custom_tags = false;
             bool has_automatic_tags = false;
+
+            auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
+
+            auto result = std::make_unique<CustomTypeDefinition>();
+            result->export_token = export_token;
+            result->type_token = type_token;
+            result->name = name;
+            result->restricted_token = restricted_token;
+            result->left_curly_bracket = left_curly_bracket;
+            result->namespace_name = std::move(namespace_name);
 
             while (not current_is<RightCurlyBracket>()) {
                 auto variant = variant_definition();
@@ -427,6 +486,7 @@ namespace Parser {
                     Error::error(current(), fmt::format("automatic tag \"{}\" is not applicable", current_tag));
                 }
                 alternatives[current_tag] = std::move(variant);
+                alternatives[current_tag].owning_custom_type_definition = result.get();
                 next_tag = current_tag + 1;
 
                 if (not maybe_consume<Comma>()) {
@@ -435,6 +495,7 @@ namespace Parser {
             }
 
             const auto right_curly_bracket = consume<RightCurlyBracket>("expected \"}\"");
+            result->right_curly_bracket = right_curly_bracket;
 
             if (alternatives.empty()) {
                 Error::error(right_curly_bracket, "empty custom types are not allowed");
@@ -447,16 +508,9 @@ namespace Parser {
                 );
             }
 
-            auto namespace_name = get_namespace_qualifier(m_namespaces_stack);
-            return std::make_unique<CustomTypeDefinition>(CustomTypeDefinition{
-                    .export_token{ export_token },
-                    .type_token{ type_token },
-                    .name{ name },
-                    .restricted_token{ restricted_token },
-                    .left_curly_bracket{ left_curly_bracket },
-                    .alternatives{ std::move(alternatives) },
-                    .right_curly_bracket{ right_curly_bracket },
-                    .namespace_name{ namespace_name } });
+            result->alternatives = std::move(alternatives);
+
+            return result;
         }
 
         [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {
@@ -696,12 +750,22 @@ namespace Parser {
 
         [[nodiscard]] std::unique_ptr<DataType> primitive_type() {
             auto identifier = consume<Identifier>("type identifier expected");
-            return std::make_unique<ConcreteType>(identifier.location.view(), false);
+            const auto basic_type = magic_enum::enum_cast<BasicType>(identifier.location.view());
+            if (not basic_type.has_value()) {
+                Error::error(
+                        identifier,
+                        fmt::format("the identifier \"{}\" does not name a primitive type", identifier.location.view())
+                );
+            }
+            return std::make_unique<PrimitiveType>(*basic_type);
         }
 
         [[nodiscard]] std::unique_ptr<Statements::VariableDefinition> variable_definition() {
             const auto let_token = consume<Let>();
             const auto identifier = consume<Identifier>("expected variable name");
+            if (is_type_name(identifier)) {
+                Error::error(identifier, "variable name must not start with an uppercase character");
+            }
             auto type_definition = std::unique_ptr<DataType>{};
             auto is_mutable = false;
             auto type_tokens = std::span<const Token>{};

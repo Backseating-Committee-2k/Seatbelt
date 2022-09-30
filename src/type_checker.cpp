@@ -4,6 +4,7 @@
 
 #include "type_checker.hpp"
 #include "error.hpp"
+#include "namespace.hpp"
 #include "return_type_checker.hpp"
 #include "utils.hpp"
 #include <algorithm>
@@ -34,13 +35,6 @@
 
 namespace TypeChecker {
     using Lexer::Tokens::Token;
-
-    [[nodiscard]] static std::optional<std::string_view> concrete_type(const DataType* data_type) {
-        if (const auto concrete = dynamic_cast<const ConcreteType*>(data_type)) {
-            return concrete->name;
-        }
-        return {};
-    }
 
     [[nodiscard]] static const DataType*
     get_resulting_data_type_for_arrays(const ArrayType* lhs, const Token& token, const ArrayType* rhs) {
@@ -114,6 +108,15 @@ namespace TypeChecker {
         assert(lhs != nullptr);
         assert(rhs != nullptr);
 
+        const auto first_struct_type = dynamic_cast<const StructType*>(lhs);  // maybe nullptr
+        const auto second_struct_type = dynamic_cast<const StructType*>(rhs); // maybe nullptr
+        if (first_struct_type != nullptr and second_struct_type != nullptr) {
+            if (not std::holds_alternative<Equals>(token)) {
+                return nullptr;
+            }
+            return first_struct_type;
+        }
+
         const auto first_array_type = dynamic_cast<const ArrayType*>(lhs);  // maybe nullptr
         const auto second_array_type = dynamic_cast<const ArrayType*>(rhs); // maybe nullptr
         if (first_array_type != nullptr and second_array_type != nullptr) {
@@ -141,50 +144,49 @@ namespace TypeChecker {
             return get_resulting_data_type_for_pointers(first_pointer, token, second_pointer, type_container);
         }
 
-        // the following array represents the concrete data types ignoring their mutability
-        const auto concrete_types = std::array{ concrete_type(lhs), concrete_type(rhs) };
-        const auto both_concrete = (concrete_types[0].has_value() and concrete_types[1].has_value());
+        const auto primitive_types = std::array{ lhs->as_primitive_type(), rhs->as_primitive_type() };
+        const auto both_primitive = (primitive_types[0].has_value() and primitive_types[1].has_value());
         if (is_one_of<EqualsEquals, ExclamationEquals>(token)) {
-            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
+            if (not both_primitive or primitive_types[0].value() != primitive_types[1].value()) {
                 return nullptr;
             }
             return type_container.get_bool();
         }
         if (is_one_of<GreaterThan, GreaterOrEquals, LessThan, LessOrEquals>(token)) {
-            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()
-                or concrete_types[0].value() != U32Identifier) {
+            if (not both_primitive or *primitive_types[0] != *primitive_types[1]
+                or *primitive_types[0] != type_container.get_u32()) {
                 return nullptr;
             }
             return type_container.get_bool();
         }
         if (is<Equals>(token)) {
-            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
+            if (not both_primitive or primitive_types[0].value() != primitive_types[1].value()) {
                 return nullptr;
             }
             return rhs;
         }
         if (is_one_of<Plus, Minus>(token) and (first_pointer or second_pointer)) {
             // pointer arithmetics
-            if (concrete_types[0].has_value() and *concrete_types[0] == U32Identifier) {
+            if (primitive_types[0].has_value() and *primitive_types[0] == type_container.get_u32()) {
                 if (is<Plus>(token)) {
                     return second_pointer;
                 }
             }
-            if (concrete_types[1].has_value() and *concrete_types[1] == U32Identifier) {
+            if (primitive_types[1].has_value() and *primitive_types[1] == type_container.get_u32()) {
                 return first_pointer;
             }
         }
         if (is_one_of<Plus, Minus, Asterisk, ForwardSlash, Mod>(token)) {
-            if (not both_concrete or concrete_types[0].value() != concrete_types[1].value()) {
+            if (not both_primitive or primitive_types[0].value() != primitive_types[1].value()) {
                 return nullptr;
             }
-            return concrete_types[0].value() == U32Identifier ? type_container.get_u32() : nullptr;
+            return *primitive_types[0] == type_container.get_u32() ? type_container.get_u32() : nullptr;
         }
         if (is_one_of<And, Or, Xor>(token)) {
-            if (not same_type or not both_concrete) {
+            if (not same_type or not both_primitive) {
                 return nullptr;
             }
-            return concrete_types[0].value() == BoolIdentifier ? lhs : nullptr;
+            return *primitive_types[0] == type_container.get_bool() ? lhs : nullptr;
         }
         return nullptr;
     }
@@ -228,8 +230,8 @@ namespace TypeChecker {
             // condition must be an rvalue
             statement.condition->value_type = ValueType::RValue;
 
-            const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
-            if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+            const auto condition_type = dynamic_cast<const PrimitiveType*>(statement.condition->data_type);
+            if (condition_type == nullptr or condition_type != type_container->get_bool()) {
                 Error::error(
                         statement.if_token,
                         fmt::format(
@@ -255,8 +257,8 @@ namespace TypeChecker {
             // condition must be an rvalue
             statement.condition->value_type = ValueType::RValue;
 
-            const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
-            if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+            const auto condition_type = dynamic_cast<const PrimitiveType*>(statement.condition->data_type);
+            if (condition_type == nullptr or condition_type != type_container->get_bool()) {
                 Error::error(
                         statement.while_token, fmt::format(
                                                        "condition of while-statement must evaluate to a boolean "
@@ -274,8 +276,8 @@ namespace TypeChecker {
             // condition must be an rvalue
             statement.condition->value_type = ValueType::RValue;
 
-            const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
-            if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+            const auto condition_type = dynamic_cast<const PrimitiveType*>(statement.condition->data_type);
+            if (condition_type == nullptr or condition_type != type_container->get_bool()) {
                 Error::error(
                         statement.while_token, fmt::format(
                                                        "condition of do-while-statement must evaluate to a boolean "
@@ -296,8 +298,8 @@ namespace TypeChecker {
                 // condition must be an rvalue
                 statement.condition->value_type = ValueType::RValue;
 
-                const auto condition_type = dynamic_cast<const ConcreteType*>(statement.condition->data_type);
-                if (condition_type == nullptr or condition_type->name != BoolIdentifier) {
+                const auto condition_type = dynamic_cast<const PrimitiveType*>(statement.condition->data_type);
+                if (condition_type == nullptr or condition_type != type_container->get_bool()) {
                     Error::error(
                             statement.for_token, fmt::format(
                                                          "condition of for-statement must evaluate to a boolean "
@@ -356,15 +358,15 @@ namespace TypeChecker {
                             fmt::format("use of undeclared type \"{}\"", type->to_string())
                     );
                 }
-                statement.type = type_container->from_type_definition(std::move(statement.type_definition));
+                statement.data_type = type_container->from_type_definition(std::move(statement.type_definition));
             } else {
                 // when doing type deduction, we use the type of the initial value as type for the variable
-                statement.type = statement.initial_value->data_type;
+                statement.data_type = statement.initial_value->data_type;
             }
 
-            assert(statement.type and statement.initial_value->data_type and "missing type information");
+            assert(statement.data_type and statement.initial_value->data_type and "missing type information");
 
-            const DataType* const assignee_type = statement.type;
+            const DataType* const assignee_type = statement.data_type;
 
             // type checking rules are the same as if we would do type checking during an assignment
             const auto resulting_type = get_resulting_data_type(
@@ -376,7 +378,7 @@ namespace TypeChecker {
                         statement.equals_token,
                         fmt::format(
                                 R"(cannot initialize a variable of type "{}" with a value of type "{}")",
-                                statement.type->to_string(), statement.initial_value->data_type->to_string()
+                                statement.data_type->to_string(), statement.initial_value->data_type->to_string()
                         )
                 );
             }
@@ -457,6 +459,86 @@ namespace TypeChecker {
             expression.value_type = ValueType::RValue;
         }
 
+        void visit(Parser::Expressions::StructLiteral& expression) override {
+            using std::ranges::find_if;
+
+            /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+             * check the types of the field initializers
+             * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+            for (auto& initializer : expression.values) {
+                initializer.field_value->accept(*this);
+                assert(initializer.field_value->value_type != ValueType::Undetermined);
+                initializer.field_value->value_type = ValueType::RValue;
+            }
+
+            /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+             * check if the struct literal matches the type it refers to
+             * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+            const auto struct_definition = expression.definition;
+            for (usize i = 0; i < std::min(expression.values.size(), struct_definition->members.size()); ++i) {
+                const auto& literal_member = expression.values[i];
+                const auto& struct_member = struct_definition->members[i];
+                if (literal_member.field_name.location.view() != struct_member.name.location.view()) {
+                    Error::error(
+                            literal_member.field_name,
+                            fmt::format(
+                                    R"(expected initializer for attribute "{}: {}" (got "{}: {}"))",
+                                    struct_member.name.location.view(), struct_member.type->to_string(),
+                                    literal_member.field_name.location.view(),
+                                    literal_member.field_value->data_type->to_string()
+                            )
+                    );
+                }
+                if (literal_member.field_value->data_type != struct_member.type) {
+                    // TODO: improve error message by pointing to the data type instead of the initializer name
+                    Error::error(
+                            literal_member.field_name,
+                            fmt::format(
+                                    R"(type mismatch: expected "{}" for attribute "{}" (got "{}"))",
+                                    struct_member.type->to_string(), literal_member.field_name.location.view(),
+                                    literal_member.field_value->data_type->to_string()
+                            )
+                    );
+                }
+            }
+
+            if (expression.values.size() > struct_definition->members.size()) {
+                const auto& first_excess_value = expression.values[struct_definition->members.size()];
+                Error::error(
+                        first_excess_value.field_name,
+                        fmt::format(
+                                R"(struct "{}" has no attribute "{}")", struct_definition->name.location.view(),
+                                first_excess_value.field_name.location.view()
+                        )
+                );
+            } else if (expression.values.size() < struct_definition->members.size()) {
+                using std::ranges::views::transform, std::ranges::views::drop;
+                const auto one_missing = (expression.values.size() + 1 == struct_definition->members.size());
+                Error::error(
+                        expression.type_name,
+                        fmt::format(
+                                "struct literal of type \"{}\" is missing {} for the {} {}",
+                                Error::token_location(expression.type_name.name_tokens.back()).view(),
+                                one_missing ? "an initializer" : "initializers",
+                                one_missing ? "attribute" : "attributes",
+                                fmt::join(
+                                        struct_definition->members | drop(expression.values.size())
+                                                | transform([](const auto& initializer) {
+                                                      return fmt::format(
+                                                              "\"{}: {}\"", initializer.name.location.view(),
+                                                              initializer.type->to_string()
+                                                      );
+                                                  }),
+                                        ", "
+                                )
+                        )
+                );
+            }
+
+            expression.data_type = expression.definition->data_type;
+            expression.value_type = ValueType::RValue;
+        }
+
         void visit(Parser::Expressions::Name& expression) override {
             using Parser::Statements::VariableDefinition;
             const auto is_variable = expression.variable_symbol.has_value();
@@ -464,22 +546,24 @@ namespace TypeChecker {
             if (is_variable) {
                 // now we visit the definition that is the origin of this variable
                 const auto& definition = expression.variable_symbol.value()->definition;
+                [[maybe_unused]] const auto name =
+                        std::string{ Error::token_location(expression.name_tokens.back()).view() };
                 expression.data_type = std::visit(
                         overloaded{ [&](const VariableDefinition* variable_definition) -> const DataType* {
-                                       assert(variable_definition->type and "type must be known");
+                                       assert(variable_definition->data_type and "type must be known");
                                        expression.value_type =
                                                (variable_definition->binding_mutability == Mutability::Mutable
                                                         ? ValueType::MutableLValue
                                                         : ValueType::ConstLValue);
-                                       return variable_definition->type;
+                                       return variable_definition->data_type;
                                    },
                                     [&](const Parameter* parameter_definition) -> const DataType* {
-                                        assert(parameter_definition->type and "type must be known");
+                                        assert(parameter_definition->data_type and "type must be known");
                                         expression.value_type =
                                                 (parameter_definition->binding_mutability == Mutability::Mutable
                                                          ? ValueType::MutableLValue
                                                          : ValueType::ConstLValue);
-                                        return parameter_definition->type;
+                                        return parameter_definition->data_type;
                                     },
                                     [](std::monostate) -> const DataType* {
                                         assert(false and "unreachable");
@@ -500,7 +584,7 @@ namespace TypeChecker {
                 }
                 assert(expression.possible_overloads.has_value() and "overloads have to be determined beforehand");
                 if (const auto function_symbol = std::get_if<FunctionSymbol>(symbol)) {
-                    const auto& overloads = *expression.possible_overloads; //function_symbol->overloads;
+                    const auto& overloads = *(expression.possible_overloads);
                     assert(not overloads.empty() and "there shall never be a function with zero overloads");
                     if (overloads.size() > 1) {
                         Error::error(name_token, fmt::format("use of identifier \"{}\" is ambiguous", identifier));
@@ -510,7 +594,7 @@ namespace TypeChecker {
                     auto parameter_types = std::vector<const DataType*>{};
                     parameter_types.reserve(function_definition->parameters.size());
                     for (const auto& parameter : function_definition->parameters) {
-                        parameter_types.push_back(parameter.type);
+                        parameter_types.push_back(parameter.data_type);
                     }
                     expression.data_type = type_container->from_type_definition(std::make_unique<FunctionPointerType>(
                             std::move(parameter_types), function_definition->return_type
@@ -692,12 +776,12 @@ namespace TypeChecker {
                     if (overload->signature == signature) {
                         assert(overload->definition->return_type != nullptr and "return type has to be set before");
                         for ([[maybe_unused]] const auto& parameter : overload->definition->parameters) {
-                            assert(parameter.type != nullptr and "parameter type has to be set before");
+                            assert(parameter.data_type != nullptr and "parameter type has to be set before");
                         }
 
                         using std::ranges::views::transform;
                         const auto range = overload->definition->parameters
-                                           | transform([](const auto& parameter) { return parameter.type; });
+                                           | transform([](const auto& parameter) { return parameter.data_type; });
                         auto parameter_types = std::vector(
                                 cbegin(range), cend(range)
                         ); // no curly braces because of constructor ambiguity
@@ -807,8 +891,52 @@ namespace TypeChecker {
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
-        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
-            // TODO: register type
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
+            assert(not type_definition->alternatives.empty());
+            assert(type_definition->name.has_value());
+
+            const auto namespace_qualifier =
+                    get_absolute_namespace_qualifier(*(type_definition->surrounding_scope->surrounding_namespace));
+
+            auto struct_types = std::vector<const StructType*>{};
+            struct_types.reserve(type_definition->alternatives.size());
+
+            // iterate variants
+            for (auto& [tag, struct_definition] : type_definition->alternatives) {
+                auto member_types = std::vector<StructMember>{};
+                member_types.reserve(struct_definition.members.size());
+
+                // iterate members of current variant
+                for (auto& member : struct_definition.members) {
+                    if (not type_container->is_defined(*(member.type_definition))) {
+                        // TODO: improve error message by pointing to the data type instead of the name
+                        Error::error(
+                                member.name,
+                                fmt::format("use of undeclared type \"{}\"", member.type_definition->to_string())
+                        );
+                    }
+                    member.type = type_container->from_type_definition(std::move(member.type_definition));
+                    member_types.push_back(StructMember{ .name{ std::string{ member.name.location.view() } },
+                                                         .data_type{ member.type } });
+                }
+
+                fmt::print(stderr, "registering struct type \"{}\"\n", struct_definition.name.location.view());
+                const auto struct_data_type = type_container->from_type_definition(std::make_unique<StructType>(
+                        std::string{ struct_definition.name.location.view() }, namespace_qualifier,
+                        std::string{ (*(type_definition->name)).location.view() }, std::move(member_types)
+                ));
+                struct_definition.data_type = struct_data_type;
+
+                const auto struct_type = dynamic_cast<const StructType*>(struct_data_type);
+                assert(struct_type != nullptr);
+                struct_types.push_back(struct_type);
+            }
+
+            fmt::print(stderr, "registering custom type \"{}\"\n", type_definition->name->location.view());
+            const auto custom_data_type = type_container->from_type_definition(std::make_unique<CustomType>(
+                    std::string{ type_definition->name->location.view() }, namespace_qualifier, std::move(struct_types)
+            ));
+            type_definition->data_type = custom_data_type;
         }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
@@ -853,17 +981,17 @@ namespace TypeChecker {
                             fmt::format("use of undeclared type \"{}\"", parameter.type_definition->to_string())
                     );
                 }
-                parameter.type = type_container->from_type_definition(std::move(parameter.type_definition));
-                offset = Utils::round_up(offset, parameter.type->alignment());
+                parameter.data_type = type_container->from_type_definition(std::move(parameter.type_definition));
+                offset = Utils::round_up(offset, parameter.data_type->alignment());
                 parameter.variable_symbol->offset = offset;
-                offset += parameter.type->size();
+                offset += parameter.data_type->size();
             }
 
             auto signature = fmt::format(
                     "{}({})", function_definition->name.location.view(),
                     fmt::join(
                             function_definition->parameters
-                                    | transform([](const auto& parameter) { return parameter.type->to_string(); }),
+                                    | transform([](const auto& parameter) { return parameter.data_type->to_string(); }),
                             ", "
                     )
             );

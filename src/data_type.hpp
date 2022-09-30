@@ -7,24 +7,26 @@
 #include "mutability.hpp"
 #include "type_container.hpp"
 #include "types.hpp"
+#include "utils.hpp"
+#include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <magic_enum.hpp>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
 #include <vector>
 
-static constexpr std::string_view U32Identifier{ "U32" };
-static constexpr std::string_view CharIdentifier{ "Char" };
-static constexpr std::string_view BoolIdentifier{ "Bool" };
-static constexpr std::string_view NothingIdentifier{ "Nothing" };
-static constexpr std::string_view FunctionPointerKeyword{ "Function" };
+static inline constexpr std::string_view FunctionPointerKeyword{ "Function" };
 
-struct ConcreteType;
+struct PrimitiveType;
 struct ArrayType;
+struct StructType;
+struct CustomType;
 struct PointerType;
 struct FunctionPointerType;
 
@@ -32,7 +34,7 @@ struct DataType {
 public:
     virtual ~DataType() = default;
 
-    virtual bool operator==(const DataType& other) const = 0;
+    [[nodiscard]] virtual bool operator==(const DataType& other) const = 0;
     [[nodiscard]] virtual std::string to_string() const = 0;
     [[nodiscard]] virtual usize size() const = 0;
     [[nodiscard]] virtual usize alignment() const = 0;
@@ -43,7 +45,7 @@ public:
         return size() / 4;
     }
 
-    [[nodiscard]] virtual bool is_concrete_type() const {
+    [[nodiscard]] virtual bool is_primitive_type() const {
         return false;
     }
 
@@ -59,11 +61,27 @@ public:
         return false;
     }
 
-    [[nodiscard]] virtual std::optional<const ConcreteType*> as_concrete_type() const {
+    [[nodiscard]] virtual bool is_struct_type() const {
+        return false;
+    }
+
+    [[nodiscard]] virtual bool is_custom_type() const {
+        return false;
+    }
+
+    [[nodiscard]] virtual std::optional<const PrimitiveType*> as_primitive_type() const {
         return {};
     }
 
     [[nodiscard]] virtual std::optional<const ArrayType*> as_array_type() const {
+        return {};
+    }
+
+    [[nodiscard]] virtual std::optional<const StructType*> as_struct_type() const {
+        return {};
+    }
+
+    [[nodiscard]] virtual std::optional<const CustomType*> as_custom_type() const {
         return {};
     }
 
@@ -76,52 +94,76 @@ public:
     }
 };
 
-struct ConcreteType final : public DataType {
-    ConcreteType(std::string_view name, bool has_been_defined) : name{ name }, has_been_defined{ has_been_defined } { }
+enum class BasicType {
+    U32,
+    Char,
+    Bool,
+    Nothing,
+};
 
-    bool operator==(const DataType& other) const override {
-        if (const auto other_pointer = dynamic_cast<const ConcreteType*>(&other)) {
-            return name == other_pointer->name;
+struct PrimitiveType final : public DataType {
+    explicit PrimitiveType(BasicType type) : type{ type } { }
+
+    [[nodiscard]] bool operator==(const DataType& other) const override {
+        if (const auto other_pointer = dynamic_cast<const PrimitiveType*>(&other)) {
+            return type == other_pointer->type;
         }
         return false;
     }
 
     [[nodiscard]] std::string to_string() const override {
-        return std::string{ name };
+        return std::string{ magic_enum::enum_name(type) };
     }
 
     [[nodiscard]] usize size() const override {
-        if (name == U32Identifier) {
-            return 4;
-        } else if (name == BoolIdentifier or name == CharIdentifier) {
-            return 1;
-        } else if (name == NothingIdentifier) {
-            return 0;
-        } else {
-            assert(false and "unknown data type");
-            return {};
+        switch (type) {
+            case BasicType::U32:
+                return WordSize;
+            case BasicType::Char:
+            case BasicType::Bool:
+                return 1;
+            case BasicType::Nothing:
+                return 0;
         }
+        assert(false and "unreachable");
+        return 0;
     }
 
     [[nodiscard]] usize alignment() const override {
-        return std::max(size(), usize{ 1 });
+        switch (type) {
+            case BasicType::U32:
+                return WordSize;
+            case BasicType::Char:
+            case BasicType::Bool:
+            case BasicType::Nothing:
+                return 1;
+        }
+        assert(false and "unreachable");
+        return 0;
     }
 
     [[nodiscard]] usize size_when_pushed() const override {
-        assert(size() <= WordSize);
-        return size() == 0 ? 0 : WordSize;
+        switch (type) {
+            case BasicType::U32:
+            case BasicType::Char:
+            case BasicType::Bool:
+                return WordSize;
+            case BasicType::Nothing:
+                return 0;
+        }
+        assert(false and "unreachable");
+        return 0;
     }
 
-    [[nodiscard]] bool is_concrete_type() const override {
+    [[nodiscard]] bool is_primitive_type() const override {
         return true;
     }
 
-    [[nodiscard]] std::optional<const ConcreteType*> as_concrete_type() const override {
+    [[nodiscard]] std::optional<const PrimitiveType*> as_primitive_type() const override {
         return this;
     }
 
-    std::string_view name;
-    bool has_been_defined;
+    BasicType type;
 };
 
 struct ArrayType final : public DataType {
@@ -162,12 +204,168 @@ struct ArrayType final : public DataType {
     usize num_elements;
 };
 
+struct StructMember {
+    std::string name;
+    const DataType* data_type;
+
+    [[nodiscard]] bool operator==(const StructMember& other) const {
+        return data_type == other.data_type and name == other.name;
+    }
+};
+
+struct StructType final : public DataType {
+    StructType(
+            std::string name,
+            std::string namespace_qualifier,
+            std::string custom_type_name,
+            std::vector<StructMember> members
+    )
+        : name{ std::move(name) },
+          namespace_qualifier{ std::move(namespace_qualifier) },
+          custom_type_name{ std::move(custom_type_name) },
+          members{ std::move(members) } { }
+
+    [[nodiscard]] bool is_struct_type() const override {
+        return true;
+    }
+
+    [[nodiscard]] std::optional<const StructType*> as_struct_type() const override {
+        return this;
+    }
+
+    [[nodiscard]] bool operator==(const DataType& other) const override {
+        if (const auto other_pointer = dynamic_cast<const StructType*>(&other)) {
+            return name == other_pointer->name and namespace_qualifier == other_pointer->namespace_qualifier
+                   and members == other_pointer->members;
+        }
+        return false;
+    }
+
+    [[nodiscard]] std::string to_string() const override {
+        return namespace_qualifier + name;
+    }
+
+    [[nodiscard]] usize size() const override {
+        usize result = 0;
+        for (const auto& member : members) {
+            result = Utils::round_up(result, member.data_type->alignment());
+            result += member.data_type->size();
+        }
+        return result;
+    }
+
+    [[nodiscard]] usize alignment() const override {
+        if (members.empty()) {
+            return 1;
+        }
+        const auto max_alignment_iterator =
+                std::max_element(members.cbegin(), members.cend(), [](const auto& lhs, const auto& rhs) {
+                    return lhs.data_type->alignment() < rhs.data_type->alignment();
+                });
+        return max_alignment_iterator->data_type->alignment();
+    }
+
+    [[nodiscard]] usize size_when_pushed() const override {
+        const auto result =
+                std::accumulate(members.cbegin(), members.cend(), usize{ 0 }, [](const usize sum, const auto& member) {
+                    return sum + member.data_type->size_when_pushed();
+                });
+        assert(result % WordSize == 0);
+        return result;
+    }
+
+    std::string name;
+    std::string namespace_qualifier;
+    std::string custom_type_name; // name of the custom type this struct was defined in
+    std::vector<StructMember> members;
+};
+
+struct CustomType final : public DataType {
+    CustomType(std::string name, std::string namespace_qualifier, std::vector<const StructType*> struct_types)
+        : name{ std::move(name) },
+          namespace_qualifier{ std::move(namespace_qualifier) },
+          struct_types{ std::move(struct_types) } { }
+
+    [[nodiscard]] bool is_custom_type() const override {
+        return true;
+    }
+
+    [[nodiscard]] std::optional<const CustomType*> as_custom_type() const override {
+        return this;
+    }
+
+    [[nodiscard]] bool is_tagged() const {
+        assert(not struct_types.empty());
+        return struct_types.size() != 1;
+    }
+
+    [[nodiscard]] bool operator==(const DataType& other) const override {
+        const auto other_pointer = dynamic_cast<const CustomType*>(&other);
+        if (other_pointer == nullptr) {
+            return false;
+        }
+        if (struct_types.size() != other_pointer->struct_types.size() or name != other_pointer->name
+            or namespace_qualifier != other_pointer->namespace_qualifier) {
+            return false;
+        }
+        for (usize i = 0; i < struct_types.size(); ++i) {
+            if (not struct_types[i]->operator==(*(other_pointer->struct_types[i]))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    [[nodiscard]] std::string to_string() const override {
+        return namespace_qualifier + name;
+    }
+
+    [[nodiscard]] usize size() const override {
+        assert(not struct_types.empty());
+        const auto max_alignment_iterator =
+                std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
+                    return lhs->size() < rhs->size();
+                });
+        return (*max_alignment_iterator)->size() + (is_tagged() ? WordSize : 0);
+    }
+
+    [[nodiscard]] usize alignment() const override {
+        assert(not struct_types.empty());
+        // this loop should get optimized away in release builds
+        for (const auto& type : struct_types) {
+            assert(type->alignment() <= WordSize);
+        }
+
+        if (is_tagged()) {
+            return WordSize;
+        }
+        const auto max_alignment_iterator =
+                std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
+                    return lhs->alignment() < rhs->alignment();
+                });
+        return (*max_alignment_iterator)->alignment();
+    }
+
+    [[nodiscard]] usize size_when_pushed() const override {
+        assert(not struct_types.empty());
+        const auto max_alignment_iterator =
+                std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
+                    return lhs->size_when_pushed() < rhs->size_when_pushed();
+                });
+        return (*max_alignment_iterator)->size_when_pushed();
+    }
+
+    std::string name;
+    std::string namespace_qualifier;
+    std::vector<const StructType*> struct_types;
+};
+
 struct PointerType final : public DataType {
     PointerType(const DataType* contained, Mutability binding_mutability)
         : contained{ contained },
           binding_mutability{ binding_mutability } { }
 
-    bool operator==(const DataType& other) const override {
+    [[nodiscard]] bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const PointerType*>(&other)) {
             return binding_mutability == other_pointer->binding_mutability and *contained == *other_pointer->contained;
         }
@@ -209,7 +407,7 @@ struct FunctionPointerType final : public DataType {
         : parameter_types{ std::move(parameter_types) },
           return_type{ return_type } { }
 
-    bool operator==(const DataType& other) const override {
+    [[nodiscard]] bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const FunctionPointerType*>(&other)) {
             if (parameter_types.size() != other_pointer->parameter_types.size()) {
                 return false;

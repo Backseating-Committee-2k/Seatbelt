@@ -60,7 +60,8 @@ namespace StackLayoutGenerator {
 
         void visit(Parser::Statements::VariableDefinition& statement) override {
             assert(statement.variable_symbol != nullptr);
-            statement.variable_symbol->offset = claim_stack_space(statement.type->size(), statement.type->alignment());
+            statement.variable_symbol->offset =
+                    claim_stack_space(statement.data_type->size(), statement.data_type->alignment());
         }
 
         void visit(Parser::Statements::InlineAssembly&) override { }
@@ -94,8 +95,8 @@ namespace StackLayoutGenerator {
                                                                                                             : 0);
                                    for (const auto& parameter : function_definition->parameters) {
                                        size_of_parameters =
-                                               Utils::round_up(size_of_parameters, parameter.type->alignment());
-                                       size_of_parameters += parameter.type->size();
+                                               Utils::round_up(size_of_parameters, parameter.data_type->alignment());
+                                       size_of_parameters += parameter.data_type->size();
                                    }
                                    auto visitor = StackLayoutGeneratorVisitor{ size_of_parameters };
                                    function_definition->body.accept(visitor);

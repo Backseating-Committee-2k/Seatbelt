@@ -194,7 +194,7 @@ namespace Emitter {
             bssembly.add(Instruction{ PUSH, { Immediate{ value } }, "push immediate onto stack" });
         }
 
-        void visit(Parser::Expressions::ArrayLiteral& expression) override {
+        void visit(ArrayLiteral& expression) override {
             std::visit(
                     overloaded{ [&](const std::vector<std::unique_ptr<Expression>>& values) {
                                    for (const auto& value : values) {
@@ -208,6 +208,12 @@ namespace Emitter {
                                 } },
                     expression.values
             );
+        }
+
+        void visit(StructLiteral& expression) override {
+            for (const auto& initializer : expression.values) {
+                initializer.field_value->accept(*this);
+            }
         }
 
         void visit(Name& expression) override {
@@ -254,7 +260,7 @@ namespace Emitter {
             }
         }
 
-        void visit(Parser::Expressions::UnaryOperator& expression) override {
+        void visit(UnaryOperator& expression) override {
             expression.operand->accept(*this);
             if (is<Not>(expression.operator_token)) {
                 assert(expression.data_type == type_container->get_bool() and "type checker should've caught this");

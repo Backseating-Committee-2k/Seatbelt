@@ -546,7 +546,7 @@ namespace Bssembler {
             }
             assert(temp_register != stack_pointer and temp_register != destination_pointer);
 
-            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
                 if (data_type->size() > 0) {
@@ -582,7 +582,7 @@ namespace Bssembler {
             Register temp_register = (pointer == R1 ? R2 : R1);
             assert(temp_register != pointer);
 
-            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
                 if (data_type->size() > 0) {
@@ -600,6 +600,23 @@ namespace Bssembler {
                     const auto new_offset = offset + index * array_type->contained->size();
                     pop_from_stack_into_pointer(pointer, array_type->contained, new_offset);
                 }
+            } else if (data_type->is_struct_type()) {
+                const auto struct_type = *(data_type->as_struct_type());
+                const auto num_members = struct_type->members.size();
+
+                auto offsets = std::vector<usize>{};
+                offsets.reserve(num_members);
+                usize current_offset = offset;
+                for (const auto& member : struct_type->members) {
+                    current_offset = Utils::round_up(current_offset, member.data_type->alignment());
+                    offsets.push_back(current_offset);
+                    current_offset += member.data_type->size();
+                }
+
+                for (usize i = 0; i < num_members; ++i) {
+                    const usize index = num_members - i - 1;
+                    pop_from_stack_into_pointer(pointer, struct_type->members[index].data_type, offsets[index]);
+                }
             } else {
                 assert(false and "not implemented");
             }
@@ -611,7 +628,7 @@ namespace Bssembler {
 
             const auto temp_register = (source_pointer == R1 ? R2 : R1);
 
-            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
                 if (data_type->size() > 0) {

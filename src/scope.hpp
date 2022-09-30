@@ -28,13 +28,13 @@ struct VariableSymbol {
     std::variant<std::monostate, const Parser::Statements::VariableDefinition*, const Parameter*> definition{};
 };
 
-struct TypeOverload {
-    std::string_view namespace_name{};
+struct CustomTypeSymbol {
     Parser::CustomTypeDefinition* definition{ nullptr };
 };
 
-struct CustomTypeSymbol {
-    std::list<TypeOverload> overloads;
+struct StructSymbol {
+    Parser::CustomTypeDefinition* custom_type_definition;
+    u32 tag;
 };
 
 struct FunctionOverload {
@@ -51,7 +51,7 @@ struct NamespaceSymbol {
     const Parser::NamespaceDefinition* namespace_definition{ nullptr };
 };
 
-using SymbolDescription = std::variant<VariableSymbol, CustomTypeSymbol, FunctionSymbol, NamespaceSymbol>;
+using SymbolDescription = std::variant<VariableSymbol, CustomTypeSymbol, StructSymbol, FunctionSymbol, NamespaceSymbol>;
 
 struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
     explicit Scope(const Scope* surrounding_scope, const Parser::NamespaceDefinition* surrounding_namespace)
