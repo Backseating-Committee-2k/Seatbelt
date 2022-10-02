@@ -16,24 +16,25 @@ class TypeContainer {
 public:
     TypeContainer();
 
-    [[nodiscard]] const DataType* from_type_definition(std::unique_ptr<DataType> data_type);
+    [[nodiscard]] DataType* from_type_definition(std::unique_ptr<DataType> data_type);
     void register_type(std::unique_ptr<DataType> data_type);
-    [[nodiscard]] bool is_defined(const DataType& data_type) const;
-    [[nodiscard]] const DataType* pointer_to(const DataType* pointee_type, Mutability binding_mutability);
-    [[nodiscard]] const DataType* array_of(const DataType* contained, usize num_elements);
+    [[nodiscard]] bool is_defined(DataType& data_type) const;
+    [[nodiscard]] DataType* function_pointer(std::vector<DataType*> parameter_types, DataType* return_type);
+    [[nodiscard]] DataType* pointer_to(DataType* pointee_type, Mutability binding_mutability);
+    [[nodiscard]] DataType* array_of(DataType* contained, usize num_elements);
 
-    [[nodiscard]] const DataType* get_u32() const;
-    [[nodiscard]] const DataType* get_bool() const;
-    [[nodiscard]] const DataType* get_char() const;
-    [[nodiscard]] const DataType* get_nothing() const;
+    [[nodiscard]] DataType* get_u32() const;
+    [[nodiscard]] DataType* get_bool() const;
+    [[nodiscard]] DataType* get_char() const;
+    [[nodiscard]] DataType* get_nothing() const;
 
 private:
-    [[nodiscard]] const DataType* find(const DataType& data_type) const;
+    [[nodiscard]] DataType* find(DataType& data_type) const;
 
 private:
     std::vector<std::unique_ptr<DataType>> m_data_types;
-    const DataType* m_u32;
-    const DataType* m_bool;
-    const DataType* m_char;
-    const DataType* m_nothing;
+    DataType* m_u32;
+    DataType* m_bool;
+    DataType* m_char;
+    DataType* m_nothing;
 };

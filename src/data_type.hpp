@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "error.hpp"
 #include "mutability.hpp"
 #include "type_container.hpp"
 #include "types.hpp"
@@ -27,6 +28,7 @@ struct PrimitiveType;
 struct ArrayType;
 struct StructType;
 struct CustomType;
+struct CustomTypePlaceholder;
 struct PointerType;
 struct FunctionPointerType;
 
@@ -69,6 +71,10 @@ public:
         return false;
     }
 
+    [[nodiscard]] virtual bool is_custom_type_placeholder() const {
+        return false;
+    }
+
     [[nodiscard]] virtual std::optional<const PrimitiveType*> as_primitive_type() const {
         return {};
     }
@@ -85,11 +91,19 @@ public:
         return {};
     }
 
+    [[nodiscard]] virtual std::optional<const CustomTypePlaceholder*> as_custom_type_placeholder() const {
+        return {};
+    }
+
+    [[nodiscard]] virtual std::optional<CustomTypePlaceholder*> as_custom_type_placeholder() {
+        return {};
+    }
+
     [[nodiscard]] virtual std::optional<const PointerType*> as_pointer_type() const {
         return {};
     }
 
-    [[nodiscard]] virtual std::optional<const FunctionPointerType*> as_function_pointer_Type() const {
+    [[nodiscard]] virtual std::optional<const FunctionPointerType*> as_function_pointer_type() const {
         return {};
     }
 };
@@ -167,7 +181,7 @@ struct PrimitiveType final : public DataType {
 };
 
 struct ArrayType final : public DataType {
-    ArrayType(const DataType* contained, usize num_elements) : contained{ contained }, num_elements{ num_elements } { }
+    ArrayType(DataType* contained, usize num_elements) : contained{ contained }, num_elements{ num_elements } { }
 
     [[nodiscard]] bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const ArrayType*>(&other)) {
@@ -200,13 +214,14 @@ struct ArrayType final : public DataType {
         return this;
     }
 
-    const DataType* contained;
+    DataType* contained;
     usize num_elements;
 };
 
 struct StructMember {
     std::string name;
-    const DataType* data_type;
+    DataType* data_type;
+    std::optional<usize> offset{};
 
     [[nodiscard]] bool operator==(const StructMember& other) const {
         return data_type == other.data_type and name == other.name;
@@ -360,8 +375,90 @@ struct CustomType final : public DataType {
     std::vector<const StructType*> struct_types;
 };
 
+namespace Parser {
+    struct VariantDefinition;
+    struct CustomTypeDefinition;
+} // namespace Parser
+
+struct CustomTypePlaceholder : public DataType {
+    explicit CustomTypePlaceholder(std::span<const Lexer::Tokens::Token> type_definition_tokens)
+        : type_definition_tokens{ type_definition_tokens } {
+        using std::ranges::views::transform;
+        fmt::print(
+                stderr, "creating custom type placeholder for \"{}\"\n",
+                fmt::join(
+                        type_definition_tokens
+                                | transform([](const auto& token) { return Error::token_location(token).view(); }),
+                        ""
+                )
+        );
+    }
+
+    [[nodiscard]] bool operator==(const DataType& other) const override {
+        using Lexer::Tokens::Identifier;
+        if (const auto other_pointer = dynamic_cast<const CustomTypePlaceholder*>(&other)) {
+            if (type_definition_tokens.size() != other_pointer->type_definition_tokens.size()) {
+                return false;
+            }
+            for (usize i = 0; i < type_definition_tokens.size(); ++i) {
+                assert(std::holds_alternative<Identifier>(type_definition_tokens[i]));
+                assert(std::holds_alternative<Identifier>(other_pointer->type_definition_tokens[i]));
+                if (std::get<Identifier>(type_definition_tokens[i]).location.view()
+                    != std::get<Identifier>(other_pointer->type_definition_tokens[i]).location.view()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] std::string to_string() const override {
+        using std::ranges::views::transform;
+        return fmt::format(
+                "Placeholder({})", fmt::join(
+                                           type_definition_tokens | transform([](const auto& token) {
+                                               return Error::token_location(token).view();
+                                           }),
+                                           ""
+                                   )
+        );
+    }
+
+    [[nodiscard]] usize size() const override {
+        assert(false and "this type should not be used like this!");
+        return 0;
+    }
+
+    [[nodiscard]] usize alignment() const override {
+        assert(false and "this type should not be used like this!");
+        return 0;
+    }
+
+    [[nodiscard]] usize size_when_pushed() const override {
+        assert(false and "this type should not be used like this!");
+        return 0;
+    }
+
+    [[nodiscard]] bool is_custom_type_placeholder() const override {
+        return true;
+    }
+
+    [[nodiscard]] std::optional<const CustomTypePlaceholder*> as_custom_type_placeholder() const override {
+        return this;
+    }
+
+    [[nodiscard]] std::optional<CustomTypePlaceholder*> as_custom_type_placeholder() override {
+        return this;
+    }
+
+    std::span<const Lexer::Tokens::Token> type_definition_tokens;
+    const Parser::VariantDefinition* struct_definition{ nullptr };
+    const Parser::CustomTypeDefinition* custom_type_definition{ nullptr };
+};
+
 struct PointerType final : public DataType {
-    PointerType(const DataType* contained, Mutability binding_mutability)
+    PointerType(DataType* contained, Mutability binding_mutability)
         : contained{ contained },
           binding_mutability{ binding_mutability } { }
 
@@ -398,12 +495,12 @@ struct PointerType final : public DataType {
         return this;
     }
 
-    const DataType* contained;
+    DataType* contained;
     Mutability binding_mutability;
 };
 
 struct FunctionPointerType final : public DataType {
-    explicit FunctionPointerType(std::vector<const DataType*> parameter_types, const DataType* return_type)
+    explicit FunctionPointerType(std::vector<DataType*> parameter_types, DataType* return_type)
         : parameter_types{ std::move(parameter_types) },
           return_type{ return_type } { }
 
@@ -447,10 +544,10 @@ struct FunctionPointerType final : public DataType {
         return true;
     }
 
-    [[nodiscard]] std::optional<const FunctionPointerType*> as_function_pointer_Type() const override {
+    [[nodiscard]] std::optional<const FunctionPointerType*> as_function_pointer_type() const override {
         return this;
     }
 
-    std::vector<const DataType*> parameter_types;
-    const DataType* return_type;
+    std::vector<DataType*> parameter_types;
+    DataType* return_type;
 };

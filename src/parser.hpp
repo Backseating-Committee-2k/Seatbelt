@@ -248,7 +248,7 @@ namespace Parser {
             Equals equals_token;
             std::span<const Token> type_definition_tokens;
             std::unique_ptr<DataType> type_definition;
-            const DataType* data_type{ nullptr };
+            DataType* data_type{ nullptr };
             std::unique_ptr<Expression> initial_value;
             VariableSymbol* variable_symbol{ nullptr };
             Mutability binding_mutability;
@@ -327,12 +327,16 @@ namespace Parser {
             virtual ~Expression() = default;
             virtual void accept(ExpressionVisitor& visitor) = 0;
 
-            const DataType* data_type{ nullptr };
+            DataType* data_type{ nullptr };
             const Scope* surrounding_scope{ nullptr };
             ValueType value_type{ ValueType::Undetermined };
 
             [[nodiscard]] bool is_lvalue() const {
                 return value_type == ValueType::ConstLValue or value_type == ValueType::MutableLValue;
+            }
+
+            [[nodiscard]] bool is_rvalue() const {
+                return not is_lvalue();
             }
         };
 
@@ -511,7 +515,7 @@ namespace Parser {
         Identifier name;
         std::unique_ptr<DataType> type_definition;
         std::span<const Token> type_definition_tokens;
-        const DataType* type{ nullptr };
+        DataType* type{ nullptr };
     };
 
     struct CustomTypeDefinition;
@@ -520,7 +524,7 @@ namespace Parser {
         Identifier name;
         std::vector<VariantMemberDefinition> members;
         const CustomTypeDefinition* owning_custom_type_definition;
-        const DataType* data_type{ nullptr };
+        DataType* data_type{ nullptr };
     };
 
     struct CustomTypeDefinition {
@@ -551,7 +555,7 @@ namespace Parser {
         std::unique_ptr<DataType> return_type_definition;
         std::span<const Token> return_type_definition_tokens{};
         std::optional<Export> export_token{};
-        const DataType* return_type{ nullptr };
+        DataType* return_type{ nullptr };
         Statements::Block body;
         FunctionOverload* corresponding_symbol{ nullptr };
         bool is_entry_point{ false };

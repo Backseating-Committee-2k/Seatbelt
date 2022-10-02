@@ -12,8 +12,21 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <ranges>
+#include <variant>
 
 namespace ScopeGenerator {
+
+    struct StructLookupResult {
+        const Parser::VariantDefinition* struct_definition;
+    };
+
+    struct CustomTypeLookupResult {
+        const Parser::CustomTypeDefinition* custom_type_definition;
+    };
+
+    struct NothingFoundLookupResult { };
+
+    using LookupResult = std::variant<StructLookupResult, CustomTypeLookupResult, NothingFoundLookupResult>;
 
     [[nodiscard]] static std::optional<const Scope*>
     get_relative_scope(const Scope* starting_scope, const Parser::Expressions::Name& name_expression) {
@@ -229,6 +242,74 @@ namespace ScopeGenerator {
         return result;
     }
 
+    /**
+         * Performs a lookup for either a struct of a custom type and, if successful, sets the corresponding
+         * member (either struct_definition or custom_type_definition) of the custom type placeholder passed
+         * in type_definition to the appropriate definition.
+         * If type_definition does not represent a custom type placeholder (e.g. U32), the function returns
+         * false. If it represents a custom type placeholder, but the lookup fails, the function issues an
+         * error and also returns false.
+         * @param type_definition the definition of the type in question
+         * @param surrounding_scope the scope the name occurred in
+         * @param name_tokens the tokens that form the name expression
+         * @return true if the lookup was successful, false otherwise
+         */
+    static bool custom_type_lookup(DataType* const type_definition, const Scope* const surrounding_scope) {
+        // type definition may be a nullptr (when used during auto type-deduction)
+        if (type_definition != nullptr and type_definition->is_pointer_type()) {
+            const auto pointer_type = *(type_definition->as_pointer_type());
+            return custom_type_lookup(pointer_type->contained, surrounding_scope);
+        }
+
+        if (type_definition != nullptr and type_definition->is_function_pointer_type()) {
+            const auto function_pointer_type = *(type_definition->as_function_pointer_type());
+            bool result = true;
+            for (const auto& parameter_type : function_pointer_type->parameter_types) {
+                if (not custom_type_lookup(parameter_type, surrounding_scope)) {
+                    result = false;
+                }
+            }
+            if (not custom_type_lookup(function_pointer_type->return_type, surrounding_scope)) {
+                result = false;
+            }
+            return result;
+        }
+
+        if (type_definition == nullptr or not type_definition->is_custom_type_placeholder()) {
+            return false;
+        }
+        // we know we have a custom type placeholder at hand
+        const auto placeholder_type = *(type_definition->as_custom_type_placeholder());
+        const auto name_expression = Parser::Expressions::Name{ placeholder_type->type_definition_tokens };
+        const auto struct_definition = lookup<const Parser::VariantDefinition*>(surrounding_scope, name_expression);
+        const auto struct_type_found = (struct_definition != nullptr);
+        if (struct_type_found) {
+            placeholder_type->struct_definition = struct_definition;
+            return true;
+        }
+        const auto custom_type_definition =
+                lookup<const Parser::CustomTypeDefinition*>(surrounding_scope, name_expression);
+        const auto custom_type_definition_found = (custom_type_definition != nullptr);
+        if (custom_type_definition_found) {
+            placeholder_type->custom_type_definition = custom_type_definition;
+            return true;
+        }
+        using std::ranges::views::transform;
+        Error::error(
+                placeholder_type->type_definition_tokens.back(),
+                fmt::format(
+                        "use of undeclared type \"{}\"",
+                        fmt::join(
+                                name_expression.name_tokens | transform([](const auto& token) {
+                                    return Error::token_location(token).view();
+                                }),
+                                ""
+                        )
+                )
+        );
+        return false;
+    }
+
     struct ScopeGenerator : public Parser::Statements::StatementVisitor, public Parser::Expressions::ExpressionVisitor {
         ScopeGenerator(Scope* scope, TypeContainer* type_container)
             : scope{ scope },
@@ -324,6 +405,8 @@ namespace ScopeGenerator {
             statement.variable_symbol = &std::get<VariableSymbol>(scope->at(statement.name.location.view()));
             assert(statement.variable_symbol != nullptr);
             statement.surrounding_scope = scope;
+
+            custom_type_lookup(statement.type_definition.get(), statement.surrounding_scope);
         }
 
         void visit(Parser::Statements::InlineAssembly& statement) override {
@@ -455,8 +538,19 @@ namespace ScopeGenerator {
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {
             expression.lhs->accept(*this);
-            expression.rhs->accept(*this);
             expression.surrounding_scope = scope;
+
+            /* If this is access to a struct attribute, we cannot do a name lookup for the right
+             * operand, since we would need to know the type of the struct we want to access.
+             * A "real" lookup is not needed anyway. The type checker will later on perform a check if the
+             * struct in question really has an attribute with the given name. */
+            const auto token = std::get_if<Lexer::Tokens::Token>(&(expression.operator_type)); // maybe nullptr
+            const auto is_struct_attribute_access =
+                    (token != nullptr and std::holds_alternative<Lexer::Tokens::Dot>(*token));
+
+            if (not is_struct_attribute_access) {
+                expression.rhs->accept(*this);
+            }
         }
 
         void visit(Parser::Expressions::FunctionCall& expression) override {
@@ -515,7 +609,11 @@ namespace ScopeGenerator {
                 (*function_scope)[parameter.name.location.view()] = VariableSymbol{ .definition{ &parameter } };
                 parameter.variable_symbol =
                         &std::get<VariableSymbol>(function_scope->at(parameter.name.location.view()));
+
+                custom_type_lookup(parameter.type_definition.get(), function_scope.get());
             }
+
+            custom_type_lookup(function_definition->return_type_definition.get(), surrounding_scope);
 
             auto visitor = ScopeGenerator{ function_scope.get(), type_container };
             function_definition->body.scope = std::move(function_scope);
@@ -633,7 +731,6 @@ namespace ScopeGenerator {
             if (found) {
                 Error::error(*(type_definition->name), fmt::format("redefinition of identifier \"{}\"", identifier));
             }
-            fmt::print(stderr, "creating symbol for custom type named \"{}\"\n", identifier);
             (*scope)[identifier] = CustomTypeSymbol{ .definition{ type_definition.get() } };
 
             type_definition->surrounding_scope = scope;

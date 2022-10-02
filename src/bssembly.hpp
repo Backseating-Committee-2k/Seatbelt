@@ -658,6 +658,54 @@ namespace Bssembler {
             }
         }
 
+        /**
+         * Pushes a value from the stack (or from a memory region that was part of the stack before) onto the stack.
+         * The address referenced by stack_pointer must point to a value in its expanded form (pushed form).
+         * @param stack_pointer source pointer
+         * @param data_type data type of the value to push
+         * @param offset internal offset used for recursion
+         */
+        void push_onto_stack_from_stack_pointer(
+                const Register stack_pointer,
+                const DataType* data_type,
+                const usize offset = 0
+        ) {
+            using enum Mnemonic;
+            using enum Register;
+
+            const auto temp_register = (stack_pointer == R1 ? R2 : R1);
+
+            assert(offset % WordSize == 0);
+
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
+                or data_type->is_function_pointer_type()) {
+                assert(data_type->size_when_pushed() == 0 or data_type->size_when_pushed() == WordSize);
+                if (data_type->size_when_pushed() == WordSize) {
+                    add(Instruction{
+                            OFFSET_COPY,
+                            {Pointer{ stack_pointer }, Immediate{ offset }, temp_register}
+                    });
+                    add(Instruction{ PUSH, { temp_register } });
+                }
+            } else if (data_type->is_array_type()) {
+                const auto array_type = *(data_type->as_array_type());
+                usize current_offset = offset;
+                for (usize i = 0; i < array_type->num_elements; ++i) {
+                    push_onto_stack_from_stack_pointer(stack_pointer, array_type->contained, current_offset);
+                    current_offset += array_type->contained->size_when_pushed();
+                }
+            } else if (data_type->is_struct_type()) {
+                const auto struct_type = *(data_type->as_struct_type());
+                usize current_offset = offset;
+                for (const auto& attribute : struct_type->members) {
+                    push_onto_stack_from_stack_pointer(stack_pointer, attribute.data_type, current_offset);
+                    current_offset += attribute.data_type->size_when_pushed();
+                }
+            } else {
+                assert(false and "not implemented");
+            }
+        }
+
         [[nodiscard]] std::string to_string() const {
             auto result = std::string{};
             for (const auto& instruction : m_instructions) {
