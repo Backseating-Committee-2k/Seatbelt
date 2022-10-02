@@ -63,6 +63,17 @@ struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
         return std::make_unique<Scope>(this, surrounding_namespace);
     }
 
+    [[nodiscard]] bool is_child_of(const Scope* const parent) const {
+        const Scope* current = this;
+        while (current != nullptr) {
+            if (current != this and current == parent) {
+                return true;
+            }
+            current = current->surrounding_scope;
+        }
+        return false;
+    }
+
     const Scope* surrounding_scope;
     const Parser::NamespaceDefinition* surrounding_namespace;
 };
