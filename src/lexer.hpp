@@ -77,7 +77,9 @@
     x(At) \
     x(ExclamationMark) \
     x(TypeSize) \
-    x(ValueSize)
+    x(ValueSize) \
+    x(Type) \
+    x(Restricted)
 
 // clang-format on
 

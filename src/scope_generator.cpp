@@ -12,8 +12,21 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <ranges>
+#include <variant>
 
 namespace ScopeGenerator {
+
+    struct StructLookupResult {
+        const Parser::VariantDefinition* struct_definition;
+    };
+
+    struct CustomTypeLookupResult {
+        const Parser::CustomTypeDefinition* custom_type_definition;
+    };
+
+    struct NothingFoundLookupResult { };
+
+    using LookupResult = std::variant<StructLookupResult, CustomTypeLookupResult, NothingFoundLookupResult>;
 
     [[nodiscard]] static std::optional<const Scope*>
     get_relative_scope(const Scope* starting_scope, const Parser::Expressions::Name& name_expression) {
@@ -40,8 +53,12 @@ namespace ScopeGenerator {
         return starting_scope;
     }
 
-    [[nodiscard]] static std::vector<const FunctionOverload*>
-    get_function_overloads_in_scope(const Scope* scope, const Parser::Identifier name, bool exported_only) {
+    template<typename T>
+    [[nodiscard]] T get_symbols_in_scope(const Scope* scope, Parser::Identifier name, bool exported_only);
+
+    template<>
+    [[nodiscard]] std::vector<const FunctionOverload*>
+    get_symbols_in_scope(const Scope* scope, const Parser::Identifier name, bool exported_only) {
         using std::ranges::find_if;
         auto result = std::vector<const FunctionOverload*>{};
         const auto find_iterator = find_if(*scope, [&](const auto& pair) {
@@ -56,6 +73,37 @@ namespace ScopeGenerator {
             }
         }
         return result;
+    }
+
+    template<>
+    [[nodiscard]] const Parser::CustomTypeDefinition*
+    get_symbols_in_scope(const Scope* scope, const Parser::Identifier name, bool exported_only) {
+        using std::ranges::find_if;
+        const auto find_iterator = find_if(*scope, [&](const auto& pair) {
+            return pair.first == name.location.view() and std::holds_alternative<CustomTypeSymbol>(pair.second)
+                   and (not exported_only or std::get<CustomTypeSymbol>(pair.second).definition->is_exported());
+        });
+        const auto found = (find_iterator != scope->cend());
+        if (found) {
+            return std::get<CustomTypeSymbol>(find_iterator->second).definition;
+        }
+        return nullptr;
+    }
+
+    template<>
+    [[nodiscard]] const Parser::VariantDefinition*
+    get_symbols_in_scope(const Scope* scope, const Parser::Identifier name, bool exported_only) {
+        using std::ranges::find_if;
+        const auto find_iterator = find_if(*scope, [&](const auto& pair) {
+            return pair.first == name.location.view() and std::holds_alternative<StructSymbol>(pair.second)
+                   and (not exported_only or std::get<StructSymbol>(pair.second).custom_type_definition->is_exported());
+        });
+        const auto found = (find_iterator != scope->cend());
+        if (found) {
+            const auto& struct_symbol = std::get<StructSymbol>(find_iterator->second);
+            return &(struct_symbol.custom_type_definition->alternatives.at(struct_symbol.tag));
+        }
+        return nullptr;
     }
 
     [[nodiscard]] std::optional<const VariableSymbol*>
@@ -74,9 +122,14 @@ namespace ScopeGenerator {
         return {};
     }
 
-    [[nodiscard]] std::vector<const FunctionOverload*>
-    function_lookup(const Scope* surrounding_scope, const Parser::Expressions::Name& name_expression) {
+    template<typename T>
+    [[nodiscard]] T lookup(const Scope* surrounding_scope, const Parser::Expressions::Name& name_expression) {
         using std::ranges::find_if;
+
+        static constexpr auto is_function_lookup = std::same_as<T, std::vector<const FunctionOverload*>>;
+        static constexpr auto is_custom_type_lookup = std::same_as<T, const Parser::CustomTypeDefinition*>;
+        static constexpr auto is_variant_lookup = std::same_as<T, const Parser::VariantDefinition*>;
+        static_assert(is_function_lookup or is_custom_type_lookup or is_variant_lookup);
 
         /* To do a correct function lookup, we have to start in a scope that corresponds to a namespace. E.g. if
          * the name to be looked up is inside a function, we start in the scope that is owned by the namespace
@@ -95,7 +148,7 @@ namespace ScopeGenerator {
         surrounding_scope = surrounding_scope->surrounding_namespace->scope.get();
 
         const auto is_qualified_name = (name_expression.name_tokens.size() > 1);
-        auto result = std::vector<const FunctionOverload*>{};
+        auto result = T{};
         const auto name = std::get<Parser::Identifier>(name_expression.name_tokens.back());
 
         const Scope* current_scope = surrounding_scope;
@@ -105,16 +158,18 @@ namespace ScopeGenerator {
 
             if (found_relative_namespace) {
                 current_scope = *maybe_relative_scope;
-                result = get_function_overloads_in_scope(current_scope, name, true);
+                result = get_symbols_in_scope<T>(current_scope, name, true);
             } else {
                 // global namespace lookup fallback
                 const auto global_scope = get_global_scope(surrounding_scope);
                 const auto maybe_absolute_scope = get_relative_scope(global_scope, name_expression);
                 if (maybe_absolute_scope) {
-                    result = get_function_overloads_in_scope(*maybe_absolute_scope, name, true);
+                    result = get_symbols_in_scope<T>(*maybe_absolute_scope, name, true);
                 }
             }
-            if (result.empty()) {
+
+            const auto nothing_found_yet = (result == T{});
+            if (nothing_found_yet) {
                 auto error_message = fmt::format("use of undeclared identifier \"{}\"", name.location.view());
                 /* Maybe the function in question exists, but is not exported. We do another lookup ignoring whether
                  * the functions are exported or not, and if we find at least one possible overload, we can use this
@@ -122,23 +177,29 @@ namespace ScopeGenerator {
                 if (found_relative_namespace) {
                     using std::ranges::views::take, std::ranges::views::transform;
                     current_scope = *maybe_relative_scope;
-                    result = get_function_overloads_in_scope(current_scope, name, false);
-                    if (not result.empty()) {
-                        error_message += "\nmaybe you're missing an export? possible candidates are:";
-                        for (const auto& overload : result | take(3)) {
-                            error_message = fmt::format(
-                                    "{}\n\t{}{}({})", error_message,
-                                    get_absolute_namespace_qualifier(*(overload->surrounding_namespace)),
-                                    name.location.view(),
-                                    fmt::join(
-                                            overload->definition->parameters | transform([](const auto& parameter) {
-                                                return parameter.type_definition->to_string();
-                                            }),
-                                            ", "
-                                    )
-                            );
+                    result = get_symbols_in_scope<T>(current_scope, name, false);
+
+                    const auto found_any_symbol = (result != T{});
+                    if (found_any_symbol) {
+                        if constexpr (is_function_lookup) {
+                            error_message += "\nmaybe you're missing an export? possible candidates are:";
+                            for (const auto& overload : result | take(3)) {
+                                error_message = fmt::format(
+                                        "{}\n\t{}{}({})", error_message,
+                                        get_absolute_namespace_qualifier(*(overload->surrounding_namespace)),
+                                        name.location.view(),
+                                        fmt::join(
+                                                overload->definition->parameters | transform([](const auto& parameter) {
+                                                    return parameter.type_definition->to_string();
+                                                }),
+                                                ", "
+                                        )
+                                );
+                            }
+                            error_message += "\n";
                         }
-                        error_message += "\n";
+
+                        // TODO: better error message for custom types
                     }
                 }
                 Error::error(name, error_message);
@@ -147,19 +208,106 @@ namespace ScopeGenerator {
         } else {
             while (current_scope != nullptr) {
                 const auto find_iterator = find_if(*current_scope, [&](const auto& pair) {
-                    return pair.first == name.location.view() and std::holds_alternative<FunctionSymbol>(pair.second);
+                    if constexpr (is_function_lookup) {
+                        return pair.first == name.location.view()
+                               and std::holds_alternative<FunctionSymbol>(pair.second);
+                    } else if constexpr (is_custom_type_lookup) {
+                        return pair.first == name.location.view()
+                               and std::holds_alternative<CustomTypeSymbol>(pair.second);
+                    } else if constexpr (is_variant_lookup) {
+                        return pair.first == name.location.view() and std::holds_alternative<StructSymbol>(pair.second);
+                    } else {
+                        throw;
+                    }
                 });
                 const auto found = (find_iterator != current_scope->cend());
                 if (found) {
-                    for (const auto& overload : std::get<FunctionSymbol>(find_iterator->second).overloads) {
-                        result.push_back(&overload);
+                    if constexpr (is_function_lookup) {
+                        for (const auto& overload : std::get<FunctionSymbol>(find_iterator->second).overloads) {
+                            result.push_back(&overload);
+                        }
+                        return result;
+                    } else if constexpr (is_custom_type_lookup) {
+                        return std::get<CustomTypeSymbol>(find_iterator->second).definition;
+                    } else if constexpr (is_variant_lookup) {
+                        const auto& struct_symbol = std::get<StructSymbol>(find_iterator->second);
+                        return &(struct_symbol.custom_type_definition->alternatives[struct_symbol.tag]);
+                    } else {
+                        throw;
                     }
-                    return result;
                 }
                 current_scope = current_scope->surrounding_scope;
             }
         }
         return result;
+    }
+
+    /**
+         * Performs a lookup for either a struct of a custom type and, if successful, sets the corresponding
+         * member (either struct_definition or custom_type_definition) of the custom type placeholder passed
+         * in type_definition to the appropriate definition.
+         * If type_definition does not represent a custom type placeholder (e.g. U32), the function returns
+         * false. If it represents a custom type placeholder, but the lookup fails, the function issues an
+         * error and also returns false.
+         * @param type_definition the definition of the type in question
+         * @param surrounding_scope the scope the name occurred in
+         * @param name_tokens the tokens that form the name expression
+         * @return true if the lookup was successful, false otherwise
+         */
+    static bool custom_type_lookup(DataType* const type_definition, const Scope* const surrounding_scope) {
+        // type definition may be a nullptr (when used during auto type-deduction)
+        if (type_definition != nullptr and type_definition->is_pointer_type()) {
+            const auto pointer_type = *(type_definition->as_pointer_type());
+            return custom_type_lookup(pointer_type->contained, surrounding_scope);
+        }
+
+        if (type_definition != nullptr and type_definition->is_function_pointer_type()) {
+            const auto function_pointer_type = *(type_definition->as_function_pointer_type());
+            bool result = true;
+            for (const auto& parameter_type : function_pointer_type->parameter_types) {
+                if (not custom_type_lookup(parameter_type, surrounding_scope)) {
+                    result = false;
+                }
+            }
+            if (not custom_type_lookup(function_pointer_type->return_type, surrounding_scope)) {
+                result = false;
+            }
+            return result;
+        }
+
+        if (type_definition == nullptr or not type_definition->is_custom_type_placeholder()) {
+            return false;
+        }
+        // we know we have a custom type placeholder at hand
+        const auto placeholder_type = *(type_definition->as_custom_type_placeholder());
+        const auto name_expression = Parser::Expressions::Name{ placeholder_type->type_definition_tokens };
+        const auto struct_definition = lookup<const Parser::VariantDefinition*>(surrounding_scope, name_expression);
+        const auto struct_type_found = (struct_definition != nullptr);
+        if (struct_type_found) {
+            placeholder_type->struct_definition = struct_definition;
+            return true;
+        }
+        const auto custom_type_definition =
+                lookup<const Parser::CustomTypeDefinition*>(surrounding_scope, name_expression);
+        const auto custom_type_definition_found = (custom_type_definition != nullptr);
+        if (custom_type_definition_found) {
+            placeholder_type->custom_type_definition = custom_type_definition;
+            return true;
+        }
+        using std::ranges::views::transform;
+        Error::error(
+                placeholder_type->type_definition_tokens.back(),
+                fmt::format(
+                        "use of undeclared type \"{}\"",
+                        fmt::join(
+                                name_expression.name_tokens | transform([](const auto& token) {
+                                    return Error::token_location(token).view();
+                                }),
+                                ""
+                        )
+                )
+        );
+        return false;
     }
 
     struct ScopeGenerator : public Parser::Statements::StatementVisitor, public Parser::Expressions::ExpressionVisitor {
@@ -257,6 +405,8 @@ namespace ScopeGenerator {
             statement.variable_symbol = &std::get<VariableSymbol>(scope->at(statement.name.location.view()));
             assert(statement.variable_symbol != nullptr);
             statement.surrounding_scope = scope;
+
+            custom_type_lookup(statement.type_definition.get(), statement.surrounding_scope);
         }
 
         void visit(Parser::Statements::InlineAssembly& statement) override {
@@ -323,6 +473,37 @@ namespace ScopeGenerator {
             );
         }
 
+        void visit(Parser::Expressions::StructLiteral& expression) override {
+            using std::ranges::views::transform;
+
+            expression.surrounding_scope = scope;
+
+            // lookup for the type name of the struct literal
+            const auto type_definition =
+                    lookup<const Parser::VariantDefinition*>(expression.surrounding_scope, expression.type_name);
+            if (type_definition == nullptr) {
+                Error::error(
+                        expression.type_name,
+                        fmt::format(
+                                "use of undeclared custom type \"{}\"",
+                                fmt::join(
+                                        expression.type_name.name_tokens | transform([](const auto& token) {
+                                            return Error::token_location(token).view();
+                                        }),
+                                        "::"
+                                )
+                        )
+                );
+            }
+
+            expression.definition = type_definition;
+
+            // visit expressions for field values recursively
+            for (auto& field : expression.values) {
+                field.field_value->accept(*this);
+            }
+        }
+
         void visit(Parser::Expressions::Name& expression) override {
             using std::ranges::find_if, Lexer::Tokens::Identifier;
             expression.surrounding_scope = scope;
@@ -338,7 +519,7 @@ namespace ScopeGenerator {
                 }
             }
             if (not found) {
-                auto overloads = function_lookup(expression.surrounding_scope, expression);
+                auto overloads = lookup<std::vector<const FunctionOverload*>>(expression.surrounding_scope, expression);
                 if (not overloads.empty()) {
                     expression.possible_overloads = std::move(overloads);
                     found = true;
@@ -357,8 +538,19 @@ namespace ScopeGenerator {
 
         void visit(Parser::Expressions::BinaryOperator& expression) override {
             expression.lhs->accept(*this);
-            expression.rhs->accept(*this);
             expression.surrounding_scope = scope;
+
+            /* If this is access to a struct attribute, we cannot do a name lookup for the right
+             * operand, since we would need to know the type of the struct we want to access.
+             * A "real" lookup is not needed anyway. The type checker will later on perform a check if the
+             * struct in question really has an attribute with the given name. */
+            const auto token = std::get_if<Lexer::Tokens::Token>(&(expression.operator_type)); // maybe nullptr
+            const auto is_struct_attribute_access =
+                    (token != nullptr and std::holds_alternative<Lexer::Tokens::Dot>(*token));
+
+            if (not is_struct_attribute_access) {
+                expression.rhs->accept(*this);
+            }
         }
 
         void visit(Parser::Expressions::FunctionCall& expression) override {
@@ -399,6 +591,12 @@ namespace ScopeGenerator {
             : type_container{ type_container },
               surrounding_scope{ surrounding_scope } { }
 
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
+
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
+            // TODO: something?
+        }
+
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             auto function_scope = surrounding_scope->create_child_scope();
             for (auto& parameter : function_definition->parameters) {
@@ -411,14 +609,16 @@ namespace ScopeGenerator {
                 (*function_scope)[parameter.name.location.view()] = VariableSymbol{ .definition{ &parameter } };
                 parameter.variable_symbol =
                         &std::get<VariableSymbol>(function_scope->at(parameter.name.location.view()));
+
+                custom_type_lookup(parameter.type_definition.get(), function_scope.get());
             }
+
+            custom_type_lookup(function_definition->return_type_definition.get(), surrounding_scope);
 
             auto visitor = ScopeGenerator{ function_scope.get(), type_container };
             function_definition->body.scope = std::move(function_scope);
             function_definition->body.accept(visitor);
         }
-
-        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
             visit_function_bodies(namespace_definition->contents, *type_container, *(namespace_definition->scope));
@@ -493,6 +693,7 @@ namespace ScopeGenerator {
         void visit(Parser::Expressions::Char&) override { }
         void visit(Parser::Expressions::Bool&) override { }
         void visit(Parser::Expressions::ArrayLiteral&) override { }
+        void visit(Parser::Expressions::StructLiteral&) override { }
         void visit(Parser::Expressions::Name&) override { }
         void visit(Parser::Expressions::UnaryOperator&) override { }
         void visit(Parser::Expressions::BinaryOperator&) override { }
@@ -505,12 +706,70 @@ namespace ScopeGenerator {
         Parser::FunctionDefinition* surrounding_function;
     };
 
-    static void visit_function_definitions(Parser::Program& program, TypeContainer& type_container, Scope& scope);
+    static void visit_top_level_statements(Parser::Program& program, TypeContainer& type_container, Scope& scope);
 
     struct ScopeGeneratorTopLevelVisitor {
         ScopeGeneratorTopLevelVisitor(TypeContainer* type_container, Scope* scope)
             : type_container{ type_container },
               scope{ scope } { }
+
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
+
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
+            using namespace std::string_view_literals;
+            using std::ranges::find_if;
+
+            if (type_definition->is_exported() and type_definition->namespace_name == "::") {
+                Error::error(
+                        *(type_definition->export_token), "exporting functions from the global namespace is not allowed"
+                );
+            }
+
+            auto identifier = type_definition->name.has_value() ? (*(type_definition->name)).location.view() : ""sv;
+            auto find_iterator = find_if(*scope, [&](const auto& pair) { return pair.first == identifier; });
+            const auto found = (find_iterator != std::end(*scope));
+            if (found) {
+                Error::error(*(type_definition->name), fmt::format("redefinition of identifier \"{}\"", identifier));
+            }
+            (*scope)[identifier] = CustomTypeSymbol{ .definition{ type_definition.get() } };
+
+            type_definition->surrounding_scope = scope;
+
+            /* the definition of a custom type opens a new scope that holds the symbols of the
+             * type variants */
+            type_definition->inner_scope = scope->create_child_scope();
+            for (const auto& alternative : type_definition->alternatives) {
+                if (type_definition->inner_scope->contains(alternative.second.name.location.view())) {
+                    Error::error(
+                            alternative.second.name, fmt::format(
+                                                             "duplicate alternative \"{}\" in custom type \"{}\"",
+                                                             alternative.second.name.location.view(), identifier
+                                                     )
+                    );
+                }
+                (*(type_definition->inner_scope))[alternative.second.name.location.view()] =
+                        StructSymbol{ .custom_type_definition{ type_definition.get() }, .tag{ alternative.first } };
+            }
+
+            if (not type_definition->is_restricted()) {
+                /* for non-restricted custom type, we have to expose the alternatives to the surrounding namespace
+                 * to make them available there */
+                for (const auto& alternative : type_definition->alternatives) {
+                    if (scope->contains(alternative.second.name.location.view())) {
+                        Error::error(
+                                alternative.second.name,
+                                fmt::format(
+                                        "redefinition of identifier \"{}\" in surrounding scope of custom type \"{}\"\n"
+                                        "are you missing the \"restricted\" keyword?",
+                                        alternative.second.name.location.view(), identifier
+                                )
+                        );
+                    }
+                    (*scope)[alternative.second.name.location.view()] =
+                            StructSymbol{ .custom_type_definition{ type_definition.get() }, .tag{ alternative.first } };
+                }
+            }
+        }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using namespace std::string_literals;
@@ -530,8 +789,12 @@ namespace ScopeGenerator {
                                                        .definition{ function_definition.get() } };
 
             if (found) {
-                assert(std::holds_alternative<FunctionSymbol>(find_iterator->second)
-                       && "other cases not implemented yet");
+                if (not std::holds_alternative<FunctionSymbol>(find_iterator->second)) {
+                    Error::error(
+                            function_definition->name,
+                            fmt::format("redefinition of identifier \"{}\"", function_definition->name.location.view())
+                    );
+                }
                 auto& function_symbol = std::get<FunctionSymbol>(find_iterator->second);
                 auto& new_overload = function_symbol.overloads.emplace_back(std::move(function_overload));
                 function_definition->corresponding_symbol = &new_overload;
@@ -546,8 +809,6 @@ namespace ScopeGenerator {
             function_definition->body.accept(label_visitor);
             function_definition->surrounding_scope = scope;
         }
-
-        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
             using std::ranges::find_if;
@@ -567,7 +828,9 @@ namespace ScopeGenerator {
             const auto found = (find_iterator != scope->cend());
 
             if (found) {
-                Error::error(namespace_definition->name, fmt::format("redefinition of symbol \"{}\"", namespace_name));
+                Error::error(
+                        namespace_definition->name, fmt::format("redefinition of identifier \"{}\"", namespace_name)
+                );
             }
 
             /* If we are in the global namespace, we do not open a new child scope for this namespace, because
@@ -579,14 +842,14 @@ namespace ScopeGenerator {
                 namespace_definition->scope->surrounding_namespace = namespace_definition.get();
             }
 
-            visit_function_definitions(namespace_definition->contents, *type_container, *(namespace_definition->scope));
+            visit_top_level_statements(namespace_definition->contents, *type_container, *(namespace_definition->scope));
         }
 
         TypeContainer* type_container;
         Scope* scope;
     };
 
-    void visit_function_definitions(Parser::Program& program, TypeContainer& type_container, Scope& scope) {
+    void visit_top_level_statements(Parser::Program& program, TypeContainer& type_container, Scope& scope) {
         auto visitor = ScopeGeneratorTopLevelVisitor{ &type_container, &scope };
         for (auto& top_level_statement : program) {
             std::visit(visitor, top_level_statement);
@@ -601,7 +864,7 @@ namespace ScopeGenerator {
     }
 
     void generate(Parser::Program& program, TypeContainer& type_container, Scope& global_scope) {
-        visit_function_definitions(program, type_container, global_scope);
+        visit_top_level_statements(program, type_container, global_scope);
         visit_function_bodies(program, type_container, global_scope);
     }
 

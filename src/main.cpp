@@ -14,6 +14,7 @@
 #include <fmt/core.h>
 #include <fstream>
 #include <iostream>
+#include <magic_enum.hpp>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -70,7 +71,10 @@ void check_main_function(const SourceCode& source_code, Scope& global_scope, Typ
             (main_symbol->overloads.front().signature == "main()"
              and main_symbol->overloads.front().definition->return_type == expected_main_function_return_type);
     if (not main_function_has_correct_signature) {
-        error(fmt::format("main function must not take any parameters and must return {}", NothingIdentifier));
+        error(fmt::format(
+                "main function must not take any parameters and must return {}",
+                magic_enum::enum_name(BasicType::Nothing)
+        ));
     }
     main_symbol->overloads.front().definition->is_entry_point = true;
 }
@@ -272,6 +276,7 @@ int main(int, char** argv) {
                     .optionally_named<
                             'l', "lib", "pass a comma-separated list of paths to use for import-lookup", std::string>(""
                     )
+                    .flag<'O', "optimize", "enable the optimizer">()
                     .flag<'v', "verbose", "show verbose output">()
                     .create();
 
@@ -354,15 +359,21 @@ int main(int, char** argv) {
         bssembly += std::visit(Emitter::Emitter{ &program, &label_generator, &type_container }, item);
     }
 
-    usize size_before = bssembly.size();
-    optimize(bssembly, command_line_parser.get<'v'>());
-    usize size_after = bssembly.size();
-    if (command_line_parser.get<'v'>()) {
-        fmt::print(
-                stderr, "optimization: {:.2} % ({} instructions to {} instructions)\n",
-                static_cast<double>(size_before - size_after) / static_cast<double>(size_before) * 100.0, size_before,
-                size_after, bssembly.size()
-        );
+    if (command_line_parser.get<'O'>()) {
+        const auto size_before = bssembly.size();
+
+        optimize(bssembly, command_line_parser.get<'v'>());
+
+        const auto size_after = bssembly.size();
+        if (command_line_parser.get<'v'>()) {
+            fmt::print(
+                    stderr, "optimization: {:.2} % ({} instructions to {} instructions)\n",
+                    static_cast<double>(size_before - size_after) / static_cast<double>(size_before) * 100.0,
+                    size_before, size_after, bssembly.size()
+            );
+        }
+    } else if (command_line_parser.get<'v'>()) {
+        fmt::print(stderr, "optimizations were disabled");
     }
 
     if (command_line_parser.was_provided<'o'>()) {

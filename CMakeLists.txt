@@ -22,7 +22,13 @@ FetchContent_Declare(
         GIT_TAG v0.1.9
 )
 
-FetchContent_MakeAvailable(fmt ctre Arguably)
+FetchContent_Declare(
+        magic_enum
+        GIT_REPOSITORY https://github.com/Neargye/magic_enum
+        GIT_TAG v0.8.1
+)
+
+FetchContent_MakeAvailable(fmt ctre Arguably magic_enum)
 
 if (MSVC)
     # enable code analysis
@@ -72,7 +78,7 @@ add_executable(Seatbelt
         src/utils.cpp
         src/stack_layout_generator.hpp)
 
-target_link_libraries(Seatbelt fmt ctre Arguably)
+target_link_libraries(Seatbelt fmt ctre Arguably magic_enum)
 
 foreach (target ${TARGET_LIST})
     # set warning levels

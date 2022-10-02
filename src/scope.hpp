@@ -16,6 +16,7 @@
 namespace Parser {
     struct FunctionDefinition;
     struct NamespaceDefinition;
+    struct CustomTypeDefinition;
 
     namespace Statements {
         struct VariableDefinition;
@@ -25,6 +26,15 @@ namespace Parser {
 struct VariableSymbol {
     std::optional<usize> offset{};
     std::variant<std::monostate, const Parser::Statements::VariableDefinition*, const Parameter*> definition{};
+};
+
+struct CustomTypeSymbol {
+    Parser::CustomTypeDefinition* definition{ nullptr };
+};
+
+struct StructSymbol {
+    Parser::CustomTypeDefinition* custom_type_definition;
+    u32 tag;
 };
 
 struct FunctionOverload {
@@ -41,7 +51,7 @@ struct NamespaceSymbol {
     const Parser::NamespaceDefinition* namespace_definition{ nullptr };
 };
 
-using SymbolDescription = std::variant<VariableSymbol, FunctionSymbol, NamespaceSymbol>;
+using SymbolDescription = std::variant<VariableSymbol, CustomTypeSymbol, StructSymbol, FunctionSymbol, NamespaceSymbol>;
 
 struct Scope : public std::unordered_map<std::string_view, SymbolDescription> {
     explicit Scope(const Scope* surrounding_scope, const Parser::NamespaceDefinition* surrounding_namespace)

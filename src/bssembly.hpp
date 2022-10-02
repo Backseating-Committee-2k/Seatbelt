@@ -546,7 +546,7 @@ namespace Bssembler {
             }
             assert(temp_register != stack_pointer and temp_register != destination_pointer);
 
-            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
                 if (data_type->size() > 0) {
@@ -582,7 +582,7 @@ namespace Bssembler {
             Register temp_register = (pointer == R1 ? R2 : R1);
             assert(temp_register != pointer);
 
-            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
                 if (data_type->size() > 0) {
@@ -600,6 +600,23 @@ namespace Bssembler {
                     const auto new_offset = offset + index * array_type->contained->size();
                     pop_from_stack_into_pointer(pointer, array_type->contained, new_offset);
                 }
+            } else if (data_type->is_struct_type()) {
+                const auto struct_type = *(data_type->as_struct_type());
+                const auto num_members = struct_type->members.size();
+
+                auto offsets = std::vector<usize>{};
+                offsets.reserve(num_members);
+                usize current_offset = offset;
+                for (const auto& member : struct_type->members) {
+                    current_offset = Utils::round_up(current_offset, member.data_type->alignment());
+                    offsets.push_back(current_offset);
+                    current_offset += member.data_type->size();
+                }
+
+                for (usize i = 0; i < num_members; ++i) {
+                    const usize index = num_members - i - 1;
+                    pop_from_stack_into_pointer(pointer, struct_type->members[index].data_type, offsets[index]);
+                }
             } else {
                 assert(false and "not implemented");
             }
@@ -611,7 +628,7 @@ namespace Bssembler {
 
             const auto temp_register = (source_pointer == R1 ? R2 : R1);
 
-            if (data_type->is_concrete_type() or data_type->is_pointer_type()
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
                 if (data_type->size() > 0) {
@@ -627,6 +644,62 @@ namespace Bssembler {
                 const auto size = array_type->contained->size();
                 for (usize i = 0; i < array_type->num_elements; ++i) {
                     push_value_onto_stack(source_pointer, array_type->contained, offset + i * size);
+                }
+            } else if (data_type->is_struct_type()) {
+                const auto struct_type = *(data_type->as_struct_type());
+                usize current_offset = offset;
+                for (const auto& attribute : struct_type->members) {
+                    current_offset = Utils::round_up(current_offset, attribute.data_type->alignment());
+                    push_value_onto_stack(source_pointer, attribute.data_type, current_offset);
+                    current_offset += attribute.data_type->size();
+                }
+            } else {
+                assert(false and "not implemented");
+            }
+        }
+
+        /**
+         * Pushes a value from the stack (or from a memory region that was part of the stack before) onto the stack.
+         * The address referenced by stack_pointer must point to a value in its expanded form (pushed form).
+         * @param stack_pointer source pointer
+         * @param data_type data type of the value to push
+         * @param offset internal offset used for recursion
+         */
+        void push_onto_stack_from_stack_pointer(
+                const Register stack_pointer,
+                const DataType* data_type,
+                const usize offset = 0
+        ) {
+            using enum Mnemonic;
+            using enum Register;
+
+            const auto temp_register = (stack_pointer == R1 ? R2 : R1);
+
+            assert(offset % WordSize == 0);
+
+            if (data_type->is_primitive_type() or data_type->is_pointer_type()
+                or data_type->is_function_pointer_type()) {
+                assert(data_type->size_when_pushed() == 0 or data_type->size_when_pushed() == WordSize);
+                if (data_type->size_when_pushed() == WordSize) {
+                    add(Instruction{
+                            OFFSET_COPY,
+                            {Pointer{ stack_pointer }, Immediate{ offset }, temp_register}
+                    });
+                    add(Instruction{ PUSH, { temp_register } });
+                }
+            } else if (data_type->is_array_type()) {
+                const auto array_type = *(data_type->as_array_type());
+                usize current_offset = offset;
+                for (usize i = 0; i < array_type->num_elements; ++i) {
+                    push_onto_stack_from_stack_pointer(stack_pointer, array_type->contained, current_offset);
+                    current_offset += array_type->contained->size_when_pushed();
+                }
+            } else if (data_type->is_struct_type()) {
+                const auto struct_type = *(data_type->as_struct_type());
+                usize current_offset = offset;
+                for (const auto& attribute : struct_type->members) {
+                    push_onto_stack_from_stack_pointer(stack_pointer, attribute.data_type, current_offset);
+                    current_offset += attribute.data_type->size_when_pushed();
                 }
             } else {
                 assert(false and "not implemented");

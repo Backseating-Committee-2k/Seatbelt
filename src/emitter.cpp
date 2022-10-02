@@ -194,7 +194,7 @@ namespace Emitter {
             bssembly.add(Instruction{ PUSH, { Immediate{ value } }, "push immediate onto stack" });
         }
 
-        void visit(Parser::Expressions::ArrayLiteral& expression) override {
+        void visit(ArrayLiteral& expression) override {
             std::visit(
                     overloaded{ [&](const std::vector<std::unique_ptr<Expression>>& values) {
                                    for (const auto& value : values) {
@@ -208,6 +208,12 @@ namespace Emitter {
                                 } },
                     expression.values
             );
+        }
+
+        void visit(StructLiteral& expression) override {
+            for (const auto& initializer : expression.values) {
+                initializer.field_value->accept(*this);
+            }
         }
 
         void visit(Name& expression) override {
@@ -254,7 +260,7 @@ namespace Emitter {
             }
         }
 
-        void visit(Parser::Expressions::UnaryOperator& expression) override {
+        void visit(UnaryOperator& expression) override {
             expression.operand->accept(*this);
             if (is<Not>(expression.operator_token)) {
                 assert(expression.data_type == type_container->get_bool() and "type checker should've caught this");
@@ -455,37 +461,125 @@ namespace Emitter {
             }
         }
 
+        [[nodiscard]] usize get_attribute_offset(const StructType* struct_type, const std::string_view attribute_name) {
+            const auto find_iterator = std::find_if(
+                    struct_type->members.cbegin(), struct_type->members.cend(),
+                    [&](const auto& attribute) { return attribute.name == attribute_name; }
+            );
+            [[maybe_unused]] const auto found = (find_iterator != struct_type->members.cend());
+            assert(found and "this should have been caught before");
+            return *(find_iterator->offset);
+        }
+
         void visit(BinaryOperator& expression) override {
             using namespace Lexer::Tokens;
 
             expression.lhs->accept(*this);
 
-            if (const auto operator_token = std::get_if<Token>(&expression.operator_type)) {
-                if (is<And>(*operator_token)) {
-                    short_circuiting_and(expression, *operator_token);
-                } else if (is<Or>(*operator_token)) {
-                    short_circuiting_or(expression, *operator_token);
-                } else {
-                    non_short_circuiting_binary_operator(expression, *operator_token);
-                }
-                const auto size = expression.lhs->data_type->size();
-                assert(expression.rhs->data_type->size() == size);
-                if (size == 0) {
-                    assert(expression.lhs->data_type == type_container->get_nothing()
-                           and expression.rhs->data_type == type_container->get_nothing());
-                    const auto token = std::get_if<Token>(&expression.operator_type);
-                    assert(token != nullptr and "the type checker should've caught this");
-                    if (is<EqualsEquals>(*token)) {
-                        bssembly.add(Instruction{ PUSH, { Immediate{ 1 } }, "nothing == nothing yields true" });
-                    } else if (is<ExclamationEquals>(*token)) {
-                        bssembly.add(Instruction{ PUSH, { Immediate{ 0 } }, "nothing != nothing yields false" });
+            const auto operator_token = std::get_if<Token>(&expression.operator_type);
+
+            if (operator_token != nullptr) {
+                const auto is_attribute_access = std::holds_alternative<Dot>(*operator_token);
+                if (is_attribute_access) {
+                    const auto struct_is_lvalue = expression.lhs->is_lvalue();
+                    const auto struct_is_rvalue = not struct_is_lvalue;
+                    assert(expression.lhs->data_type->is_struct_type());
+                    const auto attribute_name_expression = dynamic_cast<const Name*>(expression.rhs.get());
+                    assert(attribute_name_expression != nullptr);
+                    assert(attribute_name_expression->name_tokens.size() == 1);
+                    const auto struct_type = *(expression.lhs->data_type->as_struct_type());
+                    const auto attribute_name =
+                            Error::token_location(attribute_name_expression->name_tokens.back()).view();
+                    const auto attribute_offset = get_attribute_offset(struct_type, attribute_name);
+
+                    assert((struct_is_lvalue or not expression.is_lvalue()) and "should have been caught before");
+
+                    if (struct_is_lvalue and expression.is_rvalue()) {
+                        /* Since the struct is an lvalue, the address of the struct has been pushed onto
+                         * the stack. We now have to calculate the address of the struct attribute and
+                         * fetch its value to put it onto the stack. */
+                        bssembly.add(Instruction{ POP, { R1 }, "get address of struct variable" });
+                        bssembly.push_value_onto_stack(R1, expression.data_type, attribute_offset);
+                    } else if (struct_is_rvalue and expression.is_rvalue()) {
+                        /* The struct value has been pushed onto the stack (in its expanded form). We now
+                         * calculate where the attribute of interest lies at and remember its address in
+                         * R1. We then subtract from the stack pointer to invalidate the struct data (but it's
+                         * still there, above the current stack).
+                         * We then take the address we just remembered as a source pointer to push the attribute
+                         * value onto the stack. */
+                        usize expanded_offset = 0;
+                        for (const auto& attribute : struct_type->members) {
+                            if (attribute.name == attribute_name) {
+                                break;
+                            }
+                            expanded_offset += attribute.data_type->size_when_pushed();
+                            assert(expanded_offset % WordSize == 0);
+                        }
+                        assert(expanded_offset % WordSize == 0);
+                        bssembly.add(Instruction{
+                                SUB,
+                                {SP, Immediate{ expression.lhs->data_type->size_when_pushed() - expanded_offset },
+                                  R1},
+                                fmt::format(
+                                        R"(calculate address of member "{}" of the struct literal of type "{}")",
+                                        attribute_name, expression.lhs->data_type->to_string()
+                                )
+                        });
+                        bssembly.add(Instruction{
+                                SUB,
+                                {SP, Immediate{ expression.lhs->data_type->size_when_pushed() }, SP},
+                                fmt::format(
+                                        "decrement stack pointer to discard rvalue of type \"{}\"",
+                                        expression.lhs->data_type->to_string()
+                                )
+                        });
+                        bssembly.push_onto_stack_from_stack_pointer(R1, expression.data_type);
+                    } else if (struct_is_lvalue and expression.is_lvalue()) {
+                        bssembly.add(Instruction{ POP,
+                                                  { R1 },
+                                                  fmt::format(
+                                                          "get the address of the struct of type \"{}\"",
+                                                          expression.lhs->data_type->to_string()
+                                                  ) });
+                        bssembly.add(Instruction{
+                                ADD,
+                                {R1, Immediate{ attribute_offset }, R1},
+                                fmt::format("get the address of the attribute \"{}\"", attribute_name)
+                        });
+                        bssembly.add(Instruction{
+                                PUSH,
+                                { R1 },
+                                fmt::format("push the address of the attribute \"{}\"", attribute_name) });
                     } else {
                         assert(false and "unreachable");
                     }
-                } else if (size <= WordSize) {
-                    bssembly.add(Instruction{ PUSH, { R3 }, "push result onto stack" });
                 } else {
-                    assert(false and "not implemented");
+                    if (is<And>(*operator_token)) {
+                        short_circuiting_and(expression, *operator_token);
+                    } else if (is<Or>(*operator_token)) {
+                        short_circuiting_or(expression, *operator_token);
+                    } else {
+                        non_short_circuiting_binary_operator(expression, *operator_token);
+                    }
+                    const auto size = expression.lhs->data_type->size();
+                    assert(expression.rhs->data_type->size() == size);
+                    if (size == 0) {
+                        assert(expression.lhs->data_type == type_container->get_nothing()
+                               and expression.rhs->data_type == type_container->get_nothing());
+                        const auto token = std::get_if<Token>(&expression.operator_type);
+                        assert(token != nullptr and "the type checker should've caught this");
+                        if (is<EqualsEquals>(*token)) {
+                            bssembly.add(Instruction{ PUSH, { Immediate{ 1 } }, "nothing == nothing yields true" });
+                        } else if (is<ExclamationEquals>(*token)) {
+                            bssembly.add(Instruction{ PUSH, { Immediate{ 0 } }, "nothing != nothing yields false" });
+                        } else {
+                            assert(false and "unreachable");
+                        }
+                    } else if (size <= WordSize) {
+                        bssembly.add(Instruction{ PUSH, { R3 }, "push result onto stack" });
+                    } else {
+                        assert(false and "not implemented");
+                    }
                 }
             } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
                 assert(expression.lhs->is_lvalue());
@@ -1038,10 +1132,6 @@ namespace Emitter {
         }
 
         return result;
-    }
-
-    Bssembly Emitter::operator()(const std::unique_ptr<Parser::ImportStatement>&) {
-        return {};
     }
 
     Bssembly Emitter::operator()(const std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {

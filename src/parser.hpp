@@ -12,6 +12,7 @@
 #include "scope.hpp"
 #include <cassert>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -38,6 +39,10 @@ namespace Parser {
     using namespace Lexer::Tokens;
 
     struct FunctionDefinition;
+    struct ImportStatement;
+    struct CustomTypeDefinition;
+    struct VariantDefinition;
+    struct NamespaceDefinition;
 
     namespace Expressions {
         struct Expression;
@@ -243,7 +248,7 @@ namespace Parser {
             Equals equals_token;
             std::span<const Token> type_definition_tokens;
             std::unique_ptr<DataType> type_definition;
-            const DataType* type{ nullptr };
+            DataType* data_type{ nullptr };
             std::unique_ptr<Expression> initial_value;
             VariableSymbol* variable_symbol{ nullptr };
             Mutability binding_mutability;
@@ -290,6 +295,7 @@ namespace Parser {
         struct Char;
         struct Bool;
         struct ArrayLiteral;
+        struct StructLiteral;
         struct Name;
         struct UnaryOperator;
         struct BinaryOperator;
@@ -305,6 +311,7 @@ namespace Parser {
             virtual void visit(Bool& expression) = 0;
             virtual void visit(Name& expression) = 0;
             virtual void visit(ArrayLiteral& expression) = 0;
+            virtual void visit(StructLiteral& expression) = 0;
             virtual void visit(UnaryOperator& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
@@ -320,12 +327,16 @@ namespace Parser {
             virtual ~Expression() = default;
             virtual void accept(ExpressionVisitor& visitor) = 0;
 
-            const DataType* data_type{ nullptr };
+            DataType* data_type{ nullptr };
             const Scope* surrounding_scope{ nullptr };
             ValueType value_type{ ValueType::Undetermined };
 
             [[nodiscard]] bool is_lvalue() const {
                 return value_type == ValueType::ConstLValue or value_type == ValueType::MutableLValue;
+            }
+
+            [[nodiscard]] bool is_rvalue() const {
+                return not is_lvalue();
             }
         };
 
@@ -377,7 +388,24 @@ namespace Parser {
 
             std::span<const Lexer::Tokens::Token> name_tokens;
             std::optional<std::vector<const FunctionOverload*>> possible_overloads{};
+            std::optional<const CustomTypeSymbol*> custom_type_symbol{};
             std::optional<const VariableSymbol*> variable_symbol{};
+        };
+
+        // initializer for a field of a struct
+        struct FieldInitializer {
+            Identifier field_name;
+            std::unique_ptr<Expression> field_value;
+        };
+
+        struct StructLiteral : public ExpressionAcceptor<StructLiteral> {
+            StructLiteral(Name type_name, std::vector<FieldInitializer> values)
+                : type_name{ std::move(type_name) },
+                  values{ std::move(values) } { }
+
+            Name type_name;
+            std::vector<FieldInitializer> values;
+            const VariantDefinition* definition{ nullptr };
         };
 
         struct UnaryOperator : public ExpressionAcceptor<UnaryOperator> {
@@ -465,34 +493,11 @@ namespace Parser {
 
     } // namespace Expressions
 
-    struct FunctionDefinition;
-    struct ImportStatement;
-    struct NamespaceDefinition;
-
     template<typename... T>
     using PointerVariant = std::variant<std::unique_ptr<T>...>;
 
-    using Program = std::vector<PointerVariant<FunctionDefinition, ImportStatement, NamespaceDefinition>>;
-
-    struct FunctionDefinition {
-        Identifier name;
-        ParameterList parameters;
-        std::unique_ptr<DataType> return_type_definition;
-        std::span<const Token> return_type_definition_tokens{};
-        std::optional<Export> export_token{};
-        const DataType* return_type{ nullptr };
-        Statements::Block body;
-        FunctionOverload* corresponding_symbol{ nullptr };
-        bool is_entry_point{ false };
-        std::vector<Statements::LabelDefinition*> contained_labels{};
-        std::optional<usize> occupied_stack_space{};   // total size of the needed stack space (in bytes)
-        std::optional<usize> parameters_stack_space{}; // size of all parameters (in bytes)
-        const Scope* surrounding_scope{ nullptr };
-
-        [[nodiscard]] bool is_exported() const {
-            return export_token.has_value();
-        }
-    };
+    using Program =
+            std::vector<PointerVariant<FunctionDefinition, ImportStatement, CustomTypeDefinition, NamespaceDefinition>>;
 
     struct ImportStatement {
         Import import_token;
@@ -504,6 +509,64 @@ namespace Parser {
         Identifier name;
         Program contents;
         std::unique_ptr<Scope> scope;
+    };
+
+    struct VariantMemberDefinition {
+        Identifier name;
+        std::unique_ptr<DataType> type_definition;
+        std::span<const Token> type_definition_tokens;
+        DataType* type{ nullptr };
+    };
+
+    struct CustomTypeDefinition;
+
+    struct VariantDefinition {
+        Identifier name;
+        std::vector<VariantMemberDefinition> members;
+        const CustomTypeDefinition* owning_custom_type_definition;
+        DataType* data_type{ nullptr };
+    };
+
+    struct CustomTypeDefinition {
+        std::optional<Export> export_token;
+        Type type_token;
+        std::optional<Identifier> name;
+        std::optional<Restricted> restricted_token;
+        LeftCurlyBracket left_curly_bracket;
+        std::map<u32, VariantDefinition> alternatives;
+        RightCurlyBracket right_curly_bracket;
+        std::string namespace_name{};
+        const Scope* surrounding_scope{ nullptr };
+        std::unique_ptr<Scope> inner_scope{};
+        const DataType* data_type{ nullptr };
+
+        [[nodiscard]] bool is_restricted() const {
+            return restricted_token.has_value();
+        }
+
+        [[nodiscard]] bool is_exported() const {
+            return export_token.has_value();
+        }
+    };
+
+    struct FunctionDefinition {
+        Identifier name;
+        ParameterList parameters;
+        std::unique_ptr<DataType> return_type_definition;
+        std::span<const Token> return_type_definition_tokens{};
+        std::optional<Export> export_token{};
+        DataType* return_type{ nullptr };
+        Statements::Block body;
+        FunctionOverload* corresponding_symbol{ nullptr };
+        bool is_entry_point{ false };
+        std::vector<Statements::LabelDefinition*> contained_labels{};
+        std::optional<usize> occupied_stack_space{};   // total size of the needed stack space (in bytes)
+        std::optional<usize> parameters_stack_space{}; // size of all parameters (in bytes)
+        const Scope* surrounding_scope{ nullptr };
+
+        [[nodiscard]] bool is_exported() const {
+            return export_token.has_value();
+        }
     };
 
     void concatenate_programs(Program& first, Program&& second);
