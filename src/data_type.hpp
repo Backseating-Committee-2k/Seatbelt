@@ -382,17 +382,7 @@ namespace Parser {
 
 struct CustomTypePlaceholder : public DataType {
     explicit CustomTypePlaceholder(std::span<const Lexer::Tokens::Token> type_definition_tokens)
-        : type_definition_tokens{ type_definition_tokens } {
-        using std::ranges::views::transform;
-        fmt::print(
-                stderr, "creating custom type placeholder for \"{}\"\n",
-                fmt::join(
-                        type_definition_tokens
-                                | transform([](const auto& token) { return Error::token_location(token).view(); }),
-                        ""
-                )
-        );
-    }
+        : type_definition_tokens{ type_definition_tokens } { }
 
     [[nodiscard]] bool operator==(const DataType& other) const override {
         using Lexer::Tokens::Identifier;
