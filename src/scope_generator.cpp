@@ -164,7 +164,11 @@ namespace ScopeGenerator {
                 const auto global_scope = get_global_scope(surrounding_scope);
                 const auto maybe_absolute_scope = get_relative_scope(global_scope, name_expression);
                 if (maybe_absolute_scope) {
-                    result = get_symbols_in_scope<T>(*maybe_absolute_scope, name, true);
+                    /* if the current scope is a child scope of the fallback scope, then the symbol in question
+                     * does not have to be exported to be valid */
+                    const auto is_child_scope = surrounding_scope->is_child_of(*maybe_absolute_scope);
+                    const auto exported_only = not is_child_scope;
+                    result = get_symbols_in_scope<T>(*maybe_absolute_scope, name, exported_only);
                 }
             }
 
