@@ -462,6 +462,7 @@ namespace Parser {
             return VariantDefinition{
                 .name{ name },
                 .members{ std::move(members) },
+                .owning_custom_type_definition{ nullptr },
             };
         }
 
