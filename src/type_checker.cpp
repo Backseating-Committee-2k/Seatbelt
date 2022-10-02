@@ -1106,7 +1106,6 @@ namespace TypeChecker {
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {
             using std::ranges::find_if, std::ranges::views::transform;
-            usize offset = 0;
 
             for (auto& parameter : function_definition->parameters) {
                 assert(parameter.type_definition and "type definition must have been set before");
@@ -1124,11 +1123,6 @@ namespace TypeChecker {
                     }
                     parameter.data_type = type_container->from_type_definition(std::move(parameter.type_definition));
                 }
-
-                // TODO: test if we can delete this since the stack layout generator should generate the offsets
-                offset = Utils::round_up(offset, parameter.data_type->alignment());
-                parameter.variable_symbol->offset = offset;
-                offset += parameter.data_type->size();
             }
 
             auto signature = fmt::format(
