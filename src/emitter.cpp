@@ -492,7 +492,7 @@ namespace Emitter {
                             Error::token_location(attribute_name_expression->name_tokens.back()).view();
                     const auto attribute_offset = get_attribute_offset(struct_type, attribute_name);
 
-                    assert(struct_is_lvalue or not expression.is_lvalue() and "should have been caught before");
+                    assert((struct_is_lvalue or not expression.is_lvalue()) and "should have been caught before");
 
                     if (struct_is_lvalue and expression.is_rvalue()) {
                         /* Since the struct is an lvalue, the address of the struct has been pushed onto
