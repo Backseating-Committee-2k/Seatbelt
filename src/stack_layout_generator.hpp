@@ -96,6 +96,7 @@ namespace StackLayoutGenerator {
                                    for (const auto& parameter : function_definition->parameters) {
                                        size_of_parameters =
                                                Utils::round_up(size_of_parameters, parameter.data_type->alignment());
+                                       parameter.variable_symbol->offset = size_of_parameters;
                                        size_of_parameters += parameter.data_type->size();
                                    }
                                    auto visitor = StackLayoutGeneratorVisitor{ size_of_parameters };
