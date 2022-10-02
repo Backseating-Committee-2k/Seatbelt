@@ -347,7 +347,7 @@ struct CustomType final : public DataType {
     [[nodiscard]] usize alignment() const override {
         assert(not struct_types.empty());
         // this loop should get optimized away in release builds
-        for (const auto& type : struct_types) {
+        for ([[maybe_unused]] const auto& type : struct_types) {
             assert(type->alignment() <= WordSize);
         }
 
