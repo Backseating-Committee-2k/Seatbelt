@@ -605,8 +605,12 @@ namespace ScopeGenerator {
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
-        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>&) {
-            // TODO: something?
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
+            for (auto& [tag, struct_definition] : type_definition->alternatives) {
+                for (auto& attribute : struct_definition.members) {
+                    custom_type_lookup(attribute.type_definition.get(), type_definition->surrounding_scope);
+                }
+            }
         }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>& function_definition) {

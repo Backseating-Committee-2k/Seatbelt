@@ -16,6 +16,7 @@
 #include <limits>
 #include <ranges>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -262,6 +263,40 @@ namespace TypeChecker {
             return type_container->array_of(contained_placeholder_type, array_type->num_elements);
         }
 
+        if (type_definition->is_struct_type()) {
+            const auto struct_type = *(type_definition->as_struct_type());
+            auto attributes = std::vector<StructMember>{};
+            attributes.reserve(struct_type->members.size());
+            auto did_replace = false;
+            for (const auto& attribute : struct_type->members) {
+                const auto placeholder_type = get_data_type_of_placeholder(type_container, attribute.data_type);
+                if (placeholder_type != nullptr) {
+                    did_replace = true;
+                    // TODO: check if the strings in here could be moved
+                    attributes.push_back(
+                            StructMember{ .name{ attribute.name }, .data_type{ placeholder_type }, .offset{} }
+                    );
+                } else {
+                    // TODO: check if the strings in here could be moved
+                    attributes.push_back(
+                            StructMember{ .name{ attribute.name }, .data_type{ attribute.data_type }, .offset{} }
+                    );
+                }
+            }
+            if (not did_replace) {
+                return nullptr;
+            }
+            // TODO: check if the strings in here could be moved
+            return type_container->struct_of(
+                    struct_type->name, struct_type->namespace_qualifier, struct_type->custom_type_name,
+                    std::move(attributes)
+            );
+        }
+
+        if (type_definition->is_custom_type()) {
+            assert(false and "not implemented");
+        }
+
         const auto is_custom_type_placeholder =
                 (type_definition != nullptr and type_definition->is_custom_type_placeholder());
         if (is_custom_type_placeholder) {
@@ -277,6 +312,12 @@ namespace TypeChecker {
                 assert(false and "unreachable");
             }
         }
+
+        if (type_definition->is_primitive_type()) {
+            return nullptr;
+        }
+
+        assert(false and "unreachable");
         return nullptr;
     }
 
@@ -643,6 +684,12 @@ namespace TypeChecker {
                                                 (parameter_definition->binding_mutability == Mutability::Mutable
                                                          ? ValueType::MutableLValue
                                                          : ValueType::ConstLValue);
+                                        const auto placeholder_type = get_data_type_of_placeholder(
+                                                type_container, parameter_definition->data_type
+                                        );
+                                        if (placeholder_type != nullptr) {
+                                            return placeholder_type;
+                                        }
                                         return parameter_definition->data_type;
                                     },
                                     [](std::monostate) -> DataType* {
@@ -765,6 +812,7 @@ namespace TypeChecker {
 
                 const auto& struct_type = **(expression.lhs->data_type->as_struct_type());
                 const auto& struct_attributes = struct_type.members;
+
                 const auto find_iterator =
                         std::find_if(struct_attributes.cbegin(), struct_attributes.cend(), [&](const auto& attribute) {
                             return attribute.name
@@ -1040,6 +1088,116 @@ namespace TypeChecker {
 
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
+        [[nodiscard]] bool has_cyclic_dependency(
+                const Parser::VariantDefinition* struct_definition,
+                std::unordered_set<const Parser::VariantDefinition*>& visited_struct_definitions
+        ) const {
+            // first put the current struct definition into the set -- if its already there, we have found a cycle
+            if (visited_struct_definitions.contains(struct_definition)) {
+                return true;
+            }
+            visited_struct_definitions.insert(struct_definition);
+
+            // now check all attribute types of the struct and "follow the link" if they contain structs themselves
+            for (const auto& attribute : struct_definition->members) {
+                if (attribute.type_definition->is_custom_type_placeholder()) {
+                    const auto placeholder_type = *(attribute.type_definition->as_custom_type_placeholder());
+                    if (placeholder_type->struct_definition != nullptr) {
+                        return has_cyclic_dependency(placeholder_type->struct_definition, visited_struct_definitions);
+                    } else if (placeholder_type->custom_type_definition != nullptr) {
+                        assert(false and "not implemented");
+                    } else {
+                        assert(false and "unreachable");
+                    }
+                }
+            }
+            return false;
+        }
+
+        [[nodiscard]] bool contains_placeholder(const DataType* type_definition) const {
+            assert(type_definition != nullptr);
+            if (type_definition->is_primitive_type()) {
+                return false;
+            }
+            if (type_definition->is_custom_type_placeholder()) {
+                return true;
+            }
+            if (type_definition->is_pointer_type()) {
+                return contains_placeholder((*(type_definition->as_pointer_type()))->contained);
+            }
+            if (type_definition->is_array_type()) {
+                return contains_placeholder((*(type_definition->as_array_type()))->contained);
+            }
+            if (type_definition->is_function_pointer_type()) {
+                const auto function_pointer_type = *(type_definition->as_function_pointer_type());
+                for (const auto parameter_type : function_pointer_type->parameter_types) {
+                    if (contains_placeholder(parameter_type)) {
+                        return true;
+                    }
+                }
+                return contains_placeholder(function_pointer_type->return_type);
+            }
+            assert(false and "unreachable");
+            return false;
+        }
+
+        /**
+         * This function makes a type known to the type system, that contains a placeholder. Example: A type like
+         * ->S (containing the placeholder for S) will result in an existing data type ("existing" meaning that its
+         * present in the type container) that corresponds to a pointer to a placeholder to S.
+         * Important: This type is not ready to be used in later stages of the compilation, since placeholder types
+         * have to be replaced by their "real" counterparts.
+         *
+         * @param type_definition The definition of a type that contains a placeholder type.
+         * @return A pointer to the corresponding type that is now known to the type container.
+         */
+        [[nodiscard]] DataType* data_type_from_definition_with_placeholder(const DataType* type_definition) const {
+            // only placeholders for structs and custom types are allowed here
+            assert(not type_definition->is_struct_type());
+            assert(not type_definition->is_custom_type());
+
+            if (type_definition->is_primitive_type()) {
+                const auto primitive_type_definition = *(type_definition->as_primitive_type());
+                return type_container->from_type_definition(
+                        std::make_unique<PrimitiveType>(primitive_type_definition->type)
+                );
+            }
+            if (type_definition->is_custom_type_placeholder()) {
+                const auto placeholder_definition = *(type_definition->as_custom_type_placeholder());
+                auto result = std::make_unique<CustomTypePlaceholder>(placeholder_definition->type_definition_tokens);
+                result->struct_definition = placeholder_definition->struct_definition;
+                result->custom_type_definition = placeholder_definition->custom_type_definition;
+                return type_container->from_type_definition(std::move(result));
+            }
+            if (type_definition->is_pointer_type()) {
+                const auto pointer_type_definition = *(type_definition->as_pointer_type());
+                return type_container->pointer_to(
+                        data_type_from_definition_with_placeholder(pointer_type_definition->contained),
+                        pointer_type_definition->binding_mutability
+                );
+            }
+            if (type_definition->is_array_type()) {
+                const auto array_type_definition = *(type_definition->as_array_type());
+                return type_container->array_of(
+                        data_type_from_definition_with_placeholder(array_type_definition->contained),
+                        array_type_definition->num_elements
+                );
+            }
+            if (type_definition->is_function_pointer_type()) {
+                const auto function_pointer_type_definition = *(type_definition->as_function_pointer_type());
+                auto parameter_types = std::vector<DataType*>{};
+                parameter_types.reserve(function_pointer_type_definition->parameter_types.size());
+                for (const auto& parameter : function_pointer_type_definition->parameter_types) {
+                    parameter_types.push_back(data_type_from_definition_with_placeholder(parameter));
+                }
+                const auto return_type =
+                        data_type_from_definition_with_placeholder(function_pointer_type_definition->return_type);
+                return type_container->function_pointer(std::move(parameter_types), return_type);
+            }
+            assert(false and "unreachable");
+            return nullptr;
+        }
+
         void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
             assert(not type_definition->alternatives.empty());
             assert(type_definition->name.has_value());
@@ -1052,26 +1210,37 @@ namespace TypeChecker {
 
             // iterate variants
             for (auto& [tag, struct_definition] : type_definition->alternatives) {
+                auto visited_struct_definitions = std::unordered_set<const Parser::VariantDefinition*>{};
+                const auto cycle_detected = has_cyclic_dependency(&struct_definition, visited_struct_definitions);
+                if (cycle_detected) {
+                    Error::error(struct_definition.name, "cyclic type definition detected");
+                }
+
                 auto member_types = std::vector<StructMember>{};
                 member_types.reserve(struct_definition.members.size());
 
-                usize offset = 0;
+                // iterate attributes of current struct
+                for (auto& attribute : struct_definition.members) {
+                    /* We do not check the types of the attributes now, because we first have to make
+                     * all types known to the type system, since one struct type could contain a member of
+                     * another struct type, that has not been seen yet */
 
-                // iterate members of current variant
-                for (auto& member : struct_definition.members) {
-                    if (not type_container->is_defined(*(member.type_definition))) {
-                        // TODO: improve error message by pointing to the data type instead of the name
-                        Error::error(
-                                member.name,
-                                fmt::format("use of undeclared type \"{}\"", member.type_definition->to_string())
-                        );
+                    const auto has_placeholder_inside = contains_placeholder(attribute.type_definition.get());
+                    if (not has_placeholder_inside) {
+                        if (not type_container->is_defined(*(attribute.type_definition))) {
+                            // TODO: improve error message by pointing to the data type instead of the name
+                            Error::error(
+                                    attribute.name,
+                                    fmt::format("use of undeclared type \"{}\"", attribute.type_definition->to_string())
+                            );
+                        }
+                        attribute.type = type_container->from_type_definition(std::move(attribute.type_definition));
+                    } else {
+                        attribute.type = data_type_from_definition_with_placeholder(attribute.type_definition.get());
                     }
-                    member.type = type_container->from_type_definition(std::move(member.type_definition));
-                    offset = Utils::round_up(offset, member.type->alignment());
-                    member_types.push_back(StructMember{ .name{ std::string{ member.name.location.view() } },
-                                                         .data_type{ member.type },
-                                                         .offset{ offset } });
-                    offset += member.type->size();
+                    member_types.push_back(StructMember{ .name{ std::string{ attribute.name.location.view() } },
+                                                         .data_type{ attribute.type },
+                                                         .offset{} });
                 }
 
                 const auto struct_data_type = type_container->from_type_definition(std::make_unique<StructType>(
@@ -1201,6 +1370,42 @@ namespace TypeChecker {
         const Scope* global_scope;
     };
 
+    static void replace_placeholder_types(Parser::Program& program, TypeContainer& type_container);
+
+    /** Visits all custom type definitions and replaces placeholder types within them
+     * */
+    struct PlaceholderReplacementVisitor {
+        explicit PlaceholderReplacementVisitor(TypeContainer* type_container) : type_container{ type_container } { }
+
+        void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
+
+        void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
+            for (auto& [tag, struct_definition] : type_definition->alternatives) {
+                {
+                    const auto placeholder_type =
+                            get_data_type_of_placeholder(type_container, struct_definition.data_type);
+                    if (placeholder_type != nullptr) {
+                        struct_definition.data_type = placeholder_type;
+                    }
+                }
+                for (auto& attribute : struct_definition.members) {
+                    const auto placeholder_type = get_data_type_of_placeholder(type_container, attribute.type);
+                    if (placeholder_type != nullptr) {
+                        attribute.type = placeholder_type;
+                    }
+                }
+            }
+        }
+
+        void operator()(std::unique_ptr<Parser::FunctionDefinition>&) { }
+
+        void operator()(std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
+            replace_placeholder_types(namespace_definition->contents, *type_container);
+        }
+
+        TypeContainer* type_container;
+    };
+
     static void visit_custom_type_definitions(Parser::Program& program, TypeContainer& type_container) {
         auto visitor = CustomTypeDefinitionVisitor{ &type_container };
         for (auto& top_level_statement : program) {
@@ -1244,9 +1449,18 @@ namespace TypeChecker {
         }
     }
 
+    static void replace_placeholder_types(Parser::Program& program, TypeContainer& type_container) {
+        auto visitor = PlaceholderReplacementVisitor{ &type_container };
+        for (auto& top_level_statement : program) {
+            std::visit(visitor, top_level_statement);
+        }
+    }
+
     void check(Parser::Program& program, TypeContainer& type_container, const Scope& global_scope) {
         // first we have to look at all type definitions to make them available to the rest of the code
         visit_custom_type_definitions(program, type_container);
+
+        replace_placeholder_types(program, type_container);
 
         // then we check the types of the actual function definitions
         visit_function_definitions(program, type_container, global_scope);

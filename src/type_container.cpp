@@ -78,6 +78,17 @@ bool TypeContainer::is_defined(DataType& data_type) const {
     return from_type_definition(std::make_unique<PointerType>(pointee_type, binding_mutability));
 }
 
+[[nodiscard]] DataType* TypeContainer::struct_of(
+        std::string name,
+        std::string namespace_qualifier,
+        std::string custom_type_name,
+        std::vector<StructMember> attributes
+) {
+    return from_type_definition(std::make_unique<StructType>(
+            std::move(name), std::move(namespace_qualifier), std::move(custom_type_name), std::move(attributes)
+    ));
+}
+
 [[nodiscard]] DataType* TypeContainer::array_of(DataType* contained, usize num_elements) {
     return from_type_definition(std::make_unique<ArrayType>(contained, num_elements));
 }
