@@ -108,6 +108,19 @@ namespace StackLayoutGenerator {
                                 [](const std::unique_ptr<Parser::NamespaceDefinition>& namespace_definition) {
                                     generate_stack_layout(namespace_definition->contents);
                                 },
+                                [](const std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
+                                    for (auto& [tag, struct_definition] : type_definition->alternatives) {
+                                        usize offset = 0;
+                                        assert(struct_definition.data_type->is_struct_type());
+                                        const auto struct_type = *(struct_definition.data_type->as_struct_type());
+                                        for (usize i = 0; i < struct_definition.members.size(); ++i) {
+                                            const auto& attribute = struct_definition.members[i];
+                                            offset = Utils::round_up(offset, attribute.type->alignment());
+                                            struct_type->members[i].offset = offset;
+                                            offset += attribute.type->size();
+                                        }
+                                    }
+                                },
                                 [](const auto&) {} },
                     top_level_statement
             );

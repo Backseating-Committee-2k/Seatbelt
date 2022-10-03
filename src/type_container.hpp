@@ -11,6 +11,7 @@
 #include <vector>
 
 struct DataType;
+struct StructMember;
 
 class TypeContainer {
 public:
@@ -20,6 +21,12 @@ public:
     void register_type(std::unique_ptr<DataType> data_type);
     [[nodiscard]] bool is_defined(DataType& data_type) const;
     [[nodiscard]] DataType* function_pointer(std::vector<DataType*> parameter_types, DataType* return_type);
+    [[nodiscard]] DataType* struct_of(
+            std::string name,
+            std::string namespace_qualifier,
+            std::string custom_type_name,
+            std::vector<StructMember> attributes
+    );
     [[nodiscard]] DataType* pointer_to(DataType* pointee_type, Mutability binding_mutability);
     [[nodiscard]] DataType* array_of(DataType* contained, usize num_elements);
 

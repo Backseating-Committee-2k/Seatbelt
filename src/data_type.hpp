@@ -87,6 +87,10 @@ public:
         return {};
     }
 
+    [[nodiscard]] virtual std::optional<StructType*> as_struct_type() {
+        return {};
+    }
+
     [[nodiscard]] virtual std::optional<const CustomType*> as_custom_type() const {
         return {};
     }
@@ -248,6 +252,10 @@ struct StructType final : public DataType {
         return this;
     }
 
+    [[nodiscard]] std::optional<StructType*> as_struct_type() override {
+        return this;
+    }
+
     [[nodiscard]] bool operator==(const DataType& other) const override {
         if (const auto other_pointer = dynamic_cast<const StructType*>(&other)) {
             return name == other_pointer->name and namespace_qualifier == other_pointer->namespace_qualifier
@@ -387,18 +395,31 @@ struct CustomTypePlaceholder : public DataType {
     [[nodiscard]] bool operator==(const DataType& other) const override {
         using Lexer::Tokens::Identifier;
         if (const auto other_pointer = dynamic_cast<const CustomTypePlaceholder*>(&other)) {
-            if (type_definition_tokens.size() != other_pointer->type_definition_tokens.size()) {
-                return false;
-            }
-            for (usize i = 0; i < type_definition_tokens.size(); ++i) {
-                assert(std::holds_alternative<Identifier>(type_definition_tokens[i]));
-                assert(std::holds_alternative<Identifier>(other_pointer->type_definition_tokens[i]));
-                if (std::get<Identifier>(type_definition_tokens[i]).location.view()
-                    != std::get<Identifier>(other_pointer->type_definition_tokens[i]).location.view()) {
+            const auto lookup_already_happened =
+                    ((struct_definition != nullptr or custom_type_definition != nullptr)
+                     and (other_pointer->struct_definition != nullptr
+                          or other_pointer->custom_type_definition != nullptr));
+            if (lookup_already_happened) {
+                if (struct_definition != nullptr) {
+                    return struct_definition == other_pointer->struct_definition;
+                }
+                if (custom_type_definition != nullptr) {
+                    return custom_type_definition == other_pointer->custom_type_definition;
+                }
+                assert(false and "unreachable");
+            } else {
+                // lookup has not happened yet, therefore we only compare the types by looking at their names
+                if (type_definition_tokens.size() != other_pointer->type_definition_tokens.size()) {
                     return false;
                 }
+                for (usize i = 0; i < type_definition_tokens.size(); ++i) {
+                    if (Error::token_location(type_definition_tokens[i]).view()
+                        != Error::token_location(other_pointer->type_definition_tokens[i]).view()) {
+                        return false;
+                    }
+                }
+                return true;
             }
-            return true;
         }
         return false;
     }
