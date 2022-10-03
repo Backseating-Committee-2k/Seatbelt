@@ -260,23 +260,31 @@ namespace ScopeGenerator {
          */
     static bool custom_type_lookup(DataType* const type_definition, const Scope* const surrounding_scope) {
         // type definition may be a nullptr (when used during auto type-deduction)
-        if (type_definition != nullptr and type_definition->is_pointer_type()) {
-            const auto pointer_type = *(type_definition->as_pointer_type());
-            return custom_type_lookup(pointer_type->contained, surrounding_scope);
-        }
 
-        if (type_definition != nullptr and type_definition->is_function_pointer_type()) {
-            const auto function_pointer_type = *(type_definition->as_function_pointer_type());
-            bool result = true;
-            for (const auto& parameter_type : function_pointer_type->parameter_types) {
-                if (not custom_type_lookup(parameter_type, surrounding_scope)) {
+        if (type_definition != nullptr) {
+            if (type_definition->is_pointer_type()) {
+                const auto pointer_type = *(type_definition->as_pointer_type());
+                return custom_type_lookup(pointer_type->contained, surrounding_scope);
+            }
+
+            if (type_definition->is_function_pointer_type()) {
+                const auto function_pointer_type = *(type_definition->as_function_pointer_type());
+                bool result = true;
+                for (const auto& parameter_type : function_pointer_type->parameter_types) {
+                    if (not custom_type_lookup(parameter_type, surrounding_scope)) {
+                        result = false;
+                    }
+                }
+                if (not custom_type_lookup(function_pointer_type->return_type, surrounding_scope)) {
                     result = false;
                 }
+                return result;
             }
-            if (not custom_type_lookup(function_pointer_type->return_type, surrounding_scope)) {
-                result = false;
+
+            if (type_definition->is_array_type()) {
+                const auto array_type = *(type_definition->as_array_type());
+                return custom_type_lookup(array_type->contained, surrounding_scope);
             }
-            return result;
         }
 
         if (type_definition == nullptr or not type_definition->is_custom_type_placeholder()) {

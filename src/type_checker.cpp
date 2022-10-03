@@ -253,6 +253,15 @@ namespace TypeChecker {
             return nullptr;
         }
 
+        if (type_definition->is_array_type()) {
+            const auto array_type = *(type_definition->as_array_type());
+            const auto contained_placeholder_type = get_data_type_of_placeholder(type_container, array_type->contained);
+            if (contained_placeholder_type == nullptr) {
+                return nullptr;
+            }
+            return type_container->array_of(contained_placeholder_type, array_type->num_elements);
+        }
+
         const auto is_custom_type_placeholder =
                 (type_definition != nullptr and type_definition->is_custom_type_placeholder());
         if (is_custom_type_placeholder) {
@@ -784,15 +793,11 @@ namespace TypeChecker {
                     // the result also is an rvalue
                     expression.value_type = ValueType::RValue;
                 } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
-                    // for index operators, the left operand must be an lvalue
-                    if (not expression.lhs->is_lvalue()) {
-                        Error::error(*expression.lhs, "index operator required left operand to be an lvalue");
-                    }
-                    // the right operator must be an rvalue, though
-                    expression.rhs->value_type = ValueType::RValue;
-
-                    // the result of the index operator is an lvalue (mutability is inherited from the left operand)
+                    // for index operators, the whole expression inherits its value type from the left operand
                     expression.value_type = expression.lhs->value_type;
+
+                    // the right operator must be an rvalue
+                    expression.rhs->value_type = ValueType::RValue;
                 } else {
                     assert(false and "not implemented");
                 }
