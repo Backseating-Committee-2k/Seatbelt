@@ -582,31 +582,72 @@ namespace Emitter {
                     }
                 }
             } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
-                assert(expression.lhs->is_lvalue());
                 assert(expression.lhs->data_type->is_array_type());
                 bssembly.add(Comment{ "evaluate index of index operator" });
                 expression.rhs->accept(*this);
                 bssembly.add(Instruction{ POP, { R1 }, "get index value" });
-                bssembly.add(Instruction{
-                        COPY,
-                        {Immediate{ (*(expression.lhs->data_type->as_array_type()))->contained->size() }, R2},
-                        "get size of contained data type"
-                });
-                bssembly.add(Instruction{
-                        MULT,
-                        {R1, R2, R4, R3},
-                        "multiply index with size of contained data type"
-                });
-                bssembly.add(Instruction{ POP, { R1 }, "get address of array" });
-                bssembly.add(Instruction{
-                        ADD,
-                        {R1, R3, R1},
-                        "get address of array element"
-                });
-                if (expression.is_lvalue()) {
-                    bssembly.add(Instruction{ PUSH, { R1 }, "push address of array element" });
+
+                // R1 holds the index value
+
+                if (expression.lhs->is_lvalue()) {
+                    /* The address of the array has been pushed onto the stack. We now have to calculate
+                     * the offset of the element relative to the array start and then push the offset
+                     * onto the stack. */
+                    const auto contained_size = (*(expression.lhs->data_type->as_array_type()))->contained->size();
+                    bssembly.add(Instruction{
+                            COPY,
+                            {Immediate{ contained_size }, R2},
+                            "get size of contained data type"
+                    });
+                    bssembly.add(Instruction{
+                            MULT,
+                            {R1, R2, R4, R3},
+                            "multiply index with size of contained data type"
+                    });
+                    bssembly.add(Instruction{ POP, { R1 }, "get address of array" });
+                    bssembly.add(Instruction{
+                            ADD,
+                            {R1, R3, R1},
+                            "get address of array element"
+                    });
+                    if (expression.is_lvalue()) {
+                        bssembly.add(Instruction{ PUSH, { R1 }, "push address of array element" });
+                    } else {
+                        bssembly.push_value_onto_stack(R1, expression.data_type);
+                    }
+                } else if (expression.lhs->is_rvalue() and expression.is_rvalue()) {
+                    /* The whole array has been pushed onto the stack (in expanded form). We have to calculate
+                     * the address of the member we want to access and store this address temporarily in a register.
+                     * Then we decrement the stack pointer to discard the array data. We then push the one array
+                     * element we need (pointed to by the saved address) onto the stack. */
+                    const auto contained_size_when_pushed =
+                            (*(expression.lhs->data_type->as_array_type()))->contained->size_when_pushed();
+                    bssembly.add(Instruction{
+                            COPY,
+                            {Immediate{ contained_size_when_pushed }, R2},
+                            "get size of contained data type in expanded form"
+                    });
+                    bssembly.add(Instruction{
+                            MULT,
+                            {R1, R2, R4, R3},
+                            "multiply index with expanded size of contained data type"
+                    });
+                    const auto total_array_size = expression.lhs->data_type->size_when_pushed();
+                    bssembly.add(Instruction{
+                            SUB,
+                            {SP, Immediate{ total_array_size }, SP},
+                            "decrement stack pointer to discard array"
+                    });
+                    bssembly.add(Instruction{
+                            ADD,
+                            {SP, R3, R3},
+                            "calculate address of array element inside the discarded stack"
+                    });
+                    bssembly.push_onto_stack_from_stack_pointer(
+                            R3, (*(expression.lhs->data_type->as_array_type()))->contained, 0
+                    );
                 } else {
-                    bssembly.push_value_onto_stack(R1, expression.data_type);
+                    assert(false and "unreachable");
                 }
             } else {
                 assert(false and "not implemented");
