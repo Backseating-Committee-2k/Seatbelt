@@ -584,6 +584,7 @@ namespace ScopeGenerator {
         }
 
         void visit(Parser::Expressions::TypeSizeExpression& expression) override {
+            custom_type_lookup(expression.type_definition.get(), scope);
             expression.surrounding_scope = scope;
         }
 
