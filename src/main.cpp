@@ -373,7 +373,7 @@ int main(int, char** argv) {
             );
         }
     } else if (command_line_parser.get<'v'>()) {
-        fmt::print(stderr, "optimizations were disabled");
+        fmt::print(stderr, "optimizations were disabled\n");
     }
 
     if (command_line_parser.was_provided<'o'>()) {
