@@ -384,7 +384,7 @@ struct CustomType final : public DataType {
 };
 
 namespace Parser {
-    struct VariantDefinition;
+    struct StructDefinition;
     struct CustomTypeDefinition;
 } // namespace Parser
 
@@ -464,7 +464,7 @@ struct CustomTypePlaceholder : public DataType {
     }
 
     std::span<const Lexer::Tokens::Token> type_definition_tokens;
-    const Parser::VariantDefinition* struct_definition{ nullptr };
+    const Parser::StructDefinition* struct_definition{ nullptr };
     const Parser::CustomTypeDefinition* custom_type_definition{ nullptr };
 };
 

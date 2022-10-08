@@ -429,19 +429,19 @@ namespace Parser {
                     .body{ std::move(body) } });
         }
 
-        [[nodiscard]] VariantMemberDefinition variant_member_definition() {
+        [[nodiscard]] StructAttributeDefinition struct_attribute_definition() {
             const auto name = consume<Identifier>("expected field name");
             consume<Colon>("expected \":\"");
             const auto type_tokens_start = &current();
             auto type = data_type();
             const auto type_tokens_end = &current();
             const auto type_definition_tokens = std::span<const Token>{ type_tokens_start, type_tokens_end };
-            return VariantMemberDefinition{ .name{ name },
+            return StructAttributeDefinition{ .name{ name },
                                             .type_definition{ std::move(type) },
                                             .type_definition_tokens{ type_definition_tokens } };
         }
 
-        [[nodiscard]] VariantDefinition variant_definition() {
+        [[nodiscard]] StructDefinition struct_definition() {
             using std::ranges::find_if;
             const auto name = consume<Identifier>("variant identifier expected");
             if (not is_valid_custom_type_name(name)) {
@@ -452,9 +452,9 @@ namespace Parser {
                 );
             }
             consume<LeftCurlyBracket>("expected \"{\"");
-            std::vector<VariantMemberDefinition> members;
+            std::vector<StructAttributeDefinition> members;
             while (not current_is<RightCurlyBracket>()) {
-                auto attribute = variant_member_definition();
+                auto attribute = struct_attribute_definition();
                 const auto find_iterator = find_if(members, [&](const auto& current_attribute) {
                     return attribute.name.location.view() == current_attribute.name.location.view();
                 });
@@ -473,9 +473,9 @@ namespace Parser {
                 }
             }
             consume<RightCurlyBracket>("expected \"}\"");
-            return VariantDefinition{
+            return StructDefinition{
                 .name{ name },
-                .members{ std::move(members) },
+                .attributes{ std::move(members) },
                 .owning_custom_type_definition{ nullptr },
             };
         }
@@ -495,7 +495,7 @@ namespace Parser {
             const auto restricted_token = maybe_consume<Restricted>();
             const auto left_curly_bracket = consume<LeftCurlyBracket>("expected \"{\"");
 
-            auto alternatives = std::map<u32, VariantDefinition>{};
+            auto struct_definitions = std::map<u32, StructDefinition>{};
 
             u32 next_tag = 0;
             bool has_custom_tags = false;
@@ -512,24 +512,24 @@ namespace Parser {
             result->namespace_name = std::move(namespace_name);
 
             while (not current_is<RightCurlyBracket>()) {
-                auto variant = variant_definition();
+                auto struct_ = struct_definition();
                 const auto has_custom_tag = static_cast<bool>(maybe_consume<Equals>());
                 u32 current_tag = next_tag;
                 if (has_custom_tag) {
                     has_custom_tags = true;
                     const auto tag_literal = consume<IntegerLiteral>("expected tag literal");
                     current_tag = get_number_from_integer_literal<u32>(tag_literal).value;
-                    if (alternatives.contains(current_tag)) {
+                    if (struct_definitions.contains(current_tag)) {
                         Error::error(tag_literal, "duplicate tag literal");
                     }
                 } else {
                     has_automatic_tags = true;
                 }
-                if (alternatives.contains(current_tag)) {
+                if (struct_definitions.contains(current_tag)) {
                     Error::error(current(), fmt::format("automatic tag \"{}\" is not applicable", current_tag));
                 }
-                alternatives[current_tag] = std::move(variant);
-                alternatives[current_tag].owning_custom_type_definition = result.get();
+                struct_definitions[current_tag] = std::move(struct_);
+                struct_definitions[current_tag].owning_custom_type_definition = result.get();
                 next_tag = current_tag + 1;
 
                 if (not maybe_consume<Comma>()) {
@@ -540,7 +540,7 @@ namespace Parser {
             const auto right_curly_bracket = consume<RightCurlyBracket>("expected \"}\"");
             result->right_curly_bracket = right_curly_bracket;
 
-            if (alternatives.empty()) {
+            if (struct_definitions.empty()) {
                 Error::error(right_curly_bracket, "empty custom types are not allowed");
             }
 
@@ -551,7 +551,7 @@ namespace Parser {
                 );
             }
 
-            result->alternatives = std::move(alternatives);
+            result->struct_definitions = std::move(struct_definitions);
 
             return result;
         }

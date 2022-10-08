@@ -600,35 +600,35 @@ namespace TypeChecker {
              * check if the struct literal matches the type it refers to
              * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
             const auto struct_definition = expression.definition;
-            for (usize i = 0; i < std::min(expression.values.size(), struct_definition->members.size()); ++i) {
+            for (usize i = 0; i < std::min(expression.values.size(), struct_definition->attributes.size()); ++i) {
                 const auto& literal_member = expression.values[i];
-                const auto& struct_member = struct_definition->members[i];
+                const auto& struct_member = struct_definition->attributes[i];
                 if (literal_member.field_name.location.view() != struct_member.name.location.view()) {
                     Error::error(
                             literal_member.field_name,
                             fmt::format(
                                     R"(expected initializer for attribute "{}: {}" (got "{}: {}"))",
-                                    struct_member.name.location.view(), struct_member.type->to_string(),
+                                    struct_member.name.location.view(), struct_member.data_type->to_string(),
                                     literal_member.field_name.location.view(),
                                     literal_member.field_value->data_type->to_string()
                             )
                     );
                 }
-                if (literal_member.field_value->data_type != struct_member.type) {
+                if (literal_member.field_value->data_type != struct_member.data_type) {
                     // TODO: improve error message by pointing to the data type instead of the initializer name
                     Error::error(
                             literal_member.field_name,
                             fmt::format(
                                     R"(type mismatch: expected "{}" for attribute "{}" (got "{}"))",
-                                    struct_member.type->to_string(), literal_member.field_name.location.view(),
+                                    struct_member.data_type->to_string(), literal_member.field_name.location.view(),
                                     literal_member.field_value->data_type->to_string()
                             )
                     );
                 }
             }
 
-            if (expression.values.size() > struct_definition->members.size()) {
-                const auto& first_excess_value = expression.values[struct_definition->members.size()];
+            if (expression.values.size() > struct_definition->attributes.size()) {
+                const auto& first_excess_value = expression.values[struct_definition->attributes.size()];
                 Error::error(
                         first_excess_value.field_name,
                         fmt::format(
@@ -636,9 +636,9 @@ namespace TypeChecker {
                                 first_excess_value.field_name.location.view()
                         )
                 );
-            } else if (expression.values.size() < struct_definition->members.size()) {
+            } else if (expression.values.size() < struct_definition->attributes.size()) {
                 using std::ranges::views::transform, std::ranges::views::drop;
-                const auto one_missing = (expression.values.size() + 1 == struct_definition->members.size());
+                const auto one_missing = (expression.values.size() + 1 == struct_definition->attributes.size());
                 Error::error(
                         expression.type_name,
                         fmt::format(
@@ -647,11 +647,11 @@ namespace TypeChecker {
                                 one_missing ? "an initializer" : "initializers",
                                 one_missing ? "attribute" : "attributes",
                                 fmt::join(
-                                        struct_definition->members | drop(expression.values.size())
+                                        struct_definition->attributes | drop(expression.values.size())
                                                 | transform([](const auto& initializer) {
                                                       return fmt::format(
                                                               "\"{}: {}\"", initializer.name.location.view(),
-                                                              initializer.type->to_string()
+                                                              initializer.data_type->to_string()
                                                       );
                                                   }),
                                         ", "
@@ -1099,8 +1099,8 @@ namespace TypeChecker {
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         [[nodiscard]] bool has_cyclic_dependency(
-                const Parser::VariantDefinition* struct_definition,
-                std::unordered_set<const Parser::VariantDefinition*>& visited_struct_definitions
+                const Parser::StructDefinition* struct_definition,
+                std::unordered_set<const Parser::StructDefinition*>& visited_struct_definitions
         ) const {
             // first put the current struct definition into the set -- if its already there, we have found a cycle
             if (visited_struct_definitions.contains(struct_definition)) {
@@ -1109,7 +1109,7 @@ namespace TypeChecker {
             visited_struct_definitions.insert(struct_definition);
 
             // now check all attribute types of the struct and "follow the link" if they contain structs themselves
-            for (const auto& attribute : struct_definition->members) {
+            for (const auto& attribute : struct_definition->attributes) {
                 if (attribute.type_definition->is_custom_type_placeholder()) {
                     const auto placeholder_type = *(attribute.type_definition->as_custom_type_placeholder());
                     if (placeholder_type->struct_definition != nullptr) {
@@ -1212,31 +1212,31 @@ namespace TypeChecker {
         }
 
         void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
-            assert(not type_definition->alternatives.empty());
+            assert(not type_definition->struct_definitions.empty());
             assert(type_definition->name.has_value());
 
             const auto namespace_qualifier =
                     get_absolute_namespace_qualifier(*(type_definition->surrounding_scope->surrounding_namespace));
 
             auto struct_types = std::vector<const StructType*>{};
-            struct_types.reserve(type_definition->alternatives.size());
+            struct_types.reserve(type_definition->struct_definitions.size());
 
             // first check for dependency cycles
-            for (auto& [tag, struct_definition] : type_definition->alternatives) {
-                auto visited_struct_definitions = std::unordered_set<const Parser::VariantDefinition*>{};
+            for (auto& [tag, struct_definition] : type_definition->struct_definitions) {
+                auto visited_struct_definitions = std::unordered_set<const Parser::StructDefinition*>{};
                 const auto cycle_detected = has_cyclic_dependency(&struct_definition, visited_struct_definitions);
                 if (cycle_detected) {
                     Error::error(struct_definition.name, "cyclic type definition detected");
                 }
             }
 
-            // iterate variants
-            for (auto& [tag, struct_definition] : type_definition->alternatives) {
+            // iterate struct definitions
+            for (auto& [tag, struct_definition] : type_definition->struct_definitions) {
                 auto member_types = std::vector<StructMember>{};
-                member_types.reserve(struct_definition.members.size());
+                member_types.reserve(struct_definition.attributes.size());
 
                 // iterate attributes of current struct
-                for (auto& attribute : struct_definition.members) {
+                for (auto& attribute : struct_definition.attributes) {
                     /* We do not check the types of the attributes now, because we first have to make
                      * all types known to the type system, since one struct type could contain a member of
                      * another struct type, that has not been seen yet */
@@ -1250,12 +1250,14 @@ namespace TypeChecker {
                                     fmt::format("use of undeclared type \"{}\"", attribute.type_definition->to_string())
                             );
                         }
-                        attribute.type = type_container->from_type_definition(std::move(attribute.type_definition));
+                        attribute.data_type =
+                                type_container->from_type_definition(std::move(attribute.type_definition));
                     } else {
-                        attribute.type = data_type_from_definition_with_placeholder(attribute.type_definition.get());
+                        attribute.data_type =
+                                data_type_from_definition_with_placeholder(attribute.type_definition.get());
                     }
                     member_types.push_back(StructMember{ .name{ std::string{ attribute.name.location.view() } },
-                                                         .data_type{ attribute.type },
+                                                         .data_type{ attribute.data_type },
                                                          .offset{} });
                 }
 
@@ -1396,7 +1398,7 @@ namespace TypeChecker {
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
-            for (auto& [tag, struct_definition] : type_definition->alternatives) {
+            for (auto& [tag, struct_definition] : type_definition->struct_definitions) {
                 {
                     const auto placeholder_type =
                             get_data_type_of_placeholder(type_container, struct_definition.data_type);
@@ -1404,10 +1406,10 @@ namespace TypeChecker {
                         struct_definition.data_type = placeholder_type;
                     }
                 }
-                for (auto& attribute : struct_definition.members) {
-                    const auto placeholder_type = get_data_type_of_placeholder(type_container, attribute.type);
+                for (auto& attribute : struct_definition.attributes) {
+                    const auto placeholder_type = get_data_type_of_placeholder(type_container, attribute.data_type);
                     if (placeholder_type != nullptr) {
-                        attribute.type = placeholder_type;
+                        attribute.data_type = placeholder_type;
                     }
                 }
             }
