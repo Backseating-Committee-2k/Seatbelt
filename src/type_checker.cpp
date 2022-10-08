@@ -632,7 +632,7 @@ namespace TypeChecker {
                 Error::error(
                         first_excess_value.field_name,
                         fmt::format(
-                                R"(struct "{}" has no attribute "{}")", struct_definition->name.location.view(),
+                                R"(too many initializers for struct "{}")", struct_definition->name.location.view(),
                                 first_excess_value.field_name.location.view()
                         )
                 );
