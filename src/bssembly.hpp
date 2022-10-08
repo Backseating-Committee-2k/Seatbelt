@@ -7,9 +7,11 @@
 #include "data_type.hpp"
 #include "overloaded.hpp"
 #include "types.hpp"
+#include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <iterator>
 #include <optional>
 #include <ranges>
 #include <string>
@@ -738,11 +740,8 @@ namespace Bssembler {
             return Bssembly{ result };
         }
 
-        Bssembly& operator+=(const Bssembly& other) {
-            m_instructions.reserve(m_instructions.size() + other.m_instructions.size());
-            for (const auto& instruction : other.m_instructions) {
-                m_instructions.push_back(instruction);
-            }
+        Bssembly& operator+=(Bssembly&& other) {
+            std::ranges::move(other.m_instructions, std::back_inserter(m_instructions));
             return *this;
         }
 
