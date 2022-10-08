@@ -561,6 +561,8 @@ namespace TypeChecker {
                     overloaded{ [&](std::vector<std::unique_ptr<Expression>>& values) {
                                    for (auto& value : values) {
                                        value->accept(*this);
+                                       assert(value->value_type != ValueType::Undetermined);
+                                       value->value_type = ValueType::RValue;
                                    }
                                    assert(not values.empty() and "empty arrays are not allowed");
                                    const auto type = values.front()->data_type;
@@ -573,6 +575,8 @@ namespace TypeChecker {
                                },
                                 [&](std::pair<std::unique_ptr<Expression>, usize>& pair) {
                                     pair.first->accept(*this);
+                                    assert(pair.first->value_type != ValueType::Undetermined);
+                                    pair.first->value_type = ValueType::RValue;
                                     expression.data_type = type_container->array_of(pair.first->data_type, pair.second);
                                 } },
                     expression.values
