@@ -442,6 +442,7 @@ namespace Parser {
         }
 
         [[nodiscard]] VariantDefinition variant_definition() {
+            using std::ranges::find_if;
             const auto name = consume<Identifier>("variant identifier expected");
             if (not is_valid_custom_type_name(name)) {
                 Error::error(
@@ -453,7 +454,20 @@ namespace Parser {
             consume<LeftCurlyBracket>("expected \"{\"");
             std::vector<VariantMemberDefinition> members;
             while (not current_is<RightCurlyBracket>()) {
-                members.push_back(variant_member_definition());
+                auto attribute = variant_member_definition();
+                const auto find_iterator = find_if(members, [&](const auto& current_attribute) {
+                    return attribute.name.location.view() == current_attribute.name.location.view();
+                });
+                const auto found = (find_iterator != members.cend());
+
+                if (found) {
+                    Error::error(
+                            attribute.name,
+                            fmt::format("redefinition of attribute \"{}\"", attribute.name.location.view())
+                    );
+                }
+
+                members.push_back(std::move(attribute));
                 if (not maybe_consume<Comma>()) {
                     break;
                 }
