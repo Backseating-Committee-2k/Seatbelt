@@ -1032,14 +1032,20 @@ namespace TypeChecker {
         }
 
         void visit(Parser::Expressions::TypeSizeExpression& expression) override {
-            if (not type_container->is_defined(*(expression.type_definition))) {
-                Error::error(
-                        expression.contained_data_type_tokens.front(),
-                        fmt::format("use of undeclared type \"{}\"", expression.type_definition->to_string())
-                );
+            const auto placeholder_type =
+                    get_data_type_of_placeholder(type_container, expression.type_definition.get());
+            if (placeholder_type != nullptr) {
+                expression.contained_data_type = placeholder_type;
+            } else {
+                if (not type_container->is_defined(*(expression.type_definition))) {
+                    Error::error(
+                            expression.contained_data_type_tokens.front(),
+                            fmt::format("use of undeclared type \"{}\"", expression.type_definition->to_string())
+                    );
+                }
+                expression.contained_data_type =
+                        type_container->from_type_definition(std::move(expression.type_definition));
             }
-            expression.contained_data_type =
-                    type_container->from_type_definition(std::move(expression.type_definition));
             expression.data_type = type_container->get_u32();
             expression.value_type = ValueType::RValue;
         }
@@ -1107,7 +1113,9 @@ namespace TypeChecker {
                 if (attribute.type_definition->is_custom_type_placeholder()) {
                     const auto placeholder_type = *(attribute.type_definition->as_custom_type_placeholder());
                     if (placeholder_type->struct_definition != nullptr) {
-                        return has_cyclic_dependency(placeholder_type->struct_definition, visited_struct_definitions);
+                        if (has_cyclic_dependency(placeholder_type->struct_definition, visited_struct_definitions)) {
+                            return true;
+                        }
                     } else if (placeholder_type->custom_type_definition != nullptr) {
                         assert(false and "not implemented");
                     } else {
@@ -1115,6 +1123,7 @@ namespace TypeChecker {
                     }
                 }
             }
+            visited_struct_definitions.erase(struct_definition);
             return false;
         }
 
@@ -1212,14 +1221,17 @@ namespace TypeChecker {
             auto struct_types = std::vector<const StructType*>{};
             struct_types.reserve(type_definition->alternatives.size());
 
-            // iterate variants
+            // first check for dependency cycles
             for (auto& [tag, struct_definition] : type_definition->alternatives) {
                 auto visited_struct_definitions = std::unordered_set<const Parser::VariantDefinition*>{};
                 const auto cycle_detected = has_cyclic_dependency(&struct_definition, visited_struct_definitions);
                 if (cycle_detected) {
                     Error::error(struct_definition.name, "cyclic type definition detected");
                 }
+            }
 
+            // iterate variants
+            for (auto& [tag, struct_definition] : type_definition->alternatives) {
                 auto member_types = std::vector<StructMember>{};
                 member_types.reserve(struct_definition.members.size());
 

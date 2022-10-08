@@ -274,7 +274,7 @@ struct StructType final : public DataType {
             result = Utils::round_up(result, member.data_type->alignment());
             result += member.data_type->size();
         }
-        return result;
+        return Utils::round_up(result, alignment());
     }
 
     [[nodiscard]] usize alignment() const override {
