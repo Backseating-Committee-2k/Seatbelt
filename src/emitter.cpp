@@ -1006,9 +1006,10 @@ namespace Emitter {
 
         void visit(ReturnStatement& statement) override {
             if (statement.return_value) {
-                if (statement.return_value->data_type->size() > 0) {
-                    statement.return_value->accept(*this); // evaluate return value => result is pushed
+                // evaluate return value => result is pushed (if not of type Nothing)
+                statement.return_value->accept(*this);
 
+                if (statement.return_value->data_type->size() > 0) {
                     const auto return_value_into_pointer =
                             (statement.return_value->data_type->size_when_pushed() > WordSize);
                     if (return_value_into_pointer) {
