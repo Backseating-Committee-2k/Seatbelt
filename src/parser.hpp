@@ -41,7 +41,7 @@ namespace Parser {
     struct FunctionDefinition;
     struct ImportStatement;
     struct CustomTypeDefinition;
-    struct VariantDefinition;
+    struct StructDefinition;
     struct NamespaceDefinition;
 
     namespace Expressions {
@@ -405,7 +405,7 @@ namespace Parser {
 
             Name type_name;
             std::vector<FieldInitializer> values;
-            const VariantDefinition* definition{ nullptr };
+            const StructDefinition* definition{ nullptr };
         };
 
         struct UnaryOperator : public ExpressionAcceptor<UnaryOperator> {
@@ -511,18 +511,18 @@ namespace Parser {
         std::unique_ptr<Scope> scope;
     };
 
-    struct VariantMemberDefinition {
+    struct StructAttributeDefinition {
         Identifier name;
         std::unique_ptr<DataType> type_definition;
         std::span<const Token> type_definition_tokens;
-        DataType* type{ nullptr };
+        DataType* data_type{ nullptr };
     };
 
     struct CustomTypeDefinition;
 
-    struct VariantDefinition {
+    struct StructDefinition {
         Identifier name;
-        std::vector<VariantMemberDefinition> members;
+        std::vector<StructAttributeDefinition> attributes;
         const CustomTypeDefinition* owning_custom_type_definition;
         DataType* data_type{ nullptr };
     };
@@ -533,7 +533,7 @@ namespace Parser {
         std::optional<Identifier> name;
         std::optional<Restricted> restricted_token;
         LeftCurlyBracket left_curly_bracket;
-        std::map<u32, VariantDefinition> alternatives;
+        std::map<u32, StructDefinition> struct_definitions;
         RightCurlyBracket right_curly_bracket;
         std::string namespace_name{};
         const Scope* surrounding_scope{ nullptr };

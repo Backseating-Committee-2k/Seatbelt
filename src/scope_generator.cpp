@@ -17,7 +17,7 @@
 namespace ScopeGenerator {
 
     struct StructLookupResult {
-        const Parser::VariantDefinition* struct_definition;
+        const Parser::StructDefinition* struct_definition;
     };
 
     struct CustomTypeLookupResult {
@@ -91,7 +91,7 @@ namespace ScopeGenerator {
     }
 
     template<>
-    [[nodiscard]] const Parser::VariantDefinition*
+    [[nodiscard]] const Parser::StructDefinition*
     get_symbols_in_scope(const Scope* scope, const Parser::Identifier name, bool exported_only) {
         using std::ranges::find_if;
         const auto find_iterator = find_if(*scope, [&](const auto& pair) {
@@ -101,7 +101,7 @@ namespace ScopeGenerator {
         const auto found = (find_iterator != scope->cend());
         if (found) {
             const auto& struct_symbol = std::get<StructSymbol>(find_iterator->second);
-            return &(struct_symbol.custom_type_definition->alternatives.at(struct_symbol.tag));
+            return &(struct_symbol.custom_type_definition->struct_definitions.at(struct_symbol.tag));
         }
         return nullptr;
     }
@@ -128,8 +128,8 @@ namespace ScopeGenerator {
 
         static constexpr auto is_function_lookup = std::same_as<T, std::vector<const FunctionOverload*>>;
         static constexpr auto is_custom_type_lookup = std::same_as<T, const Parser::CustomTypeDefinition*>;
-        static constexpr auto is_variant_lookup = std::same_as<T, const Parser::VariantDefinition*>;
-        static_assert(is_function_lookup or is_custom_type_lookup or is_variant_lookup);
+        static constexpr auto is_struct_lookup = std::same_as<T, const Parser::StructDefinition*>;
+        static_assert(is_function_lookup or is_custom_type_lookup or is_struct_lookup);
 
         /* To do a correct function lookup, we have to start in a scope that corresponds to a namespace. E.g. if
          * the name to be looked up is inside a function, we start in the scope that is owned by the namespace
@@ -218,7 +218,7 @@ namespace ScopeGenerator {
                     } else if constexpr (is_custom_type_lookup) {
                         return pair.first == name.location.view()
                                and std::holds_alternative<CustomTypeSymbol>(pair.second);
-                    } else if constexpr (is_variant_lookup) {
+                    } else if constexpr (is_struct_lookup) {
                         return pair.first == name.location.view() and std::holds_alternative<StructSymbol>(pair.second);
                     } else {
                         throw;
@@ -233,9 +233,9 @@ namespace ScopeGenerator {
                         return result;
                     } else if constexpr (is_custom_type_lookup) {
                         return std::get<CustomTypeSymbol>(find_iterator->second).definition;
-                    } else if constexpr (is_variant_lookup) {
+                    } else if constexpr (is_struct_lookup) {
                         const auto& struct_symbol = std::get<StructSymbol>(find_iterator->second);
-                        return &(struct_symbol.custom_type_definition->alternatives[struct_symbol.tag]);
+                        return &(struct_symbol.custom_type_definition->struct_definitions[struct_symbol.tag]);
                     } else {
                         throw;
                     }
@@ -293,7 +293,7 @@ namespace ScopeGenerator {
         // we know we have a custom type placeholder at hand
         const auto placeholder_type = *(type_definition->as_custom_type_placeholder());
         const auto name_expression = Parser::Expressions::Name{ placeholder_type->type_definition_tokens };
-        const auto struct_definition = lookup<const Parser::VariantDefinition*>(surrounding_scope, name_expression);
+        const auto struct_definition = lookup<const Parser::StructDefinition*>(surrounding_scope, name_expression);
         const auto struct_type_found = (struct_definition != nullptr);
         if (struct_type_found) {
             placeholder_type->struct_definition = struct_definition;
@@ -492,7 +492,7 @@ namespace ScopeGenerator {
 
             // lookup for the type name of the struct literal
             const auto type_definition =
-                    lookup<const Parser::VariantDefinition*>(expression.surrounding_scope, expression.type_name);
+                    lookup<const Parser::StructDefinition*>(expression.surrounding_scope, expression.type_name);
             if (type_definition == nullptr) {
                 Error::error(
                         expression.type_name,
@@ -607,8 +607,8 @@ namespace ScopeGenerator {
         void operator()(std::unique_ptr<Parser::ImportStatement>&) { }
 
         void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
-            for (auto& [tag, struct_definition] : type_definition->alternatives) {
-                for (auto& attribute : struct_definition.members) {
+            for (auto& [tag, struct_definition] : type_definition->struct_definitions) {
+                for (auto& attribute : struct_definition.attributes) {
                     custom_type_lookup(attribute.type_definition.get(), type_definition->surrounding_scope);
                 }
             }
@@ -755,35 +755,37 @@ namespace ScopeGenerator {
             /* the definition of a custom type opens a new scope that holds the symbols of the
              * type variants */
             type_definition->inner_scope = scope->create_child_scope();
-            for (const auto& alternative : type_definition->alternatives) {
-                if (type_definition->inner_scope->contains(alternative.second.name.location.view())) {
+            for (const auto& struct_definition : type_definition->struct_definitions) {
+                if (type_definition->inner_scope->contains(struct_definition.second.name.location.view())) {
                     Error::error(
-                            alternative.second.name, fmt::format(
-                                                             "duplicate alternative \"{}\" in custom type \"{}\"",
-                                                             alternative.second.name.location.view(), identifier
-                                                     )
+                            struct_definition.second.name,
+                            fmt::format(
+                                    "duplicate struct \"{}\" in custom type \"{}\"",
+                                    struct_definition.second.name.location.view(), identifier
+                            )
                     );
                 }
-                (*(type_definition->inner_scope))[alternative.second.name.location.view()] =
-                        StructSymbol{ .custom_type_definition{ type_definition.get() }, .tag{ alternative.first } };
+                (*(type_definition->inner_scope))[struct_definition.second.name.location.view()] =
+                        StructSymbol{ .custom_type_definition{ type_definition.get() },
+                                      .tag{ struct_definition.first } };
             }
 
             if (not type_definition->is_restricted()) {
-                /* for non-restricted custom type, we have to expose the alternatives to the surrounding namespace
+                /* for non-restricted custom type, we have to expose the struct definitions to the surrounding namespace
                  * to make them available there */
-                for (const auto& alternative : type_definition->alternatives) {
-                    if (scope->contains(alternative.second.name.location.view())) {
+                for (const auto& struct_definition : type_definition->struct_definitions) {
+                    if (scope->contains(struct_definition.second.name.location.view())) {
                         Error::error(
-                                alternative.second.name,
+                                struct_definition.second.name,
                                 fmt::format(
                                         "redefinition of identifier \"{}\" in surrounding scope of custom type \"{}\"\n"
                                         "are you missing the \"restricted\" keyword?",
-                                        alternative.second.name.location.view(), identifier
+                                        struct_definition.second.name.location.view(), identifier
                                 )
                         );
                     }
-                    (*scope)[alternative.second.name.location.view()] =
-                            StructSymbol{ .custom_type_definition{ type_definition.get() }, .tag{ alternative.first } };
+                    (*scope)[struct_definition.second.name.location.view()] =
+                            StructSymbol{ .custom_type_definition{ type_definition.get() }, .tag{ struct_definition.first } };
                 }
             }
         }
