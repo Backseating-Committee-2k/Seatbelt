@@ -442,6 +442,30 @@ namespace Parser {
                   left_parenthesis{ left_parenthesis },
                   arguments{ std::move(arguments) } { }
 
+            /**
+             * Calculates the size of the arguments to this function including the address for the return value
+             * passed as hidden first argument if the function's return value does not fit into a register.
+             * @return The size of all parameters.
+             */
+            [[nodiscard]] usize arguments_size() const {
+                usize result = (returns_into_pointer() ? WordSize : 0);
+                for (const auto& argument : arguments) {
+                    const auto type = argument->data_type;
+                    result = Utils::round_up(result, type->alignment());
+                    result += type->size();
+                }
+                return result;
+            }
+
+            /**
+             * Returns true if the result of this function is being returned via a pointer passed as a hidden
+             * first argument. This is the case, if the return value doesn't fit into a register.
+             * @return True if the return value is returned into a pointer.
+             */
+            [[nodiscard]] bool returns_into_pointer() const {
+                return data_type->size_when_pushed() > WordSize;
+            }
+
             std::unique_ptr<Expression> callee;
             LeftParenthesis left_parenthesis;
             std::vector<std::unique_ptr<Expression>> arguments;

@@ -49,6 +49,7 @@ namespace Bssembler {
     x(JUMP)                 \
     x(JUMP_EQ)              \
     x(JUMP_GT)              \
+    x(CALL)                 \
     x(PUSH)                 \
     x(POP)                  \
     x(RETURN)               \
