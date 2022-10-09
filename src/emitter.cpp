@@ -226,12 +226,10 @@ namespace Emitter {
                         "{}{}", get_absolute_namespace_qualifier(*(overload->surrounding_namespace)),
                         overload->signature
                 );
-                bssembly.add(Instruction{
-                        COPY,
-                        {Immediate{ fmt::format("$\"{}\"", mangled_name) }, R1},
-                        "get address of label"
-                });
-                bssembly.add(Instruction{ PUSH, { R1 }, "push address of label onto stack" });
+                auto label_name = fmt::format("$\"{}\"", mangled_name);
+                bssembly.add(
+                        Instruction{ PUSH, { Immediate{ std::move(label_name) } }, "push address of label onto stack" }
+                );
                 return;
             }
             assert(expression.variable_symbol.has_value() and "if this is not a function, it has to be a variable");
@@ -242,21 +240,20 @@ namespace Emitter {
             const auto& variable_token = expression.name_tokens.back();
             const auto variable_name = Error::token_location(variable_token).view();
 
-            bssembly.add(Instruction{
-                    ADD,
-                    {R0, Immediate{ offset }, R1},
-                    fmt::format("calculate address of variable \"{}\"", variable_name)
-            });
             // If the variable is used as an lvalue, we have to push its address onto the stack. Otherwise,
             // we dereference the address and push the value.
-
             if (expression.is_lvalue()) {
+                bssembly.add(Instruction{
+                        ADD,
+                        {R0, Immediate{ offset }, R1},
+                        fmt::format("calculate address of variable \"{}\"", variable_name)
+                });
                 bssembly.add(Instruction{ PUSH, { R1 }, "push the address of variable onto the stack" });
             } else {
                 // we have an rvalue
                 bssembly.add(Comment{
                         fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) });
-                bssembly.push_value_onto_stack(R1, expression.data_type);
+                bssembly.push_value_onto_stack(R0, expression.data_type, offset);
             }
         }
 
@@ -671,8 +668,8 @@ namespace Emitter {
              * jump address
              * stack space for the return value (only if it doesn't fit into a single register)
              */
+            const auto size_when_pushed = expression.data_type->size_when_pushed();
             if (return_value_into_pointer) {
-                const auto size_when_pushed = expression.data_type->size_when_pushed();
                 assert(size_when_pushed % WordSize == 0);
                 bssembly.add(Instruction{
                         ADD,
@@ -682,42 +679,44 @@ namespace Emitter {
             }
 
             expression.callee->accept(*this); // evaluate callee => jump address is pushed
-            bssembly.add(Instruction{
-                    ADD,
-                    {SP, Immediate{ 4 }, SP},
-                    "reserve stack space for the return address"
-            });
-            bssembly.add(Instruction{ PUSH, { R0 }, "push the current stack frame base pointer" });
 
-            usize arguments_size = (return_value_into_pointer ? WordSize : 0);
-            for (const auto& argument : expression.arguments) {
-                const auto type = argument->data_type;
-                arguments_size = Utils::round_up(arguments_size, type->alignment());
-                arguments_size += type->size();
-            }
+            const auto arguments_size = expression.arguments_size();
+            /* We want to manipulate the stack pointer using the arguments_size, but the stack pointer may only ever
+             * move in steps of the WordSize. Therefore, we may have to include padding. */
             const auto arguments_size_with_padding = Utils::round_up(arguments_size, WordSize);
             const auto arguments_padding = arguments_size_with_padding - arguments_size;
+
+            if (return_value_into_pointer) {
+                bssembly.add(Instruction{
+                        SUB,
+                        {SP, Immediate{ size_when_pushed + WordSize },
+                          R1}  // WordSize because of the callee address that has been pushed
+                });
+                bssembly.add(Instruction{
+                        OFFSET_COPY,
+                        {R1, Immediate{ WordSize }, Pointer{ SP }},
+                        "save address for return value as hidden first argument"
+                });
+            }
             bssembly.add(Instruction{
                     ADD,
-                    {SP, Immediate{ arguments_size_with_padding }, SP},
+                    {SP, Immediate{ arguments_size_with_padding + WordSize }, SP},
                     fmt::format(
-                            "reserve stack space for the arguments (additional padding of {} bytes)", arguments_padding
+                            "reserve stack space for the arguments (additional padding of {} bytes) + 1 extra word",
+                            arguments_padding
                     )
             });
             bssembly.add(Comment{ "evaluate all arguments one by one and put them into the reserved stack space" });
-            if (return_value_into_pointer) { }
+
             usize current_offset = (return_value_into_pointer ? WordSize : 0);
             for (const auto& argument : expression.arguments) {
                 if (argument->data_type->size() == 0) {
                     continue;
                 }
                 current_offset = Utils::round_up(current_offset, argument->data_type->alignment());
-                argument->accept(*this); // evaluate argument => result will be pushed
-                bssembly.add(Instruction{
-                        SUB,
-                        {SP, Immediate{ argument->data_type->size_when_pushed() }, R1},
-                        "calculate address of argument value"
-                });
+                bssembly.add(Comment{ "evaluate argument => result will be pushed" });
+                argument->accept(*this);
+
                 bssembly.add(Instruction{
                         SUB,
                         {SP,
@@ -726,69 +725,24 @@ namespace Emitter {
                           R2},
                         "calculate target address"
                 });
-                bssembly.add(Comment{ "mem-copy the argument" });
                 bssembly.pop_from_stack_into_pointer(R2, argument->data_type);
+
                 current_offset += argument->data_type->size();
             }
 
-            // if we had to use padding for the arguments, we now have to undo the padding
-            if (arguments_padding > 0) {
-                bssembly.add(Instruction{
-                        SUB,
-                        {SP, Immediate{ arguments_padding }, SP},
-                        fmt::format("undo the additional arguments padding of {} bytes", arguments_padding)
-                });
-            }
-
             bssembly.add(Instruction{
                     SUB,
-                    {SP, Immediate{ arguments_size }, R0},
-                    "set stack frame base pointer for callee"
+                    {SP, Immediate{ arguments_size_with_padding + WordSize }, SP},
+                    "reset stack pointer to where it was before"
             });
 
-            if (return_value_into_pointer) {
-                bssembly.add(Instruction{
-                        SUB,
-                        {R0, Immediate{ 12 + expression.data_type->size_when_pushed() }, R1},
-                        "calculate address of return value"
-                });
-                bssembly.add(Instruction{
-                        COPY,
-                        {R1, Pointer{ R0 }},
-                        "pass the address for the return value as hidden first parameter"
-                });
-            }
+            /* By popping the address of the callee off of the stack, we will then have 2 words of free space inside
+             * the stack right below the function arguments. */
+            bssembly.add(Instruction{ POP, { R1 }, "get the address of the callee" });
 
-            bssembly.add(Instruction{
-                    SUB,
-                    {R0, Immediate{ 8 }, R1},
-                    "calculate address of placeholder for return address"
-            });
-            const auto call_return_label = label_generator->next_label("return_address");
-            bssembly.add(Instruction{
-                    COPY,
-                    {Immediate{ call_return_label }, R2},
-                    "get return address"
-            });
-            bssembly.add(Instruction{
-                    COPY,
-                    {R2, Pointer{ R1 }},
-                    "fill in return address"
-            });
-            bssembly.add(Instruction{
-                    SUB,
-                    {R0, Immediate{ 12 }, R1},
-                    "calculate address of jump address"
-            });
-            bssembly.add(Instruction{
-                    COPY,
-                    {Pointer{ R1 }, R1},
-                    "dereference the pointer"
-            });
-            bssembly.add(Instruction{ JUMP, { R1 }, "call the function" });
-            bssembly.add(Bssembler::Label{ call_return_label,
-                                           "this is where the control flow returns to after the function call" });
-            bssembly.add(Instruction{ POP, {}, "pop the callee address off of the stack" });
+            /* The following CALL instruction occupies one of the empty words with the return address. The other
+             * empty word will be filled by the callee with the old stack frame base pointer. */
+            bssembly.add(Instruction{ CALL, { R1 }, "call the function" });
 
             /* If the return value is not returned through a pointer and its size is bigger than zero,
              * we have to put the return value onto the stack. */
@@ -1121,17 +1075,16 @@ namespace Emitter {
         auto result = Bssembly{};
         result.add(NewLine{});
         result.add(Bssembler::Label{ fmt::format("$\"{}\"", mangled_name) });
-
-        // get the size needed for the locals of this function (excluding its parameters)
-        const auto locals_size =
-                function_definition->occupied_stack_space.value() - function_definition->parameters_stack_space.value();
-
-        // the caller has already pushed the arguments onto the stack - we only have to reserve stack space for
-        // the locals of this function
+        result.add(Instruction{ PUSH, { R0 }, "save the old stack frame base pointer" });
+        result.add(Instruction{
+                COPY,
+                {SP, R0},
+                "set the new stack frame base pointer"
+        });
         result.add(Instruction{
                 ADD,
-                {SP, Immediate{ locals_size }, SP},
-                "reserve stack space for local variables"
+                {SP, Immediate{ function_definition->occupied_stack_space.value() }, SP},
+                "reserve stack space for arguments and local variables (arguments already filled by the caller)"
         });
 
         // generate labels for all label definitions in the current function
@@ -1139,39 +1092,19 @@ namespace Emitter {
             label->emitted_label = label_generator->next_label(label->identifier.location.view());
         }
 
-        if (function_definition->is_entry_point) {
-            result.add(Instruction{
-                    COPY,
-                    {SP, R0},
-                    "save stack frame base pointer for main function into R0"
-            });
-            assert(function_definition->body.occupied_stack_space.has_value()
-                   and "needed stack size for function must be known");
-            result.add(Instruction{
-                    ADD,
-                    {SP,
-                      Immediate{ Utils::round_up(function_definition->body.occupied_stack_space.value(), WordSize) },
-                      SP},
-                    "reserve stack space for main function"
-            });
-        }
         const auto function_return_label = label_generator->next_label("function_return");
 
         result += emit_statement(function_definition->body, label_generator, function_return_label, type_container);
 
         result.add(Bssembler::Label{ function_return_label });
 
-        if (function_definition->is_entry_point) {
-            result.add(Instruction{ HALT, {} });
-        } else {
-            result.add(Instruction{
-                    COPY,
-                    {R0, SP},
-                    "clear current stack frame"
-            });
-            result.add(Instruction{ POP, { R0 }, "restore previous stack frame" });
-            result.add(Instruction{ RETURN, {} });
-        }
+        result.add(Instruction{
+                COPY,
+                {R0, SP},
+                "clear current stack frame"
+        });
+        result.add(Instruction{ POP, { R0 }, "restore previous stack frame" });
+        result.add(Instruction{ RETURN, {} });
 
         return result;
     }

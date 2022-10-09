@@ -352,7 +352,8 @@ int main(int, char** argv) {
 
     auto bssembly = Bssembler::Bssembly{};
     using namespace std::string_view_literals;
-    bssembly.add(Bssembler::Instruction{ Bssembler::Mnemonic::JUMP, { Bssembler::Immediate{ "$\"::main()\""sv } } });
+    bssembly.add(Bssembler::Instruction{ Bssembler::Mnemonic::CALL, { Bssembler::Immediate{ "$\"::main()\""sv } } });
+    bssembly.add(Bssembler::Instruction{ Bssembler::Mnemonic::HALT, {} });
 
     auto label_generator = Emitter::LabelGenerator{};
     for (const auto& item : program) {
