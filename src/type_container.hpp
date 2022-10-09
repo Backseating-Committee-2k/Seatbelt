@@ -24,7 +24,6 @@ public:
     [[nodiscard]] DataType* struct_of(
             std::string name,
             std::string namespace_qualifier,
-            std::string custom_type_name,
             std::vector<StructMember> attributes
     );
     [[nodiscard]] DataType* pointer_to(DataType* pointee_type, Mutability binding_mutability);

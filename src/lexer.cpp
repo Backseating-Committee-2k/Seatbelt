@@ -362,6 +362,7 @@ private:
             KEYWORD("type_size", TypeSize)
             KEYWORD("value_size", ValueSize)
             KEYWORD("type", Type)
+            KEYWORD("struct", Struct)
             KEYWORD("restricted", Restricted)
             if (identifier_result.view() == "bsm") {
                 return inline_assembly(tokens);

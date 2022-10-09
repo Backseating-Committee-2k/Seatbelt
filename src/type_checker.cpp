@@ -288,8 +288,7 @@ namespace TypeChecker {
             }
             // TODO: check if the strings in here could be moved
             return type_container->struct_of(
-                    struct_type->name, struct_type->namespace_qualifier, struct_type->custom_type_name,
-                    std::move(attributes)
+                    struct_type->name, struct_type->namespace_qualifier, std::move(attributes)
             );
         }
 
@@ -1213,7 +1212,6 @@ namespace TypeChecker {
 
         void operator()(std::unique_ptr<Parser::CustomTypeDefinition>& type_definition) {
             assert(not type_definition->struct_definitions.empty());
-            assert(type_definition->name.has_value());
 
             const auto namespace_qualifier =
                     get_absolute_namespace_qualifier(*(type_definition->surrounding_scope->surrounding_namespace));
@@ -1263,7 +1261,7 @@ namespace TypeChecker {
 
                 const auto struct_data_type = type_container->from_type_definition(std::make_unique<StructType>(
                         std::string{ struct_definition.name.location.view() }, namespace_qualifier,
-                        std::string{ (*(type_definition->name)).location.view() }, std::move(member_types)
+                        std::move(member_types)
                 ));
                 struct_definition.data_type = struct_data_type;
 
@@ -1272,10 +1270,13 @@ namespace TypeChecker {
                 struct_types.push_back(struct_type);
             }
 
-            const auto custom_data_type = type_container->from_type_definition(std::make_unique<CustomType>(
-                    std::string{ type_definition->name->location.view() }, namespace_qualifier, std::move(struct_types)
-            ));
-            type_definition->data_type = custom_data_type;
+            if (not type_definition->is_anonymous()) {
+                const auto custom_data_type = type_container->from_type_definition(std::make_unique<CustomType>(
+                        std::string{ type_definition->name->location.view() }, namespace_qualifier,
+                        std::move(struct_types)
+                ));
+                type_definition->data_type = custom_data_type;
+            }
         }
 
         void operator()(std::unique_ptr<Parser::FunctionDefinition>&) { }

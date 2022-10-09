@@ -10,11 +10,27 @@
 #include <variant>
 #include <vector>
 
-#define DEFINE_TOKEN(name)                               \
-    struct name {                                        \
-        Location location;                               \
-        static constexpr const char* debug_name = #name; \
-    };
+namespace Lexer::Tokens {
+
+    template<typename T>
+    [[nodiscard]] T token_prototype();
+
+}
+
+#define DEFINE_TOKEN(name)                                                              \
+    struct name {                                                                       \
+        Location location;                                                              \
+        static constexpr const char* debug_name = #name;                                \
+    };                                                                                  \
+                                                                                        \
+    template<>                                                                          \
+    [[nodiscard]] inline name token_prototype() {                                       \
+        return name{                                                                    \
+            .location{.source_code{ .filename{ "<prototype file>" }, .text{ #name } }, \
+                      .offset_start_inclusive{ 0 },                                    \
+                      .offset_end_exclusive{ std::string_view{ #name }.length() }}    \
+        };                                                                              \
+    }
 
 // clang-format off
 #define TOKEN_LIST \
@@ -79,6 +95,7 @@
     x(TypeSize) \
     x(ValueSize) \
     x(Type) \
+    x(Struct) \
     x(Restricted)
 
 // clang-format on
