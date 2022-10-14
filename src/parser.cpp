@@ -196,28 +196,24 @@ namespace Parser {
         // When called without any arguments, this overload is chosen. Since there are no precedence groups left over,
         // we just pass on the call to the expression with the next higher precedence.
         [[nodiscard]] std::unique_ptr<Expression> binary_operator() {
-            return right_associative_unary_operator();
+            return not_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> right_associative_unary_operator() {
+        [[nodiscard]] std::unique_ptr<Expression> not_operator() {
             if (current_is<Not>()) {
                 const auto not_token = current();
                 advance();
-                return std::make_unique<Expressions::UnaryOperator>(not_token, right_associative_unary_operator());
+                return std::make_unique<Expressions::UnaryOperator>(not_token, not_operator());
             }
-            if (current_is<At>()) {
-                const auto at_token = current();
-                advance();
-                return std::make_unique<Expressions::UnaryOperator>(at_token, right_associative_unary_operator());
-            }
-            return function_call_or_index_operator_or_dereferencing_or_dot_operator();
+            return function_call_or_index_operator_or_dereferencing_or_dot_operator_or_address_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> function_call_or_index_operator_or_dereferencing_or_dot_operator() {
+        [[nodiscard]] std::unique_ptr<Expression>
+        function_call_or_index_operator_or_dereferencing_or_dot_operator_or_address_operator() {
             using Expressions::FunctionCall, Expressions::BinaryOperator, Parser::IndexOperator;
 
             auto accumulator = primary();
-            while (is_one_of<LeftParenthesis, LeftSquareBracket, ExclamationMark, Dot>(current())) {
+            while (is_one_of<LeftParenthesis, LeftSquareBracket, ExclamationMark, Dot, At>(current())) {
                 if (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
                     // function call
                     std::vector<std::unique_ptr<Expression>> arguments;
@@ -257,6 +253,10 @@ namespace Parser {
                             dot_token
                     );
                     advance(); // consume attribute name
+                } else if (current_is<At>()) {
+                    const auto at_token = current();
+                    advance();
+                    accumulator = std::make_unique<Expressions::UnaryOperator>(at_token, std::move(accumulator));
                 } else {
                     assert(false and "unreachable");
                 }
