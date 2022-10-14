@@ -743,12 +743,16 @@ namespace ScopeGenerator {
             }
 
             auto identifier = type_definition->name.has_value() ? (*(type_definition->name)).location.view() : ""sv;
-            auto find_iterator = find_if(*scope, [&](const auto& pair) { return pair.first == identifier; });
+            auto find_iterator = find_if(*scope, [&](const auto& pair) {
+                return not type_definition->is_anonymous() and pair.first == identifier;
+            });
             const auto found = (find_iterator != std::end(*scope));
             if (found) {
                 Error::error(*(type_definition->name), fmt::format("redefinition of identifier \"{}\"", identifier));
             }
-            (*scope)[identifier] = CustomTypeSymbol{ .definition{ type_definition.get() } };
+            if (not type_definition->is_anonymous()) {
+                (*scope)[identifier] = CustomTypeSymbol{ .definition{ type_definition.get() } };
+            }
 
             type_definition->surrounding_scope = scope;
 
@@ -785,7 +789,8 @@ namespace ScopeGenerator {
                         );
                     }
                     (*scope)[struct_definition.second.name.location.view()] =
-                            StructSymbol{ .custom_type_definition{ type_definition.get() }, .tag{ struct_definition.first } };
+                            StructSymbol{ .custom_type_definition{ type_definition.get() },
+                                          .tag{ struct_definition.first } };
                 }
             }
         }

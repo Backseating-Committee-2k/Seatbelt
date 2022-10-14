@@ -233,15 +233,9 @@ struct StructMember {
 };
 
 struct StructType final : public DataType {
-    StructType(
-            std::string name,
-            std::string namespace_qualifier,
-            std::string custom_type_name,
-            std::vector<StructMember> members
-    )
+    StructType(std::string name, std::string namespace_qualifier, std::vector<StructMember> members)
         : name{ std::move(name) },
           namespace_qualifier{ std::move(namespace_qualifier) },
-          custom_type_name{ std::move(custom_type_name) },
           members{ std::move(members) } { }
 
     [[nodiscard]] bool is_struct_type() const override {
@@ -299,7 +293,6 @@ struct StructType final : public DataType {
 
     std::string name;
     std::string namespace_qualifier;
-    std::string custom_type_name; // name of the custom type this struct was defined in
     std::vector<StructMember> members;
 };
 

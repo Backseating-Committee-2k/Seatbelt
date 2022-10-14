@@ -571,6 +571,10 @@ namespace Parser {
         [[nodiscard]] bool is_exported() const {
             return export_token.has_value();
         }
+
+        [[nodiscard]] bool is_anonymous() const {
+            return not name.has_value();
+        }
     };
 
     struct FunctionDefinition {

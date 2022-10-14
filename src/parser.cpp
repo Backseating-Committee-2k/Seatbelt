@@ -87,6 +87,8 @@ namespace Parser {
                     program.push_back(function_definition());
                 } else if (current_is<Type>() or (current_is<Export>() and peek_is<Type>())) {
                     program.push_back(custom_type_definition());
+                } else if (current_is<Struct>() or (current_is<Export>() and peek_is<Struct>())) {
+                    program.push_back(top_level_struct_definition());
                 } else if (current_is<Import>()) {
                     Error::error(current(), "imports must precede all other top level statements of a source file");
                 } else if (is_global_namespace) {
@@ -194,28 +196,24 @@ namespace Parser {
         // When called without any arguments, this overload is chosen. Since there are no precedence groups left over,
         // we just pass on the call to the expression with the next higher precedence.
         [[nodiscard]] std::unique_ptr<Expression> binary_operator() {
-            return right_associative_unary_operator();
+            return not_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> right_associative_unary_operator() {
+        [[nodiscard]] std::unique_ptr<Expression> not_operator() {
             if (current_is<Not>()) {
                 const auto not_token = current();
                 advance();
-                return std::make_unique<Expressions::UnaryOperator>(not_token, right_associative_unary_operator());
+                return std::make_unique<Expressions::UnaryOperator>(not_token, not_operator());
             }
-            if (current_is<At>()) {
-                const auto at_token = current();
-                advance();
-                return std::make_unique<Expressions::UnaryOperator>(at_token, right_associative_unary_operator());
-            }
-            return function_call_or_index_operator_or_dereferencing_or_dot_operator();
+            return function_call_or_index_operator_or_dereferencing_or_dot_operator_or_address_operator();
         }
 
-        [[nodiscard]] std::unique_ptr<Expression> function_call_or_index_operator_or_dereferencing_or_dot_operator() {
+        [[nodiscard]] std::unique_ptr<Expression>
+        function_call_or_index_operator_or_dereferencing_or_dot_operator_or_address_operator() {
             using Expressions::FunctionCall, Expressions::BinaryOperator, Parser::IndexOperator;
 
             auto accumulator = primary();
-            while (is_one_of<LeftParenthesis, LeftSquareBracket, ExclamationMark, Dot>(current())) {
+            while (is_one_of<LeftParenthesis, LeftSquareBracket, ExclamationMark, Dot, At>(current())) {
                 if (const auto left_parenthesis = maybe_consume<LeftParenthesis>()) {
                     // function call
                     std::vector<std::unique_ptr<Expression>> arguments;
@@ -255,6 +253,10 @@ namespace Parser {
                             dot_token
                     );
                     advance(); // consume attribute name
+                } else if (current_is<At>()) {
+                    const auto at_token = current();
+                    advance();
+                    accumulator = std::make_unique<Expressions::UnaryOperator>(at_token, std::move(accumulator));
                 } else {
                     assert(false and "unreachable");
                 }
@@ -437,8 +439,8 @@ namespace Parser {
             const auto type_tokens_end = &current();
             const auto type_definition_tokens = std::span<const Token>{ type_tokens_start, type_tokens_end };
             return StructAttributeDefinition{ .name{ name },
-                                            .type_definition{ std::move(type) },
-                                            .type_definition_tokens{ type_definition_tokens } };
+                                              .type_definition{ std::move(type) },
+                                              .type_definition_tokens{ type_definition_tokens } };
         }
 
         [[nodiscard]] StructDefinition struct_definition() {
@@ -554,6 +556,27 @@ namespace Parser {
             result->struct_definitions = std::move(struct_definitions);
 
             return result;
+        }
+
+        /**
+         * Parses a top level struct definition and creates a corresponding custom type definition
+         * without a name. This is just desugaring.
+         * @return The corresponding @ref CustomTypeDefinition.
+         */
+        [[nodiscard]] std::unique_ptr<CustomTypeDefinition> top_level_struct_definition() {
+            const auto export_token = maybe_consume<Export>();
+            consume<Struct>();
+            auto struct_definitions = std::map<u32, StructDefinition>{};
+            struct_definitions[0] = struct_definition();
+            return std::make_unique<CustomTypeDefinition>(CustomTypeDefinition{
+                    .export_token{ export_token },
+                    .type_token{ token_prototype<Type>() },
+                    .name{},
+                    .restricted_token{},
+                    .left_curly_bracket{ token_prototype<LeftCurlyBracket>() },
+                    .struct_definitions{ std::move(struct_definitions) },
+                    .right_curly_bracket{ token_prototype<RightCurlyBracket>() },
+            });
         }
 
         [[nodiscard]] std::unique_ptr<ImportStatement> import_statement() {
