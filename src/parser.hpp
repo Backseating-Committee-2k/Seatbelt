@@ -261,10 +261,12 @@ namespace Parser {
         };
 
         struct ExpressionStatement : public StatementAcceptor<ExpressionStatement> {
-            explicit ExpressionStatement(std::unique_ptr<Expression> expression)
-                : expression{ std::move(expression) } { }
+            explicit ExpressionStatement(std::unique_ptr<Expression> expression, Semicolon semicolon_token)
+                : expression{ std::move(expression) },
+                  semicolon_token{ semicolon_token } { }
 
             std::unique_ptr<Expression> expression;
+            Semicolon semicolon_token;
         };
 
         struct LabelDefinition : public StatementAcceptor<LabelDefinition> {

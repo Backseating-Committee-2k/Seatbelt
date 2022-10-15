@@ -5,6 +5,7 @@
 #pragma once
 
 #include "data_type.hpp"
+#include "location.hpp"
 #include "overloaded.hpp"
 #include "types.hpp"
 #include <algorithm>
@@ -396,14 +397,33 @@ namespace Bssembler {
             : mnemonic{ mnemonic },
               arguments{ arguments },
               comment{ comment } { }
+
         Instruction(Mnemonic mnemonic, std::initializer_list<InstructionArgument> arguments)
             : mnemonic{ mnemonic },
               arguments{ arguments },
               comment{} { }
 
+        Instruction(
+                Mnemonic mnemonic,
+                std::initializer_list<InstructionArgument> arguments,
+                std::string comment,
+                Location origin_location
+        )
+            : mnemonic{ mnemonic },
+              arguments{ arguments },
+              comment{ comment },
+              origin_location{ origin_location } { }
+
+        Instruction(Mnemonic mnemonic, std::initializer_list<InstructionArgument> arguments, Location origin_location)
+            : mnemonic{ mnemonic },
+              arguments{ arguments },
+              comment{},
+              origin_location{ origin_location } { }
+
         Mnemonic mnemonic;
         std::vector<InstructionArgument> arguments;
         std::optional<std::string> comment;
+        std::optional<Location> origin_location{};
 
         [[nodiscard]] std::string to_string() const {
             using std::ranges::views::transform;
@@ -459,49 +479,7 @@ namespace Bssembler {
             m_instructions.emplace_back(std::forward<decltype(instruction)>(instruction));
         }
 
-        void emit_mem_copy(
-                const Register source_pointer,
-                const Register destination_pointer,
-                const usize size,
-                const usize alignment
-        ) {
-            if (size == 0 or source_pointer == destination_pointer) {
-                return;
-            }
-            using enum Register;
-            using enum Mnemonic;
-
-            Register temp_register = R0;
-            for (int i = static_cast<int>(R1); i < static_cast<int>(R253); ++i) {
-                const auto current = static_cast<Register>(i);
-                if (current != source_pointer and current != destination_pointer) {
-                    temp_register = current;
-                    break;
-                }
-            }
-            assert(temp_register != source_pointer and temp_register != destination_pointer);
-
-            assert(alignment <= size);
-            assert(size % alignment == 0);
-
-            const auto num_copy_instructions = size / alignment;
-
-            const auto instruction = offset_copy_instruction_from_size(alignment);
-            for (usize i = 0; i < num_copy_instructions; ++i) {
-                add(Instruction{
-                        instruction,
-                        {Pointer{ source_pointer }, Immediate{ i * alignment }, temp_register},
-                        "fetch data"
-                });
-                add(Instruction{
-                        instruction,
-                        {temp_register, Immediate{ i * alignment }, Pointer{ destination_pointer }},
-                        "write data"
-                });
-            }
-        }
-
-        void pop_from_stack_into_pointer(const Register pointer, const usize size) {
+        void pop_from_stack_into_pointer(const Register pointer, const usize size, const Location origin_location) {
             using enum Register;
             using enum Mnemonic;
 
@@ -510,10 +488,15 @@ namespace Bssembler {
             assert(temp_register != pointer);
             for (usize i = 0; i < size; i += WordSize) {
                 const auto offset = size - i - WordSize;
-                add(Instruction{ POP, { temp_register } });
+                add(Instruction{
+                        POP,
+                        { temp_register },
+                        origin_location,
+                });
                 add(Instruction{
                         OFFSET_COPY,
-                        {temp_register, Immediate{ offset }, Pointer{ pointer }}
+                        {temp_register, Immediate{ offset }, Pointer{ pointer }},
+                        origin_location,
                 });
             }
         }
@@ -533,6 +516,7 @@ namespace Bssembler {
                 const Register stack_pointer,
                 const Register destination_pointer,
                 const DataType* data_type,
+                const Location origin_location,
                 const usize stack_offset = 0,
                 const usize destination_offset = 0
         ) {
@@ -555,12 +539,14 @@ namespace Bssembler {
                 if (data_type->size() > 0) {
                     add(Instruction{
                             OFFSET_COPY,
-                            {Pointer{ stack_pointer }, Immediate{ stack_offset }, temp_register}
+                            {Pointer{ stack_pointer }, Immediate{ stack_offset }, temp_register},
+                            origin_location,
                     });
                     const auto instruction = offset_copy_instruction_from_size(data_type->size());
                     add(Instruction{
                             instruction,
-                            {temp_register, Immediate{ destination_offset }, Pointer{ destination_pointer }}
+                            {temp_register, Immediate{ destination_offset }, Pointer{ destination_pointer }},
+                            origin_location,
                     });
                 }
             } else if (data_type->is_array_type()) {
@@ -569,7 +555,7 @@ namespace Bssembler {
                 const auto size_when_pushed = array_type->contained->size_when_pushed();
                 for (usize i = 0; i < array_type->num_elements; ++i) {
                     copy_from_stack_into_pointer(
-                            stack_pointer, destination_pointer, array_type->contained,
+                            stack_pointer, destination_pointer, array_type->contained, origin_location,
                             stack_offset + i * size_when_pushed, destination_offset + i * size
                     );
                 }
@@ -578,7 +564,12 @@ namespace Bssembler {
             }
         }
 
-        void pop_from_stack_into_pointer(const Register pointer, const DataType* data_type, const usize offset = 0) {
+        void pop_from_stack_into_pointer(
+                const Register pointer,
+                const DataType* data_type,
+                const Location origin_location,
+                const usize offset = 0
+        ) {
             using enum Register;
             using enum Mnemonic;
 
@@ -589,11 +580,19 @@ namespace Bssembler {
                 or data_type->is_function_pointer_type()) {
                 assert(data_type->size() <= WordSize);
                 if (data_type->size() > 0) {
-                    add(Instruction{ POP, { temp_register } });
+                    add(Instruction{
+                            POP,
+                            { temp_register },
+                            origin_location,
+                    });
                     const auto instruction = offset_copy_instruction_from_size(data_type->size());
                     add(Instruction{
                             instruction,
-                            {temp_register, Immediate{ offset }, Pointer{ pointer }}
+                            {
+                              temp_register, Immediate{ offset },
+                              Pointer{ pointer },
+                              },
+                            origin_location,
                     });
                 }
             } else if (data_type->is_array_type()) {
@@ -601,7 +600,7 @@ namespace Bssembler {
                 for (usize i = 0; i < array_type->num_elements; ++i) {
                     const usize index = array_type->num_elements - i - 1;
                     const auto new_offset = offset + index * array_type->contained->size();
-                    pop_from_stack_into_pointer(pointer, array_type->contained, new_offset);
+                    pop_from_stack_into_pointer(pointer, array_type->contained, origin_location, new_offset);
                 }
             } else if (data_type->is_struct_type()) {
                 const auto struct_type = *(data_type->as_struct_type());
@@ -618,14 +617,21 @@ namespace Bssembler {
 
                 for (usize i = 0; i < num_members; ++i) {
                     const usize index = num_members - i - 1;
-                    pop_from_stack_into_pointer(pointer, struct_type->members[index].data_type, offsets[index]);
+                    pop_from_stack_into_pointer(
+                            pointer, struct_type->members[index].data_type, origin_location, offsets[index]
+                    );
                 }
             } else {
                 assert(false and "not implemented");
             }
         }
 
-        void push_value_onto_stack(const Register source_pointer, const DataType* data_type, const usize offset = 0) {
+        void push_value_onto_stack(
+                const Register source_pointer,
+                const DataType* data_type,
+                const Location origin_location,
+                const usize offset = 0
+        ) {
             using enum Register;
             using enum Mnemonic;
 
@@ -638,22 +644,27 @@ namespace Bssembler {
                     const auto instruction = offset_copy_instruction_from_size(data_type->size());
                     add(Instruction{
                             instruction,
-                            {Pointer{ source_pointer }, Immediate{ offset }, temp_register}
+                            {Pointer{ source_pointer }, Immediate{ offset }, temp_register},
+                            origin_location,
                     });
-                    add(Instruction{ PUSH, { temp_register } });
+                    add(Instruction{
+                            PUSH,
+                            { temp_register },
+                            origin_location,
+                    });
                 }
             } else if (data_type->is_array_type()) {
                 const auto array_type = *(data_type->as_array_type());
                 const auto size = array_type->contained->size();
                 for (usize i = 0; i < array_type->num_elements; ++i) {
-                    push_value_onto_stack(source_pointer, array_type->contained, offset + i * size);
+                    push_value_onto_stack(source_pointer, array_type->contained, origin_location, offset + i * size);
                 }
             } else if (data_type->is_struct_type()) {
                 const auto struct_type = *(data_type->as_struct_type());
                 usize current_offset = offset;
                 for (const auto& attribute : struct_type->members) {
                     current_offset = Utils::round_up(current_offset, attribute.data_type->alignment());
-                    push_value_onto_stack(source_pointer, attribute.data_type, current_offset);
+                    push_value_onto_stack(source_pointer, attribute.data_type, origin_location, current_offset);
                     current_offset += attribute.data_type->size();
                 }
             } else {
@@ -671,6 +682,7 @@ namespace Bssembler {
         void push_onto_stack_from_stack_pointer(
                 const Register stack_pointer,
                 const DataType* data_type,
+                const Location origin_location,
                 const usize offset = 0
         ) {
             using enum Mnemonic;
@@ -686,22 +698,31 @@ namespace Bssembler {
                 if (data_type->size_when_pushed() == WordSize) {
                     add(Instruction{
                             OFFSET_COPY,
-                            {Pointer{ stack_pointer }, Immediate{ offset }, temp_register}
+                            {Pointer{ stack_pointer }, Immediate{ offset }, temp_register},
+                            origin_location,
                     });
-                    add(Instruction{ PUSH, { temp_register } });
+                    add(Instruction{
+                            PUSH,
+                            { temp_register },
+                            origin_location,
+                    });
                 }
             } else if (data_type->is_array_type()) {
                 const auto array_type = *(data_type->as_array_type());
                 usize current_offset = offset;
                 for (usize i = 0; i < array_type->num_elements; ++i) {
-                    push_onto_stack_from_stack_pointer(stack_pointer, array_type->contained, current_offset);
+                    push_onto_stack_from_stack_pointer(
+                            stack_pointer, array_type->contained, origin_location, current_offset
+                    );
                     current_offset += array_type->contained->size_when_pushed();
                 }
             } else if (data_type->is_struct_type()) {
                 const auto struct_type = *(data_type->as_struct_type());
                 usize current_offset = offset;
                 for (const auto& attribute : struct_type->members) {
-                    push_onto_stack_from_stack_pointer(stack_pointer, attribute.data_type, current_offset);
+                    push_onto_stack_from_stack_pointer(
+                            stack_pointer, attribute.data_type, origin_location, current_offset
+                    );
                     current_offset += attribute.data_type->size_when_pushed();
                 }
             } else {
@@ -730,15 +751,6 @@ namespace Bssembler {
                 );
             }
             return result;
-        }
-
-        [[nodiscard]] Bssembly operator+(const Bssembly& other) const {
-            auto result = InstructionVector{ m_instructions };
-            result.reserve(m_instructions.size() + other.m_instructions.size());
-            for (const auto& instruction : other.m_instructions) {
-                result.push_back(instruction);
-            }
-            return Bssembly{ result };
         }
 
         Bssembly& operator+=(Bssembly&& other) {

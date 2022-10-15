@@ -658,8 +658,9 @@ namespace Parser {
             if (current_is<Let>()) {
                 initializer = variable_definition();
             } else if (not current_is<Semicolon>()) {
-                initializer = std::make_unique<Statements::ExpressionStatement>(expression());
-                consume_semicolon();
+                auto expression_ = expression();
+                const auto semicolon = consume_semicolon();
+                initializer = std::make_unique<Statements::ExpressionStatement>(std::move(expression_), semicolon);
             } else {
                 consume<Semicolon>();
             }
@@ -720,8 +721,10 @@ namespace Parser {
                     advance();
                 } else {
                     auto expression = this->expression();
-                    consume<Semicolon>("expected \";\" to complete expression statement");
-                    statements.push_back(std::make_unique<Statements::ExpressionStatement>(std::move(expression)));
+                    const auto semicolon = consume<Semicolon>("expected \";\" to complete expression statement");
+                    statements.push_back(
+                            std::make_unique<Statements::ExpressionStatement>(std::move(expression), semicolon)
+                    );
                 }
             }
             consume<RightCurlyBracket>("expected \"}\"");
@@ -882,8 +885,8 @@ namespace Parser {
             return std::make_unique<Statements::ReturnStatement>(return_token, std::move(return_value));
         }
 
-        void consume_semicolon() {
-            consume<Semicolon>("expected \";\"");
+        Semicolon consume_semicolon() {
+            return consume<Semicolon>("expected \";\"");
         }
 
         template<typename T>

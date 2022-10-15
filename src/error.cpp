@@ -127,9 +127,9 @@ struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
 void print_message(const Lexer::Tokens::Token& token, const std::string_view message) {
     using namespace std::ranges::views;
     using std::ranges::count, std::ranges::find;
-    const auto npos = std::string_view::npos;
-
+    static constexpr auto npos = std::string_view::npos;
     const auto location = Error::token_location(token);
+
     const auto row = count(location.source_code.text | take(location.offset_start_inclusive), '\n') + 1;
     const auto last_newline_pos = location.source_code.text.find_last_of('\n', location.offset_start_inclusive);
     const auto column = location.offset_start_inclusive - (last_newline_pos == npos ? -1 : last_newline_pos);
@@ -171,6 +171,18 @@ void print_message(const Lexer::Tokens::Token& token, const std::string_view mes
 }
 
 namespace Error {
+
+    [[nodiscard]] std::pair<usize, usize> row_and_column(Location location) {
+        using namespace std::ranges::views;
+        using std::ranges::count, std::ranges::find;
+        static constexpr auto npos = std::string_view::npos;
+
+        const auto row = count(location.source_code.text | take(location.offset_start_inclusive), '\n') + 1;
+        const auto last_newline_pos = location.source_code.text.find_last_of('\n', location.offset_start_inclusive);
+        const auto column = location.offset_start_inclusive - (last_newline_pos == npos ? -1 : last_newline_pos);
+
+        return { row, column };
+    }
 
     void error(const Lexer::Tokens::Token& token, const std::string_view message) {
         print_message(token, message);
