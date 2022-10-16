@@ -8,6 +8,7 @@
 #include "namespace.hpp"
 #include "parser.hpp"
 #include "types.hpp"
+#include "upholsterer.hpp"
 #include "utils.hpp"
 #include <algorithm>
 #include <cassert>
@@ -66,101 +67,114 @@ namespace Emitter {
         // integral data types, including pointers.
         // Operands are already stored in R1 and R2, result has to be stored in R3.
         struct UnsignedIntegralBinaryOperatorEmitter {
-            void operator()(const Plus&) const {
+            void operator()(const Plus& token) const {
                 visitor->bssembly.add(Instruction{
                         ADD,
                         {R1, R2, R3},
-                        "add values"
+                        "add values",
+                        token.location,
                 });
             }
 
-            void operator()(const Minus&) const {
+            void operator()(const Minus& token) const {
                 visitor->bssembly.add(Instruction{
                         SUB,
                         {R1, R2, R3},
-                        "subtract values"
+                        "subtract values",
+                        token.location,
                 });
             }
 
-            void operator()(const Asterisk&) const {
+            void operator()(const Asterisk& token) const {
                 visitor->bssembly.add(Instruction{
                         MULT,
                         {R1, R2, R4, R3},
-                        "multiply values"
+                        "multiply values",
+                        token.location,
                 });
             }
 
-            void operator()(const ForwardSlash&) const {
+            void operator()(const ForwardSlash& token) const {
                 visitor->bssembly.add(Instruction{
                         DIVMOD,
                         {R1, R2, R3, R4},
-                        "divmod the values, R4 gets the result of the division"
+                        "divmod the values, R4 gets the result of the division",
+                        token.location,
                 });
             }
 
-            void operator()(const Mod&) const {
+            void operator()(const Mod& token) const {
                 visitor->bssembly.add(Instruction{
                         DIVMOD,
                         {R1, R2, R4, R3},
-                        "divmod the values, R3 gets the result of 'mod'"
+                        "divmod the values, R3 gets the result of 'mod'",
+                        token.location,
                 });
             }
 
-            void operator()(const And&) const {
+            void operator()(const And& token) const {
                 visitor->bssembly.add(Instruction{
                         AND,
                         {R1, R2, R3},
-                        "and values"
+                        "and values",
+                        token.location,
                 });
             }
 
-            void operator()(const Or&) const {
+            void operator()(const Or& token) const {
                 visitor->bssembly.add(Instruction{
                         OR,
                         {R1, R2, R3},
-                        "or values"
+                        "or values",
+                        token.location,
                 });
             }
 
-            void operator()(const EqualsEquals&) const {
+            void operator()(const EqualsEquals& token) const {
                 visitor->bssembly.add(Instruction{
                         COMP_EQ,
-                        {R1, R2, R3}
+                        {R1, R2, R3},
+                        token.location,
                 });
             }
 
-            void operator()(const ExclamationEquals&) const {
+            void operator()(const ExclamationEquals& token) const {
                 visitor->bssembly.add(Instruction{
                         COMP_NEQ,
-                        {R1, R2, R3}
+                        {R1, R2, R3},
+                        token.location,
                 });
             }
 
-            void operator()(const GreaterThan&) const {
+            void operator()(const GreaterThan& token) const {
                 visitor->bssembly.add(Instruction{
                         COMP_GT,
-                        {R1, R2, R3}
+                        {R1, R2, R3},
+                        token.location,
                 });
             }
 
-            void operator()(const GreaterOrEquals&) const {
+            void operator()(const GreaterOrEquals& token) const {
                 visitor->bssembly.add(Instruction{
                         COMP_GE,
-                        {R1, R2, R3}
+                        {R1, R2, R3},
+                        token.location,
                 });
             }
 
-            void operator()(const LessThan&) const {
+            void operator()(const LessThan& token) const {
                 visitor->bssembly.add(Instruction{
                         COMP_LT,
-                        {R1, R2, R3}
+                        {R1, R2, R3},
+                        token.location,
                 });
             }
 
-            void operator()(const LessOrEquals&) const {
+            void operator()(const LessOrEquals& token) const {
                 visitor->bssembly.add(Instruction{
                         COMP_LE,
-                        {R1, R2, R3}
+                        {R1, R2, R3},
+                        token.location,
                 });
             }
 
@@ -179,19 +193,24 @@ namespace Emitter {
 
         void visit(Integer& expression) override {
             assert(not expression.emittable_string.empty());
-            bssembly.add(Instruction{ PUSH, { Immediate{ expression.emittable_string } }, "push immediate onto stack" }
-            );
+            bssembly.add(Instruction{ PUSH,
+                                      { Immediate{ expression.emittable_string } },
+                                      "push immediate onto stack",
+                                      expression.value.location });
         }
 
         void visit(Char& expression) override {
             bssembly.add(Instruction{ PUSH,
                                       { Immediate{ char_token_to_u8(expression.value) } },
-                                      "push immediate onto stack" });
+                                      "push immediate onto stack",
+                                      expression.value.location });
         }
 
         void visit(Bool& expression) override {
             const u8 value = expression.value.location.view() == "true" ? 1 : 0;
-            bssembly.add(Instruction{ PUSH, { Immediate{ value } }, "push immediate onto stack" });
+            bssembly.add(
+                    Instruction{ PUSH, { Immediate{ value } }, "push immediate onto stack", expression.value.location }
+            );
         }
 
         void visit(ArrayLiteral& expression) override {
@@ -227,9 +246,10 @@ namespace Emitter {
                         overload->signature
                 );
                 auto label_name = fmt::format("$\"{}\"", mangled_name);
-                bssembly.add(
-                        Instruction{ PUSH, { Immediate{ std::move(label_name) } }, "push address of label onto stack" }
-                );
+                bssembly.add(Instruction{ PUSH,
+                                          { Immediate{ std::move(label_name) } },
+                                          "push address of label onto stack",
+                                          std::get<Identifier>(expression.name_tokens.back()).location });
                 return;
             }
             assert(expression.variable_symbol.has_value() and "if this is not a function, it has to be a variable");
@@ -246,14 +266,20 @@ namespace Emitter {
                 bssembly.add(Instruction{
                         ADD,
                         {R0, Immediate{ offset }, R1},
-                        fmt::format("calculate address of variable \"{}\"", variable_name)
+                        fmt::format("calculate address of variable \"{}\"", variable_name),
+                        std::get<Identifier>(expression.name_tokens.back()).location
                 });
-                bssembly.add(Instruction{ PUSH, { R1 }, "push the address of variable onto the stack" });
+                bssembly.add(Instruction{ PUSH,
+                                          { R1 },
+                                          "push the address of variable onto the stack",
+                                          std::get<Identifier>(expression.name_tokens.back()).location });
             } else {
                 // we have an rvalue
                 bssembly.add(Comment{
                         fmt::format("load value of variable \"{}\" and push it onto the stack", variable_name) });
-                bssembly.push_value_onto_stack(R0, expression.data_type, offset);
+                bssembly.push_value_onto_stack(
+                        R0, expression.data_type, std::get<Identifier>(expression.name_tokens.back()).location, offset
+                );
             }
         }
 
@@ -263,18 +289,30 @@ namespace Emitter {
                 assert(expression.data_type == type_container->get_bool() and "type checker should've caught this");
                 // we can assume that the value on the stack is 0 or 1 (representing false or true)
                 // we have to flip the least significant bit to invert the truth value
-                bssembly.add(Instruction{ POP, { R1 }, "get value of operand for logical not operation" });
+                bssembly.add(Instruction{
+                        POP,
+                        { R1 },
+                        "get value of operand for logical not operation",
+                        Error::token_location(expression.operator_token),
+                });
                 bssembly.add(Instruction{
                         COPY,
                         {Immediate{ 1 }, R3},
-                        "get constant 1"
+                        "get constant 1",
+                        Error::token_location(expression.operator_token),
                 });
                 bssembly.add(Instruction{
                         XOR,
                         {R1, R3, R1},
-                        "flip the truth value"
+                        "flip the truth value",
+                        Error::token_location(expression.operator_token),
                 });
-                bssembly.add(Instruction{ PUSH, { R1 }, "push the result of the logical not operation" });
+                bssembly.add(Instruction{
+                        PUSH,
+                        { R1 },
+                        "push the result of the logical not operation",
+                        Error::token_location(expression.operator_token),
+                });
             } else if (is<At>(expression.operator_token)) {
                 // we do not have to do anything, since the operand is guaranteed to be an lvalue and therefore
                 // puts its address onto the stack upon being evaluated
@@ -285,8 +323,15 @@ namespace Emitter {
                     // lvalue: evaluating the operand already yielded the contained address, nothing to do here
                 } else {
                     // rvalue: evaluating the operand yielded the address which we now have to dereference
-                    bssembly.add(Instruction{ POP, { R1 }, "get address to dereference" });
-                    bssembly.push_value_onto_stack(R1, expression.data_type);
+                    bssembly.add(Instruction{
+                            POP,
+                            { R1 },
+                            "get address to dereference",
+                            Error::token_location(expression.operator_token),
+                    });
+                    bssembly.push_value_onto_stack(
+                            R1, expression.data_type, Error::token_location(expression.operator_token)
+                    );
                 }
             } else {
                 assert(false and "not implemented");
@@ -297,38 +342,53 @@ namespace Emitter {
             bssembly.add(Instruction{
                     POP,
                     { R1 },
-                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()) });
+                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()),
+                    Error::token_location(operator_token),
+            });
             const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
             bssembly.add(Instruction{
                     JUMP_EQ,
                     {R1, Immediate{ end_of_evaluation }},
-                    "skip rest of evaluation if value is false"
+                    "skip rest of evaluation if value is false",
+                    Error::token_location(operator_token),
             });
-            bssembly.add(Instruction{ PUSH,
-                                      { R1 },
-                                      fmt::format(
-                                              "push left operand for {}-operator onto the stack",
-                                              Error::token_location(operator_token).view()
-                                      ) });
+            bssembly.add(Instruction{
+                    PUSH,
+                    { R1 },
+                    fmt::format(
+                            "push left operand for {}-operator onto the stack",
+                            Error::token_location(operator_token).view()
+                    ),
+                    Error::token_location(operator_token),
+            });
             expression.rhs->accept(*this);
             bssembly.add(Instruction{
                     POP,
                     { R2 },
-                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()),
+                    Error::token_location(operator_token),
+            });
             bssembly.add(Instruction{
                     POP,
                     { R1 },
-                    fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+                    fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()),
+                    Error::token_location(operator_token),
+            });
             assert(expression.lhs->data_type == type_container->get_bool());
             assert(expression.rhs->data_type == type_container->get_bool());
             std::visit(UnsignedIntegralBinaryOperatorEmitter{ this }, operator_token);
             const auto after_push = label_generator->next_label("after_push");
-            bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ after_push } },
+                    Error::token_location(operator_token),
+            });
             bssembly.add(Bssembler::Label{ end_of_evaluation });
             bssembly.add(Instruction{
                     COPY,
                     {R1, R3},
-                    "store \"false\" as result"
+                    "store \"false\" as result",
+                    Error::token_location(operator_token),
             });
             bssembly.add(Bssembler::Label{ after_push });
         }
@@ -337,38 +397,53 @@ namespace Emitter {
             bssembly.add(Instruction{
                     POP,
                     { R1 },
-                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()) });
+                    fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()),
+                    Error::token_location(operator_token),
+            });
             const auto end_of_evaluation = label_generator->next_label("end_of_short_circuiting");
             bssembly.add(Instruction{
                     JUMP_GT,
                     {R1, Immediate{ end_of_evaluation }},
-                    "skip rest of evaluation if value is true"
+                    "skip rest of evaluation if value is true",
+                    Error::token_location(operator_token),
             });
-            bssembly.add(Instruction{ PUSH,
-                                      { R1 },
-                                      fmt::format(
-                                              "push left operand for {}-operator onto the stack",
-                                              Error::token_location(operator_token).view()
-                                      ) });
+            bssembly.add(Instruction{
+                    PUSH,
+                    { R1 },
+                    fmt::format(
+                            "push left operand for {}-operator onto the stack",
+                            Error::token_location(operator_token).view()
+                    ),
+                    Error::token_location(operator_token),
+            });
             expression.rhs->accept(*this);
             bssembly.add(Instruction{
                     POP,
                     { R2 },
-                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+                    fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()),
+                    Error::token_location(operator_token),
+            });
             bssembly.add(Instruction{
                     POP,
                     { R1 },
-                    fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()) });
+                    fmt::format(R"(store lhs for {}-operator in R2)", Error::token_location(operator_token).view()),
+                    Error::token_location(operator_token),
+            });
             assert(expression.lhs->data_type == type_container->get_bool());
             assert(expression.rhs->data_type == type_container->get_bool());
             std::visit(UnsignedIntegralBinaryOperatorEmitter{ this }, operator_token);
             const auto after_push = label_generator->next_label("after_push");
-            bssembly.add(Instruction{ JUMP, { Immediate{ after_push } } });
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ after_push } },
+                    Error::token_location(operator_token),
+            });
             bssembly.add(Bssembler::Label{ end_of_evaluation });
             bssembly.add(Instruction{
                     COPY,
                     {R1, R3},
-                    "store \"true\" as result"
+                    "store \"true\" as result",
+                    Error::token_location(operator_token),
             });
             bssembly.add(Bssembler::Label{ after_push });
         }
@@ -385,15 +460,15 @@ namespace Emitter {
                 bssembly.add(Instruction{
                         POP,
                         { R2 },
-                        fmt::format(
-                                R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()
-                        ) });
+                        fmt::format(R"(store rhs for {}-operator in R2)", Error::token_location(operator_token).view()),
+                        Error::token_location(operator_token),
+                });
                 bssembly.add(Instruction{
                         POP,
                         { R1 },
-                        fmt::format(
-                                R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()
-                        ) });
+                        fmt::format(R"(store lhs for {}-operator in R1)", Error::token_location(operator_token).view()),
+                        Error::token_location(operator_token),
+                });
             } else {
                 assert(false and "not implemented");
             }
@@ -417,12 +492,14 @@ namespace Emitter {
                 bssembly.add(Instruction{
                         COPY,
                         {Immediate{ contained_size }, R4},
-                        fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string())
+                        fmt::format("get size of data type \"{}\"", pointer_type->contained->to_string()),
+                        Error::token_location(operator_token),
                 });
                 bssembly.add(Instruction{
                         MULT,
                         {Immediate{ number_register }, R4, R3, Immediate{ number_register }},
-                        "multiply operand with size"
+                        "multiply operand with size",
+                        Error::token_location(operator_token),
                 });
             }
 
@@ -448,12 +525,14 @@ namespace Emitter {
                 bssembly.add(Instruction{
                         COPY,
                         {Immediate{ contained_size }, R5},
-                        fmt::format("get the size of the data type \"{}\"", pointer_type->to_string())
+                        fmt::format("get the size of the data type \"{}\"", pointer_type->to_string()),
+                        Error::token_location(operator_token),
                 });
                 bssembly.add(Instruction{
                         DIVMOD,
                         {R3, R5, R3, R4},
-                        "divide the result of pointer subtraction by the size of the data type"
+                        "divide the result of pointer subtraction by the size of the data type",
+                        Error::token_location(operator_token),
                 });
             }
         }
@@ -495,8 +574,15 @@ namespace Emitter {
                         /* Since the struct is an lvalue, the address of the struct has been pushed onto
                          * the stack. We now have to calculate the address of the struct attribute and
                          * fetch its value to put it onto the stack. */
-                        bssembly.add(Instruction{ POP, { R1 }, "get address of struct variable" });
-                        bssembly.push_value_onto_stack(R1, expression.data_type, attribute_offset);
+                        bssembly.add(Instruction{
+                                POP,
+                                { R1 },
+                                "get address of struct variable",
+                                Error::token_location(*operator_token),
+                        });
+                        bssembly.push_value_onto_stack(
+                                R1, expression.data_type, Error::token_location(*operator_token), attribute_offset
+                        );
                     } else if (struct_is_rvalue and expression.is_rvalue()) {
                         /* The struct value has been pushed onto the stack (in its expanded form). We now
                          * calculate where the attribute of interest lies at and remember its address in
@@ -520,7 +606,8 @@ namespace Emitter {
                                 fmt::format(
                                         R"(calculate address of member "{}" of the struct literal of type "{}")",
                                         attribute_name, expression.lhs->data_type->to_string()
-                                )
+                                ),
+                                Error::token_location(*operator_token),
                         });
                         bssembly.add(Instruction{
                                 SUB,
@@ -528,25 +615,34 @@ namespace Emitter {
                                 fmt::format(
                                         "decrement stack pointer to discard rvalue of type \"{}\"",
                                         expression.lhs->data_type->to_string()
-                                )
+                                ),
+                                Error::token_location(*operator_token),
                         });
-                        bssembly.push_onto_stack_from_stack_pointer(R1, expression.data_type);
+                        bssembly.push_onto_stack_from_stack_pointer(
+                                R1, expression.data_type, Error::token_location(*operator_token)
+                        );
                     } else if (struct_is_lvalue and expression.is_lvalue()) {
-                        bssembly.add(Instruction{ POP,
-                                                  { R1 },
-                                                  fmt::format(
-                                                          "get the address of the struct of type \"{}\"",
-                                                          expression.lhs->data_type->to_string()
-                                                  ) });
+                        bssembly.add(Instruction{
+                                POP,
+                                { R1 },
+                                fmt::format(
+                                        "get the address of the struct of type \"{}\"",
+                                        expression.lhs->data_type->to_string()
+                                ),
+                                Error::token_location(*operator_token),
+                        });
                         bssembly.add(Instruction{
                                 ADD,
                                 {R1, Immediate{ attribute_offset }, R1},
-                                fmt::format("get the address of the attribute \"{}\"", attribute_name)
+                                fmt::format("get the address of the attribute \"{}\"", attribute_name),
+                                Error::token_location(*operator_token),
                         });
                         bssembly.add(Instruction{
                                 PUSH,
                                 { R1 },
-                                fmt::format("push the address of the attribute \"{}\"", attribute_name) });
+                                fmt::format("push the address of the attribute \"{}\"", attribute_name),
+                                Error::token_location(*operator_token),
+                        });
                     } else {
                         assert(false and "unreachable");
                     }
@@ -566,23 +662,43 @@ namespace Emitter {
                         const auto token = std::get_if<Token>(&expression.operator_type);
                         assert(token != nullptr and "the type checker should've caught this");
                         if (is<EqualsEquals>(*token)) {
-                            bssembly.add(Instruction{ PUSH, { Immediate{ 1 } }, "nothing == nothing yields true" });
+                            bssembly.add(Instruction{
+                                    PUSH,
+                                    { Immediate{ 1 } },
+                                    "nothing == nothing yields true",
+                                    Error::token_location(*operator_token),
+                            });
                         } else if (is<ExclamationEquals>(*token)) {
-                            bssembly.add(Instruction{ PUSH, { Immediate{ 0 } }, "nothing != nothing yields false" });
+                            bssembly.add(Instruction{
+                                    PUSH,
+                                    { Immediate{ 0 } },
+                                    "nothing != nothing yields false",
+                                    Error::token_location(*operator_token),
+                            });
                         } else {
                             assert(false and "unreachable");
                         }
                     } else if (size <= WordSize) {
-                        bssembly.add(Instruction{ PUSH, { R3 }, "push result onto stack" });
+                        bssembly.add(Instruction{
+                                PUSH,
+                                { R3 },
+                                "push result onto stack",
+                                Error::token_location(*operator_token),
+                        });
                     } else {
                         assert(false and "not implemented");
                     }
                 }
-            } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
+            } else if (const auto index_operator = std::get_if<Parser::IndexOperator>(&expression.operator_type)) {
                 assert(expression.lhs->data_type->is_array_type());
                 bssembly.add(Comment{ "evaluate index of index operator" });
                 expression.rhs->accept(*this);
-                bssembly.add(Instruction{ POP, { R1 }, "get index value" });
+                bssembly.add(Instruction{
+                        POP,
+                        { R1 },
+                        "get index value",
+                        index_operator->left_square_bracket_token.location,
+                });
 
                 // R1 holds the index value
 
@@ -594,23 +710,38 @@ namespace Emitter {
                     bssembly.add(Instruction{
                             COPY,
                             {Immediate{ contained_size }, R2},
-                            "get size of contained data type"
+                            "get size of contained data type",
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             MULT,
                             {R1, R2, R4, R3},
-                            "multiply index with size of contained data type"
+                            "multiply index with size of contained data type",
+                            index_operator->left_square_bracket_token.location,
                     });
-                    bssembly.add(Instruction{ POP, { R1 }, "get address of array" });
+                    bssembly.add(Instruction{
+                            POP,
+                            { R1 },
+                            "get address of array",
+                            index_operator->left_square_bracket_token.location,
+                    });
                     bssembly.add(Instruction{
                             ADD,
                             {R1, R3, R1},
-                            "get address of array element"
+                            "get address of array element",
+                            index_operator->left_square_bracket_token.location,
                     });
                     if (expression.is_lvalue()) {
-                        bssembly.add(Instruction{ PUSH, { R1 }, "push address of array element" });
+                        bssembly.add(Instruction{
+                                PUSH,
+                                { R1 },
+                                "push address of array element",
+                                index_operator->left_square_bracket_token.location,
+                        });
                     } else {
-                        bssembly.push_value_onto_stack(R1, expression.data_type);
+                        bssembly.push_value_onto_stack(
+                                R1, expression.data_type, index_operator->left_square_bracket_token.location
+                        );
                     }
                 } else if (expression.lhs->is_rvalue() and expression.is_rvalue()) {
                     /* The whole array has been pushed onto the stack (in expanded form). We have to calculate
@@ -622,26 +753,31 @@ namespace Emitter {
                     bssembly.add(Instruction{
                             COPY,
                             {Immediate{ contained_size_when_pushed }, R2},
-                            "get size of contained data type in expanded form"
+                            "get size of contained data type in expanded form",
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             MULT,
                             {R1, R2, R4, R3},
-                            "multiply index with expanded size of contained data type"
+                            "multiply index with expanded size of contained data type",
+                            index_operator->left_square_bracket_token.location,
                     });
                     const auto total_array_size = expression.lhs->data_type->size_when_pushed();
                     bssembly.add(Instruction{
                             SUB,
                             {SP, Immediate{ total_array_size }, SP},
-                            "decrement stack pointer to discard array"
+                            "decrement stack pointer to discard array",
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             ADD,
                             {SP, R3, R3},
-                            "calculate address of array element inside the discarded stack"
+                            "calculate address of array element inside the discarded stack",
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.push_onto_stack_from_stack_pointer(
-                            R3, (*(expression.lhs->data_type->as_array_type()))->contained, 0
+                            R3, (*(expression.lhs->data_type->as_array_type()))->contained,
+                            index_operator->left_square_bracket_token.location, 0
                     );
                 } else {
                     assert(false and "unreachable");
@@ -674,7 +810,8 @@ namespace Emitter {
                 bssembly.add(Instruction{
                         ADD,
                         {SP, Immediate{ size_when_pushed }, SP},
-                        "reserve stack space for the return value"
+                        "reserve stack space for the return value",
+                        expression.left_parenthesis.location,
                 });
             }
 
@@ -690,12 +827,14 @@ namespace Emitter {
                 bssembly.add(Instruction{
                         SUB,
                         {SP, Immediate{ size_when_pushed + WordSize },
-                          R1}  // WordSize because of the callee address that has been pushed
+                          R1}, // WordSize because of the callee address that has been pushed
+                        expression.left_parenthesis.location,
                 });
                 bssembly.add(Instruction{
                         OFFSET_COPY,
                         {R1, Immediate{ WordSize }, Pointer{ SP }},
-                        "save address for return value as hidden first argument"
+                        "save address for return value as hidden first argument",
+                        expression.left_parenthesis.location,
                 });
             }
             bssembly.add(Instruction{
@@ -704,7 +843,8 @@ namespace Emitter {
                     fmt::format(
                             "reserve stack space for the arguments (additional padding of {} bytes) + 1 extra word",
                             arguments_padding
-                    )
+                    ),
+                    expression.left_parenthesis.location,
             });
             bssembly.add(Comment{ "evaluate all arguments one by one and put them into the reserved stack space" });
 
@@ -723,9 +863,10 @@ namespace Emitter {
                           Immediate{ argument->data_type->size_when_pushed() + arguments_size_with_padding
                           - current_offset },
                           R2},
-                        "calculate target address"
+                        "calculate target address",
+                        expression.left_parenthesis.location,
                 });
-                bssembly.pop_from_stack_into_pointer(R2, argument->data_type);
+                bssembly.pop_from_stack_into_pointer(R2, argument->data_type, expression.left_parenthesis.location);
 
                 current_offset += argument->data_type->size();
             }
@@ -733,21 +874,37 @@ namespace Emitter {
             bssembly.add(Instruction{
                     SUB,
                     {SP, Immediate{ arguments_size_with_padding + WordSize }, SP},
-                    "reset stack pointer to where it was before"
+                    "reset stack pointer to where it was before",
+                    expression.left_parenthesis.location,
             });
 
             /* By popping the address of the callee off of the stack, we will then have 2 words of free space inside
              * the stack right below the function arguments. */
-            bssembly.add(Instruction{ POP, { R1 }, "get the address of the callee" });
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    "get the address of the callee",
+                    expression.left_parenthesis.location,
+            });
 
             /* The following CALL instruction occupies one of the empty words with the return address. The other
              * empty word will be filled by the callee with the old stack frame base pointer. */
-            bssembly.add(Instruction{ CALL, { R1 }, "call the function" });
+            bssembly.add(Instruction{
+                    CALL,
+                    { R1 },
+                    "call the function",
+                    expression.left_parenthesis.location,
+            });
 
             /* If the return value is not returned through a pointer and its size is bigger than zero,
              * we have to put the return value onto the stack. */
             if (expression.data_type->size() > 0 and not return_value_into_pointer) {
-                bssembly.add(Instruction{ PUSH, { R1 }, "push the return value of the called function" });
+                bssembly.add(Instruction{
+                        PUSH,
+                        { R1 },
+                        "push the return value of the called function",
+                        expression.left_parenthesis.location,
+                });
             }
             /* If the return value is returned though a pointer, it now resides in the area we previously
              * reserved. This is the top of the stack.
@@ -764,14 +921,21 @@ namespace Emitter {
                 expression.value->accept(*this); // puts value on the stack
                 bssembly.add(Comment{ "evaluate the assignee to get the address to store the value at" });
                 expression.assignee->accept(*this); // this will put the address of the assignee onto the stack
-                bssembly.add(Instruction{ POP, { R2 }, "get address of assignee" });
+                bssembly.add(Instruction{
+                        POP,
+                        { R2 },
+                        "get address of assignee",
+                        expression.equals_token.location,
+                });
                 bssembly.add(Instruction{
                         SUB,
                         {SP, Immediate{ size_when_pushed }, R1},
-                        "calculate address of value"
+                        "calculate address of value",
+                        expression.equals_token.location,
                 });
-                //bssembly.emit_mem_copy(R1, R2, size, alignment);
-                bssembly.copy_from_stack_into_pointer(R1, R2, expression.value->data_type);
+                bssembly.copy_from_stack_into_pointer(
+                        R1, R2, expression.value->data_type, expression.equals_token.location
+                );
 
                 // Since assignments are expressions, they have a resulting value. This value must lie on the
                 // stack after the assignment has been evaluated. Since we only copied the value, it is still
@@ -784,9 +948,15 @@ namespace Emitter {
             bssembly.add(Instruction{
                     COPY,
                     {Immediate{ expression.contained_data_type->size() }, R1},
-                    fmt::format("get size of \"{}\"", expression.contained_data_type->to_string())
+                    fmt::format("get size of \"{}\"", expression.contained_data_type->to_string()),
+                    expression.type_size_token.location,
             });
-            bssembly.add(Instruction{ PUSH, { R1 }, "push size onto the stack" });
+            bssembly.add(Instruction{
+                    PUSH,
+                    { R1 },
+                    "push size onto the stack",
+                    expression.type_size_token.location,
+            });
         }
 
         void visit(ValueSizeExpression& expression) override {
@@ -794,9 +964,15 @@ namespace Emitter {
             bssembly.add(Instruction{
                     COPY,
                     {Immediate{ expression.expression->data_type->size() }, R1},
-                    fmt::format("get size of \"{}\"", expression.expression->data_type->to_string())
+                    fmt::format("get size of \"{}\"", expression.expression->data_type->to_string()),
+                    expression.value_size_token.location,
             });
-            bssembly.add(Instruction{ PUSH, { R1 }, "push size onto the stack" });
+            bssembly.add(Instruction{
+                    PUSH,
+                    { R1 },
+                    "push size onto the stack",
+                    expression.value_size_token.location,
+            });
         }
 
         void visit(Nothing&) override {
@@ -811,27 +987,40 @@ namespace Emitter {
 
         void visit(IfStatement& statement) override {
             statement.condition->accept(*this);
-            bssembly.add(Instruction{ POP, { R1 }, "get result of condition" });
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    "get result of condition",
+                    statement.if_token.location,
+            });
             bssembly.add(Instruction{
                     COPY,
                     {Immediate{ 0 }, R2},
-                    "get constant zero"
+                    "get constant zero",
+                    statement.if_token.location,
             });
             bssembly.add(Instruction{
                     COMP,
                     {R1, R2, R3},
-                    "evaluate if condition is true"
+                    "evaluate if condition is true",
+                    statement.if_token.location,
             });
             const auto else_label = label_generator->next_label("else");
             const auto endif_label = label_generator->next_label("endif");
             bssembly.add(Instruction{
                     JUMP_EQ,
                     {R3, Immediate{ else_label }},
-                    "jump to else-block"
+                    "jump to else-block",
+                    statement.if_token.location,
             });
             bssembly.add(Comment{ "begin of then-block" });
             statement.then_block.accept(*this);
-            bssembly.add(Instruction{ JUMP, { Immediate{ endif_label } }, "jump to end of else-block" });
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ endif_label } },
+                    "jump to end of else-block",
+                    statement.if_token.location,
+            });
             bssembly.add(Bssembler::Label{ else_label, "begin of else-block" });
             statement.else_block.accept(*this);
             bssembly.add(Bssembler::Label{ endif_label, "end of else-block" });
@@ -844,7 +1033,11 @@ namespace Emitter {
             bssembly.add(Bssembler::Label{ loop_start_label, "brrrrr" });
             statement.body.accept(*this);
             loop_stack.pop();
-            bssembly.add(Instruction{ JUMP, { Immediate{ loop_start_label } } });
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ loop_start_label } },
+                    statement.loop_token.location,
+            });
             bssembly.add(Bssembler::Label{ loop_end_label, "end of loop" });
         }
 
@@ -854,20 +1047,30 @@ namespace Emitter {
             const auto while_end_label = label_generator->next_label("while_end");
             loop_stack.push(LoopLabels{ .continue_to_label{ while_condition_label },
                                         .break_to_label{ while_end_label } });
-            bssembly.add(Instruction{ JUMP, { Immediate{ while_condition_label } }, "jump to condition of while-loop" }
-            );
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ while_condition_label } },
+                    "jump to condition of while-loop",
+                    statement.while_token.location,
+            });
             bssembly.add(Bssembler::Label{ while_start_label });
 
             statement.body.accept(*this);
 
             bssembly.add(Bssembler::Label{ while_condition_label });
             statement.condition->accept(*this);
-            bssembly.add(Instruction{ POP, { R1 }, "get value of while-loop condition" });
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    "get value of while-loop condition",
+                    statement.while_token.location,
+            });
 
             bssembly.add(Instruction{
                     JUMP_GT,
                     {R1, Immediate{ while_start_label }},
-                    "repeat the while-loop if the condition is true"
+                    "repeat the while-loop if the condition is true",
+                    statement.while_token.location,
             });
 
             bssembly.add(Bssembler::Label{ while_end_label });
@@ -886,12 +1089,18 @@ namespace Emitter {
 
             bssembly.add(Bssembler::Label{ do_while_condition_label });
             statement.condition->accept(*this);
-            bssembly.add(Instruction{ POP, { R1 }, "get value of do-while-loop condition" });
+            bssembly.add(Instruction{
+                    POP,
+                    { R1 },
+                    "get value of do-while-loop condition",
+                    statement.while_token.location,
+            });
 
             bssembly.add(Instruction{
                     JUMP_GT,
                     {R1, Immediate{ do_while_start_label }},
-                    "repeat the do-while-loop if the condition is true"
+                    "repeat the do-while-loop if the condition is true",
+                    statement.while_token.location,
             });
 
             bssembly.add(Bssembler::Label{ do_while_end_label });
@@ -910,9 +1119,12 @@ namespace Emitter {
             }
 
             if (statement.condition) {
-                bssembly.add(Instruction{ JUMP,
-                                          { Immediate{ for_condition_label } },
-                                          "jump to the condition of the for-loop" });
+                bssembly.add(Instruction{
+                        JUMP,
+                        { Immediate{ for_condition_label } },
+                        "jump to the condition of the for-loop",
+                        statement.for_token.location,
+                });
             }
 
             bssembly.add(Bssembler::Label{ for_start_label });
@@ -921,22 +1133,36 @@ namespace Emitter {
 
             if (statement.increment) {
                 statement.increment->accept(*this);
-                bssembly.add(Instruction{ POP, { R1 }, "pop result of increment" });
+                bssembly.add(Instruction{
+                        POP,
+                        { R1 },
+                        "pop result of increment",
+                        statement.for_token.location,
+                });
             }
 
             bssembly.add(Bssembler::Label{ for_condition_label });
             if (statement.condition) {
                 statement.condition->accept(*this);
-                bssembly.add(Instruction{ POP, { R1 }, "get value of for-loop condition" });
+                bssembly.add(Instruction{
+                        POP,
+                        { R1 },
+                        "get value of for-loop condition",
+                        statement.for_token.location,
+                });
                 bssembly.add(Instruction{
                         JUMP_GT,
                         {R1, Immediate{ for_start_label }},
-                        "jump to the beginning of the for-loop"
+                        "jump to the beginning of the for-loop",
+                        statement.for_token.location,
                 });
             } else {
-                bssembly.add(
-                        Instruction{ JUMP, { Immediate{ for_start_label } }, "jump to the beginning of the for-loop" }
-                );
+                bssembly.add(Instruction{
+                        JUMP,
+                        { Immediate{ for_start_label } },
+                        "jump to the beginning of the for-loop",
+                        statement.for_token.location,
+                });
             }
             bssembly.add(Bssembler::Label{ for_end_label });
             loop_stack.pop();
@@ -946,16 +1172,24 @@ namespace Emitter {
             if (loop_stack.empty()) {
                 Error::error(statement.break_token, "break statement not allowed here");
             }
-            bssembly.add(Instruction{ JUMP, { Immediate{ loop_stack.top().break_to_label } }, "break out of loop" });
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ loop_stack.top().break_to_label } },
+                    "break out of loop",
+                    statement.break_token.location,
+            });
         }
 
         void visit(ContinueStatement& statement) override {
             if (loop_stack.empty()) {
                 Error::error(statement.continue_token, "continue statement not allowed here");
             }
-            bssembly.add(
-                    Instruction{ JUMP, { Immediate{ loop_stack.top().continue_to_label } }, "continue to top of loop" }
-            );
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ loop_stack.top().continue_to_label } },
+                    "continue to top of loop",
+                    statement.continue_token.location,
+            });
         }
 
         void visit(ReturnStatement& statement) override {
@@ -970,17 +1204,28 @@ namespace Emitter {
                         bssembly.add(Instruction{
                                 COPY,
                                 {Pointer{ R0 }, R1},
-                                "get address where to store the return value at"
+                                "get address where to store the return value at",
+                                statement.return_token.location,
                         });
                         const auto size_when_pushed = statement.return_value->data_type->size_when_pushed();
                         assert(size_when_pushed % WordSize == 0);
-                        bssembly.pop_from_stack_into_pointer(R1, size_when_pushed);
+                        bssembly.pop_from_stack_into_pointer(R1, size_when_pushed, statement.return_token.location);
                     } else {
-                        bssembly.add(Instruction{ POP, { R1 }, "put return value into R1" });
+                        bssembly.add(Instruction{
+                                POP,
+                                { R1 },
+                                "put return value into R1",
+                                statement.return_token.location,
+                        });
                     }
                 }
             }
-            bssembly.add(Instruction{ JUMP, { Immediate{ return_label } }, "immediately exit the current function" });
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ return_label } },
+                    "immediately exit the current function",
+                    statement.return_token.location,
+            });
         }
 
         void visit(VariableDefinition& statement) override {
@@ -997,10 +1242,13 @@ namespace Emitter {
                 bssembly.add(Instruction{
                         ADD,
                         {R0, Immediate{ *(statement.variable_symbol->offset) }, R1},
-                        "get target address"
+                        "get target address",
+                        statement.let_token.location,
                 });
                 assert(statement.initial_value->data_type->alignment() <= WordSize and "unreachable");
-                bssembly.pop_from_stack_into_pointer(R1, statement.initial_value->data_type);
+                bssembly.pop_from_stack_into_pointer(
+                        R1, statement.initial_value->data_type, statement.let_token.location
+                );
             }
         }
 
@@ -1009,9 +1257,12 @@ namespace Emitter {
             const auto start_iterator = std::find(assembly_block.cbegin(), assembly_block.cend(), '{');
             assert(start_iterator != assembly_block.cend());
             const auto inner = std::string_view{ start_iterator + 1, assembly_block.cend() - 1 };
+            const auto instructions =
+                    parse_bssembly(statement.token.location.source_code.filename, inner, statement.token.location);
             bssembly.add(Comment{ "-- block of inline bssembly --" });
-            bssembly.add(InlineBssembly{ inner });
-            bssembly.add(NewLine{});
+            for (const auto& instruction : instructions) {
+                bssembly.add(instruction);
+            }
             bssembly.add(Comment{ "-- end of inline bssembly --" });
         }
 
@@ -1023,7 +1274,11 @@ namespace Emitter {
                 const auto num_words = size_when_pushed / WordSize;
                 bssembly.add(Comment{ "discard value of expression statement" });
                 for (usize i = 0; i < num_words; ++i) {
-                    bssembly.add(Instruction{ POP, {} });
+                    bssembly.add(Instruction{
+                            POP,
+                            {},
+                            statement.semicolon_token.location,
+                    });
                 }
             }
         }
@@ -1036,9 +1291,12 @@ namespace Emitter {
         void visit(GotoStatement& statement) override {
             assert(statement.target_label != nullptr and "target label must have been set before");
             const auto& label = statement.target_label->emitted_label;
-            bssembly.add(Instruction{ JUMP,
-                                      { Immediate{ label } },
-                                      fmt::format("goto {}", statement.label_identifier.location.view()) });
+            bssembly.add(Instruction{
+                    JUMP,
+                    { Immediate{ label } },
+                    fmt::format("goto {}", statement.label_identifier.location.view()),
+                    statement.goto_token.location,
+            });
         }
 
         TypeContainer* type_container;
@@ -1075,16 +1333,23 @@ namespace Emitter {
         auto result = Bssembly{};
         result.add(NewLine{});
         result.add(Bssembler::Label{ fmt::format("$\"{}\"", mangled_name) });
-        result.add(Instruction{ PUSH, { R0 }, "save the old stack frame base pointer" });
+        result.add(Instruction{
+                PUSH,
+                { R0 },
+                "save the old stack frame base pointer",
+                function_definition->name.location,
+        });
         result.add(Instruction{
                 COPY,
                 {SP, R0},
-                "set the new stack frame base pointer"
+                "set the new stack frame base pointer",
+                function_definition->name.location,
         });
         result.add(Instruction{
                 ADD,
                 {SP, Immediate{ function_definition->occupied_stack_space.value() }, SP},
-                "reserve stack space for arguments and local variables (arguments already filled by the caller)"
+                "reserve stack space for arguments and local variables (arguments already filled by the caller)",
+                function_definition->name.location,
         });
 
         // generate labels for all label definitions in the current function
@@ -1101,10 +1366,20 @@ namespace Emitter {
         result.add(Instruction{
                 COPY,
                 {R0, SP},
-                "clear current stack frame"
+                "clear current stack frame",
+                function_definition->name.location,
         });
-        result.add(Instruction{ POP, { R0 }, "restore previous stack frame" });
-        result.add(Instruction{ RETURN, {} });
+        result.add(Instruction{
+                POP,
+                { R0 },
+                "restore previous stack frame",
+                function_definition->name.location,
+        });
+        result.add(Instruction{
+                RETURN,
+                {},
+                function_definition->name.location,
+        });
 
         return result;
     }

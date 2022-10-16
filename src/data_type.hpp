@@ -5,6 +5,7 @@
 #pragma once
 
 #include "error.hpp"
+#include "magic_enum_wrapper.hpp"
 #include "mutability.hpp"
 #include "type_container.hpp"
 #include "types.hpp"
@@ -13,7 +14,6 @@
 #include <cassert>
 #include <fmt/core.h>
 #include <fmt/format.h>
-#include <magic_enum.hpp>
 #include <memory>
 #include <numeric>
 #include <optional>

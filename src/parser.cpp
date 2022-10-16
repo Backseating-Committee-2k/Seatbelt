@@ -4,6 +4,7 @@
 
 #include "parser.hpp"
 #include "error.hpp"
+#include "magic_enum_wrapper.hpp"
 #include "namespace.hpp"
 #include "type_container.hpp"
 #include "types.hpp"
@@ -13,7 +14,6 @@
 #include <cctype>
 #include <fmt/core.h>
 #include <fmt/format.h>
-#include <magic_enum.hpp>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -227,12 +227,14 @@ namespace Parser {
                     accumulator = std::make_unique<FunctionCall>(
                             std::move(accumulator), *left_parenthesis, std::move(arguments)
                     );
-                } else if (maybe_consume<LeftSquareBracket>()) {
+                } else if (const auto left_square_bracket_token = maybe_consume<LeftSquareBracket>()) {
                     // index operator
                     auto index = expression();
-                    consume<RightSquareBracket>("expected \"]\"");
-                    accumulator =
-                            std::make_unique<BinaryOperator>(std::move(accumulator), std::move(index), IndexOperator{});
+                    const auto right_square_bracket_token = consume<RightSquareBracket>("expected \"]\"");
+                    accumulator = std::make_unique<BinaryOperator>(
+                            std::move(accumulator), std::move(index),
+                            IndexOperator{ *left_square_bracket_token, right_square_bracket_token }
+                    );
                 } else if (current_is<ExclamationMark>()) {
                     // dereferencing
                     const auto exclamation_mark_token = current();
@@ -658,8 +660,9 @@ namespace Parser {
             if (current_is<Let>()) {
                 initializer = variable_definition();
             } else if (not current_is<Semicolon>()) {
-                initializer = std::make_unique<Statements::ExpressionStatement>(expression());
-                consume_semicolon();
+                auto expression_ = expression();
+                const auto semicolon = consume_semicolon();
+                initializer = std::make_unique<Statements::ExpressionStatement>(std::move(expression_), semicolon);
             } else {
                 consume<Semicolon>();
             }
@@ -720,8 +723,10 @@ namespace Parser {
                     advance();
                 } else {
                     auto expression = this->expression();
-                    consume<Semicolon>("expected \";\" to complete expression statement");
-                    statements.push_back(std::make_unique<Statements::ExpressionStatement>(std::move(expression)));
+                    const auto semicolon = consume<Semicolon>("expected \";\" to complete expression statement");
+                    statements.push_back(
+                            std::make_unique<Statements::ExpressionStatement>(std::move(expression), semicolon)
+                    );
                 }
             }
             consume<RightCurlyBracket>("expected \"}\"");
@@ -882,8 +887,8 @@ namespace Parser {
             return std::make_unique<Statements::ReturnStatement>(return_token, std::move(return_value));
         }
 
-        void consume_semicolon() {
-            consume<Semicolon>("expected \";\"");
+        Semicolon consume_semicolon() {
+            return consume<Semicolon>("expected \";\"");
         }
 
         template<typename T>

@@ -76,4 +76,8 @@ namespace Utils {
         return result;
     }
 
+    [[nodiscard]] std::string_view trim(std::string_view view);
+
+    [[nodiscard]] std::string to_upper(std::string_view view);
+
 } // namespace Utils

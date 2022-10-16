@@ -28,7 +28,13 @@ FetchContent_Declare(
         GIT_TAG v0.8.1
 )
 
-FetchContent_MakeAvailable(fmt ctre Arguably magic_enum)
+FetchContent_Declare(
+        Upholsterer2k
+        GIT_REPOSITORY https://github.com/Backseating-Committee-2k/Upholsterer2k
+        GIT_TAG aee379da1e19ba7956b12e512fd0ac81001f86c1
+)
+
+FetchContent_MakeAvailable(fmt ctre Arguably magic_enum Upholsterer2k)
 
 if (MSVC)
     # enable code analysis
@@ -76,9 +82,13 @@ add_executable(Seatbelt
         src/bssembly_optimizer.hpp
         src/utils.hpp
         src/utils.cpp
-        src/stack_layout_generator.hpp)
+        src/stack_layout_generator.hpp
+        src/upholsterer.cpp
+        src/upholsterer.hpp
+        src/magic_enum_wrapper.hpp
+        src/bssembly.cpp)
 
-target_link_libraries(Seatbelt fmt ctre Arguably magic_enum)
+target_link_libraries(Seatbelt fmt ctre Arguably magic_enum Upholsterer2kLib)
 
 foreach (target ${TARGET_LIST})
     # set warning levels
@@ -113,3 +123,6 @@ foreach (target ${TARGET_LIST})
         message("Not enabling LTO for target ${target} (not a release build)")
     endif ()
 endforeach ()
+
+set_property(TARGET Upholsterer2kLib PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

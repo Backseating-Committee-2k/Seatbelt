@@ -3,6 +3,7 @@
 #include "emitter.hpp"
 #include "error.hpp"
 #include "lexer.hpp"
+#include "magic_enum_wrapper.hpp"
 #include "parser.hpp"
 #include "scope_generator.hpp"
 #include "stack_layout_generator.hpp"
@@ -13,8 +14,8 @@
 #include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
-#include <magic_enum.hpp>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -273,9 +274,11 @@ int main(int, char** argv) {
                     .help<"usage:">()
                     .named<'o', "output", "set the output filename", std::string>("-")
                     .optionally_named<'i', "input", "set the input filename", std::string>("-")
-                    .optionally_named<
-                            'l', "lib", "pass a comma-separated list of paths to use for import-lookup", std::string>(""
-                    )
+                    .named<'l', "lib", "pass a comma-separated list of paths to use for import-lookup", std::string>("")
+                    .named<'m', "mapping-table",
+                           "outputs a JSON file containing a mapping between Backseat code and Bssembler instructions "
+                           "into the specified file",
+                           std::string>("")
                     .flag<'O', "optimize", "enable the optimizer">()
                     .flag<'v', "verbose", "show verbose output">()
                     .create();
@@ -382,6 +385,34 @@ int main(int, char** argv) {
         write_to_file(bssembly.to_string(), std::move(out_filename));
     } else {
         fmt::print("{}", bssembly.to_string());
+    }
+
+    if (command_line_parser.was_provided<'m'>()) {
+        const auto out_filename = command_line_parser.get<'m'>();
+        auto mapping_table = std::string{ "{\n" };
+        for (usize i = 0; i < bssembly.size(); ++i) {
+            const auto instruction = std::get_if<Bssembler::Instruction>(&(bssembly[i]));
+            if (instruction == nullptr or not instruction->origin_location.has_value()) {
+                continue;
+            }
+            const auto origin_location = *(instruction->origin_location);
+            mapping_table += fmt::format("\t\"{}\": {{\n", i + 1);
+            mapping_table += fmt::format(
+                    "\t\t\"backseat_filename\": {},\n", fmt::streamed(std::quoted(origin_location.source_code.filename))
+            );
+            const auto [row, column] = Error::row_and_column(origin_location);
+            mapping_table += fmt::format("\t\t\"backseat_line\": {},\n", row);
+            mapping_table += fmt::format("\t\t\"backseat_column_start\": {},\n", column);
+            mapping_table += fmt::format("\t\t\"backseat_column_end\": {}\n", column + origin_location.view().length());
+            mapping_table += "\t}";
+            if (i < bssembly.size() - 1) {
+                mapping_table += ",";
+            }
+            mapping_table += "\n";
+        }
+        mapping_table += "}\n";
+
+        write_to_file(std::string_view{ mapping_table }, std::string_view{ out_filename });
     }
 
     std::exit(EXIT_SUCCESS);

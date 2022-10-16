@@ -48,7 +48,14 @@ namespace Parser {
         struct Expression;
     }
 
-    struct IndexOperator { };
+    struct IndexOperator {
+        IndexOperator(LeftSquareBracket left_square_bracket_token, RightSquareBracket right_square_bracket_token)
+            : left_square_bracket_token{ left_square_bracket_token },
+              right_square_bracket_token{ right_square_bracket_token } { }
+
+        LeftSquareBracket left_square_bracket_token;
+        RightSquareBracket right_square_bracket_token;
+    };
 
     using BinaryOperatorType = std::variant<Token, IndexOperator>;
 
@@ -261,10 +268,12 @@ namespace Parser {
         };
 
         struct ExpressionStatement : public StatementAcceptor<ExpressionStatement> {
-            explicit ExpressionStatement(std::unique_ptr<Expression> expression)
-                : expression{ std::move(expression) } { }
+            explicit ExpressionStatement(std::unique_ptr<Expression> expression, Semicolon semicolon_token)
+                : expression{ std::move(expression) },
+                  semicolon_token{ semicolon_token } { }
 
             std::unique_ptr<Expression> expression;
+            Semicolon semicolon_token;
         };
 
         struct LabelDefinition : public StatementAcceptor<LabelDefinition> {
