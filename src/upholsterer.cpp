@@ -30,19 +30,18 @@ using namespace Bssembler;
 [[nodiscard]] static std::optional<Bssembler::Register> token_to_register(const Token token) {
     assert(token.type == TOKEN_TYPE_REGISTER);
     auto register_number_string = c_string_view_to_string(token.string_view).substr(1);
-    auto out_of_range = false;
     try {
         const auto register_number = std::stoi(register_number_string);
-        if (register_number < 0 or register_number > 255) {
-            out_of_range = true;
-        } else {
+        if (register_number >= 0 and register_number <= 255) {
             const auto register_string = fmt::format("R{}", register_number);
             const auto register_ = magic_enum::enum_cast<Bssembler::Register>(register_string);
             assert(register_.has_value());
             return *register_;
+        } else {
+            return {};
         }
     } catch (const std::out_of_range&) {
-        out_of_range = true;
+        // do nothing
     } catch (const std::invalid_argument&) {
         assert(false and "unreachable"); // Upholsterer Lexer should have checked this
     }
