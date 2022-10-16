@@ -8,6 +8,7 @@
 #include "namespace.hpp"
 #include "parser.hpp"
 #include "types.hpp"
+#include "upholsterer.hpp"
 #include "utils.hpp"
 #include <algorithm>
 #include <cassert>
@@ -688,7 +689,7 @@ namespace Emitter {
                         assert(false and "not implemented");
                     }
                 }
-            } else if (std::holds_alternative<Parser::IndexOperator>(expression.operator_type)) {
+            } else if (const auto index_operator = std::get_if<Parser::IndexOperator>(&expression.operator_type)) {
                 assert(expression.lhs->data_type->is_array_type());
                 bssembly.add(Comment{ "evaluate index of index operator" });
                 expression.rhs->accept(*this);
@@ -696,7 +697,7 @@ namespace Emitter {
                         POP,
                         { R1 },
                         "get index value",
-                        Error::token_location(*operator_token),
+                        index_operator->left_square_bracket_token.location,
                 });
 
                 // R1 holds the index value
@@ -710,36 +711,36 @@ namespace Emitter {
                             COPY,
                             {Immediate{ contained_size }, R2},
                             "get size of contained data type",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             MULT,
                             {R1, R2, R4, R3},
                             "multiply index with size of contained data type",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             POP,
                             { R1 },
                             "get address of array",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             ADD,
                             {R1, R3, R1},
                             "get address of array element",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     if (expression.is_lvalue()) {
                         bssembly.add(Instruction{
                                 PUSH,
                                 { R1 },
                                 "push address of array element",
-                                Error::token_location(*operator_token),
+                                index_operator->left_square_bracket_token.location,
                         });
                     } else {
                         bssembly.push_value_onto_stack(
-                                R1, expression.data_type, Error::token_location(*operator_token)
+                                R1, expression.data_type, index_operator->left_square_bracket_token.location
                         );
                     }
                 } else if (expression.lhs->is_rvalue() and expression.is_rvalue()) {
@@ -753,30 +754,30 @@ namespace Emitter {
                             COPY,
                             {Immediate{ contained_size_when_pushed }, R2},
                             "get size of contained data type in expanded form",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             MULT,
                             {R1, R2, R4, R3},
                             "multiply index with expanded size of contained data type",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     const auto total_array_size = expression.lhs->data_type->size_when_pushed();
                     bssembly.add(Instruction{
                             SUB,
                             {SP, Immediate{ total_array_size }, SP},
                             "decrement stack pointer to discard array",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.add(Instruction{
                             ADD,
                             {SP, R3, R3},
                             "calculate address of array element inside the discarded stack",
-                            Error::token_location(*operator_token),
+                            index_operator->left_square_bracket_token.location,
                     });
                     bssembly.push_onto_stack_from_stack_pointer(
                             R3, (*(expression.lhs->data_type->as_array_type()))->contained,
-                            Error::token_location(*operator_token), 0
+                            index_operator->left_square_bracket_token.location, 0
                     );
                 } else {
                     assert(false and "unreachable");
@@ -1256,9 +1257,12 @@ namespace Emitter {
             const auto start_iterator = std::find(assembly_block.cbegin(), assembly_block.cend(), '{');
             assert(start_iterator != assembly_block.cend());
             const auto inner = std::string_view{ start_iterator + 1, assembly_block.cend() - 1 };
+            const auto instructions =
+                    parse_bssembly(statement.token.location.source_code.filename, inner, statement.token.location);
             bssembly.add(Comment{ "-- block of inline bssembly --" });
-            bssembly.add(InlineBssembly{ inner });
-            bssembly.add(NewLine{});
+            for (const auto& instruction : instructions) {
+                bssembly.add(instruction);
+            }
             bssembly.add(Comment{ "-- end of inline bssembly --" });
         }
 

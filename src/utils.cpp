@@ -3,8 +3,10 @@
 //
 
 #include "utils.hpp"
+#include <algorithm>
 #include <array>
 #include <cctype>
+#include <ranges>
 
 namespace Utils {
 
@@ -45,6 +47,29 @@ namespace Utils {
             return 2;
         }
         return 10;
+    }
+
+    [[nodiscard]] std::string_view trim(std::string_view view) {
+        using std::ranges::find_if, std::ranges::views::reverse;
+        const auto left_find_iterator = find_if(view, [](char c) { return not std::isspace(c); });
+        const auto found = (left_find_iterator != view.cend());
+        if (not found) {
+            return std::string_view{ "" };
+        }
+        const auto right_find_iterator = find_if(view | reverse, [](char c) { return not std::isspace(c); });
+        const auto left_index = left_find_iterator - view.cbegin();
+        const auto right_index = right_find_iterator.base() - view.cbegin();
+        const auto length = right_index - left_index;
+        view = view.substr(left_index, length);
+        return view;
+    }
+
+    [[nodiscard]] std::string to_upper(std::string_view view) {
+        auto string = std::string{ view };
+        for (auto& c : string) {
+            c = static_cast<char>(std::toupper(c));
+        }
+        return string;
     }
 
 } // namespace Utils

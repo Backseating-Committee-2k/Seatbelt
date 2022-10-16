@@ -3,6 +3,7 @@
 #include "emitter.hpp"
 #include "error.hpp"
 #include "lexer.hpp"
+#include "magic_enum_wrapper.hpp"
 #include "parser.hpp"
 #include "scope_generator.hpp"
 #include "stack_layout_generator.hpp"
@@ -15,7 +16,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <magic_enum.hpp>
 #include <ranges>
 #include <string>
 #include <unordered_map>

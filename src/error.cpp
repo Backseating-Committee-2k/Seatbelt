@@ -124,11 +124,10 @@ struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
     Lexer::Tokens::Token token;
 };
 
-void print_message(const Lexer::Tokens::Token& token, const std::string_view message) {
+void print_message(const Location location, const std::string_view message) {
     using namespace std::ranges::views;
     using std::ranges::count, std::ranges::find;
     static constexpr auto npos = std::string_view::npos;
-    const auto location = Error::token_location(token);
 
     const auto row = count(location.source_code.text | take(location.offset_start_inclusive), '\n') + 1;
     const auto last_newline_pos = location.source_code.text.find_last_of('\n', location.offset_start_inclusive);
@@ -148,6 +147,10 @@ void print_message(const Lexer::Tokens::Token& token, const std::string_view mes
     for (usize i = 0; i < squiggly_length; ++i) {
         std::cerr << '~';
     }
+}
+
+void print_message(const Lexer::Tokens::Token& token, const std::string_view message) {
+    print_message(Error::token_location(token), message);
 }
 
 [[nodiscard]] Lexer::Tokens::Token get_first_token(const Parser::Statements::Statement& statement) {
@@ -184,16 +187,24 @@ namespace Error {
         return { row, column };
     }
 
-    void error(const Lexer::Tokens::Token& token, const std::string_view message) {
-        print_message(token, message);
+    void error(Location location, std::string_view message) {
+        print_message(location, message);
         std::cerr << " error occurred here\n";
         // throw std::runtime_error{ std::string{ message } };
         std::exit(EXIT_FAILURE);
     }
 
-    void warning(const Lexer::Tokens::Token& token, const std::string_view message) {
-        print_message(token, fmt::format("warning: {}", message));
+    void warning(Location location, std::string_view message) {
+        print_message(location, fmt::format("warning: {}", message));
         std::cerr << " see here\n";
+    }
+
+    void error(const Lexer::Tokens::Token& token, const std::string_view message) {
+        error(token_location(token), message);
+    }
+
+    void warning(const Lexer::Tokens::Token& token, const std::string_view message) {
+        warning(token_location(token), message);
     }
 
     void error(const Parser::Statements::Statement& statement, std::string_view message) {
@@ -211,4 +222,5 @@ namespace Error {
     void warning(const Parser::Expressions::Expression& expression, std::string_view message) {
         Error::warning(get_first_token(expression), message);
     }
+
 } // namespace Error

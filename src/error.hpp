@@ -18,6 +18,8 @@ namespace Parser::Expressions {
 namespace Error {
 
     [[nodiscard]] std::pair<usize, usize> row_and_column(Location location);
+    void error(Location location, std::string_view message);
+    void warning(Location location, std::string_view message);
     void error(const Lexer::Tokens::Token& token, std::string_view message);
     void warning(const Lexer::Tokens::Token& token, std::string_view message);
     void error(const Parser::Statements::Statement& statement, std::string_view message);
