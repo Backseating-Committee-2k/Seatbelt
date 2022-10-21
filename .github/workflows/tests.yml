@@ -83,5 +83,13 @@ jobs:
       - name: Change back to root dir
         run: cd ..
 
+      - name: Install tree
+        shell: bash
+        run: sudo apt install tree
+
+      - name: Show file system
+        shell: bash
+        run: tree ../
+
       - name: Run Tests
         run: ./test-runner --seatbelt-path ./SeatbeltCompiler
