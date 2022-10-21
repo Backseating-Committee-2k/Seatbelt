@@ -96,4 +96,5 @@ jobs:
         run: pwd
 
       - name: Run Tests
+        shell: bash
         run: ./test-runner --seatbelt-path ./SeatbeltCompiler
