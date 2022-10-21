@@ -78,10 +78,10 @@ jobs:
 
       - name: Move Seatbelt binary
         shell: bash
-        run: mv ./build/Seatbelt ..
+        run: mv ./build/Seatbelt ../SeatbeltCompiler
 
       - name: Change back to root dir
         run: cd ..
 
       - name: Run Tests
-        run: ./test-runner
+        run: ./test-runner --seatbelt-path ./SeatbeltCompiler
