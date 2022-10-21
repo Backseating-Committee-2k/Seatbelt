@@ -31,7 +31,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         Upholsterer2k
         GIT_REPOSITORY https://github.com/Backseating-Committee-2k/Upholsterer2k
-        GIT_TAG 1fb8246c1c287519f919a9069cfb892772e8fe44
+        GIT_TAG eb41ccaf9ae7aa82110e96b38d6d1af8c3bad3ae
 )
 
 FetchContent_MakeAvailable(fmt ctre Arguably magic_enum Upholsterer2k)

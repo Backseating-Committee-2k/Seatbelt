@@ -46,8 +46,8 @@
     }
 }
 
-void write_to_file(const std::string_view contents, const std::string_view filename) {
-    std::ofstream stream{ std::string{ filename }, std::ios::out };
+void write_to_file(const std::string_view contents, const std::filesystem::path& filename) {
+    std::ofstream stream{ filename, std::ios::out };
     stream << contents;
 }
 
@@ -282,6 +282,7 @@ int main(int, char** argv) {
                            "outputs a JSON file containing a mapping between Backseat code and Bssembler instructions "
                            "into the specified file",
                            std::string>("")
+                    .flag<'b', "bssembly", "only output the compilation result without running the bssembler">()
                     .flag<'O', "optimize", "enable the optimizer">()
                     .flag<'v', "verbose", "show verbose output">()
                     .create();
@@ -390,24 +391,32 @@ int main(int, char** argv) {
     UP2K_ByteVector machine_code;
     char error_message_buffer[512];
     const std::size_t error_message_buffer_size = std::size(error_message_buffer);
-    [[maybe_unused]] const auto result = UP2K_bssemble(
-            source_file, nullptr, &machine_code, nullptr, error_message_buffer, error_message_buffer_size
-    );
-    assert(result and "not implemented");
+    if (not command_line_parser.get<'b'>()) {
+        [[maybe_unused]] const auto result = UP2K_bssemble(
+                source_file, nullptr, &machine_code, nullptr, error_message_buffer, error_message_buffer_size
+        );
+        assert(result and "not implemented");
+    } else {
+        machine_code = UP2K_byte_vector_create();
+    }
 
     auto out_path = std::optional<std::filesystem::path>{};
     if (command_line_parser.was_provided<'o'>()) {
         auto out_filename = command_line_parser.get<'o'>();
-        // TODO: check command line flag whether we should only generate bssembly or machine code
-        //write_to_file(bssembly.to_string(), std::move(out_filename));
         out_path = std::filesystem::path{ out_filename };
-    } else {
-        // no output filename was provided: output to stdout
-
-        //fmt::print("{}", bssembly.to_string());
     }
-    if (not upholsterer2k::write_machine_code_to_file(machine_code, out_path)) {
-        fmt::print(stderr, "unable to write machine code to file\n");
+    if (command_line_parser.get<'b'>()) {
+        // only output the bssembler result
+        if (out_path.has_value()) {
+            write_to_file(bssembly.to_string(), *out_path);
+        } else {
+            fmt::print("{}", bssembly.to_string());
+        }
+    } else {
+        // output the machine code
+        if (not upholsterer2k::write_machine_code_to_file(machine_code, out_path)) {
+            fmt::print(stderr, "unable to write machine code to file\n");
+        }
     }
 
     UP2K_byte_vector_free(&machine_code);
