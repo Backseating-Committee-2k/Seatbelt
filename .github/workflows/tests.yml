@@ -91,5 +91,9 @@ jobs:
         shell: bash
         run: tree ../
 
+      - name: Show current directory
+        shell: bash
+        run: pwd
+
       - name: Run Tests
         run: ./test-runner --seatbelt-path ./SeatbeltCompiler
