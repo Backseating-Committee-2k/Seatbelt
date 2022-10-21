@@ -1,0 +1,11 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let i: mutable U32 = 1_000_000;
+    i = 0xABCD_EF12;
+    std::assert_equals(i, 2_882_400_018);
+    i = 0b110_0101;
+    std::assert_equals(i, 101);
+    i = 0o7_631_223;
+    std::assert_equals(i, 2_044_563);
+}

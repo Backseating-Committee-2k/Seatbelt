@@ -1,0 +1,13 @@
+function main() ~> Nothing {
+    space::f();
+    space::g();
+}
+
+namespace space {
+    export function f() ~> Nothing {}
+}
+
+namespace space {
+    export function g() ~> Nothing {}
+}
+

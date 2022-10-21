@@ -1,0 +1,27 @@
+import std.assert;
+
+function main() {
+    let a: mutable U32 = 42;
+    let b: U32 = 43;
+    let ptr: mutable -> mutable U32 = a@;
+    std::assert_equals(ptr!, a);
+
+    ptr = ptr + 1;
+    std::assert_equals(ptr!, b);
+
+    ptr = ptr - 1;
+    std::assert_equals(ptr!, a);
+
+    ptr = 1 + ptr;
+    std::assert_equals(ptr!, b);
+
+    std::assert(a@ + 1 == b@);
+
+    ptr = a@ + 1;
+    ptr! = 44; // modify immutable value ¯\_(ツ)_/¯
+    std::assert_equals(b, 44);
+
+    let distance: U32 = b@ - a@;
+    std::assert_equals(distance, 1);
+    std::assert_equals(a@ - a@, 0);
+}

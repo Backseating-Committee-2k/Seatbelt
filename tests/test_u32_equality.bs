@@ -1,0 +1,15 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let a: U32 = 42;
+    let b: U32 = 27;
+
+    std::assert_equals(a, a);
+    std::assert(a != b);
+    std::assert_equals(42, a);
+    std::assert_equals(b, 27);
+    std::assert(42 != 27);
+
+    let result: Bool = a == a;
+    std::assert_equals(result, true);
+}

@@ -1,0 +1,25 @@
+import std.assert;
+
+function a() ~> U32 {
+    return 42;
+    std::assert(false);
+}
+
+function b(n: U32) ~> U32 {
+    let a: U32 = n + 27;
+    return a;
+    std::assert(false);
+}
+
+function main() ~> Nothing {
+    let x: U32 = a();
+    bsm {
+        copy *r0, r100
+        assert r100, 42
+    }
+    std::assert_equals(x, 42);
+    std::assert_equals(a(), 42);
+    let y: U32 = b(42);
+    std::assert_equals(y, 42 + 27);
+    std::assert_equals(b(42), 42 + 27);
+}

@@ -1,0 +1,8 @@
+import std.assert;
+
+function main() {
+    let b = true;
+    let p = b@;
+    let result = p!;
+    std::assert(result);
+}

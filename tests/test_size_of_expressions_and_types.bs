@@ -1,0 +1,30 @@
+import std.assert;
+
+function f() ~> U32 {
+    bsm {
+        checkpoint 1 // this fails if f is executed
+    }
+    return 10;
+}
+
+function main() {
+    let a = type_size(U32);
+    let b = value_size(42);
+    std::assert_equals(a, b);
+    std::assert_equals(a, 4);
+    std::assert_equals(type_size(Nothing), 0);
+    std::assert_equals(value_size(nothing), 0);
+
+    std::assert_equals(type_size(Bool), 1);
+    std::assert_equals(value_size(true), 1);
+
+    std::assert_equals(type_size(Char), 1);
+    std::assert_equals(value_size('x'), 1);
+
+    std::assert_equals(value_size(f()), 4);
+
+    let ptr: Function() ~> U32 = f;
+    std::assert_equals(value_size(ptr), 4);
+    std::assert_equals(value_size(f), 4);
+    std::assert_equals(value_size(ptr@), 4);
+}

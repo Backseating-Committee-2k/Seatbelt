@@ -1,0 +1,27 @@
+import std.assert;
+
+function a() ~> Nothing {
+    return nothing;
+}
+
+function main() ~> Nothing {
+    bsm {
+        copy sp, r100
+    }
+    let x: Nothing = a();
+    bsm {
+        assert sp, r100
+    }
+    let y: Nothing = nothing;
+    bsm {
+        assert sp, r100
+    }
+    std::assert_equals(x, y);
+    bsm {
+        assert sp, r100
+    }
+    std::assert_equals((x != y), false);
+    bsm {
+        assert sp, r100
+    }
+}

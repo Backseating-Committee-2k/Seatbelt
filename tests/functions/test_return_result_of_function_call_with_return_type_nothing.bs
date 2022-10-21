@@ -1,0 +1,22 @@
+function main() {
+    bsm {
+        checkpoint 0
+    }
+    g();
+    bsm {
+        checkpoint 3
+    }
+}
+
+function g() {
+    bsm {
+        checkpoint 1
+    }
+    return h();
+}
+
+function h() {
+    bsm {
+        checkpoint 2
+    }
+}

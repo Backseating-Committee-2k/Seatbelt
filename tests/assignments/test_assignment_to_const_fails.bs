@@ -1,0 +1,6 @@
+// fails_with = "cannot assign to expression since assignee is immutable"
+
+function main() {
+    let n: U32 = 42;
+    n = 10;
+}

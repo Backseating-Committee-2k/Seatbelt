@@ -1,0 +1,5 @@
+import std.assert;
+
+function main() ~> Nothing {
+    std::assert_equals(3, 3);
+}

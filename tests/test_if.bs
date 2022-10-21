@@ -1,0 +1,23 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let a: U32 = 42;
+    let b: U32 = 27;
+
+    if a > b {
+    }
+    else {
+        std::assert(false);
+    }
+
+    if a >= b {
+    }
+    else if a < b {
+        std::assert(false);
+    }
+    else {
+        std::assert(false);
+    }
+    let q: U32 = 42;
+    std::assert_equals(q, 42);
+}

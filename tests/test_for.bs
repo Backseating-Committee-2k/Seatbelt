@@ -1,0 +1,33 @@
+import std.assert;
+
+function main() ~> Nothing {
+    for ;; {
+        break;
+        continue;
+        let i: U32 = 0;
+    }
+
+    let variable: U32 = 42;
+    let cond: mutable Bool = true;
+    for (let i: U32 = variable; cond; cond = false) {
+        variable;
+        std::assert_equals(variable, 42);
+        i;
+        std::assert_equals(i, 42);
+        let variable: U32 = 0;
+        std::assert_equals(variable, 0);
+        std::assert_equals(i, 42);
+    }
+
+    let n: mutable U32 = 0;
+    let k: mutable U32 = 1;
+    let i: U32 = 0;
+    for let i: mutable U32 = n; i < 20; i = i + 1 {
+        let n_plus_k: U32 = n + k;
+        n = k;
+        k = n_plus_k;
+    }
+    std::assert_equals(n, 6765);
+    std::assert_equals(k, 10946);
+    let aaaaaaaaaaaaaaaaaaaaaaa: U32 = 0;
+}

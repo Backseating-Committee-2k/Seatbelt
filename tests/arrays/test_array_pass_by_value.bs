@@ -1,0 +1,40 @@
+import std.assert;
+
+function f(char1: Char, char2: Char, array: [Bool; 3]) {
+    let number = 0xCAFE_BABE;
+    bsm {
+        add R0, 0, R1
+        copy_byte *R1, R1
+        assert R1, 65
+
+        add R0, 1, R1
+        copy_byte *R1, R1
+        assert R1, 66
+
+        add R0, 2, R1
+        copy_byte *R1, R1
+        assert R1, 1
+
+        add R0, 3, R1
+        copy_byte *R1, R1
+        assert R1, 0
+
+        add R0, 4, R1
+        copy_byte *R1, R1
+        assert R1, 1
+
+        add R0, 8, R1
+        copy *R1, R1
+        assert R1, 0xCAFEBABE
+    }
+    std::assert_equals(char1, 'A');
+    std::assert_equals(char2, 'B');
+    std::assert_equals(array[0], true);
+    std::assert_equals(array[1], false);
+    std::assert_equals(array[2], true);
+    std::assert_equals(number, 0xCAFE_BABE);
+}
+
+function main() {
+    f('A', 'B', [true, false, true]);
+}

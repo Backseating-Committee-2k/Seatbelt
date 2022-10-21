@@ -1,0 +1,21 @@
+import std.assert;
+
+function b(x: U32) ~> Nothing {
+    std::assert(false);
+}
+
+function f() ~> Function(U32) ~> Nothing {
+    bsm {
+        halt
+    }
+    return b;
+}
+
+function g() ~> U32 {
+    std::assert(false);
+    loop {}
+}
+
+function main() ~> Nothing {
+    f()(g());
+}

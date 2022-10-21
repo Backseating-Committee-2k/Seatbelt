@@ -1,0 +1,5 @@
+// fails_with = "exporting functions from the global namespace is not allowed"
+
+export function h() ~> Nothing { }
+
+function main() ~> Nothing { }

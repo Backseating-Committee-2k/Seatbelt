@@ -1,0 +1,27 @@
+function check_value(n: U32) ~> Nothing {
+    if n > 4 {
+        bsm {
+            checkpoint 1
+        }
+    } else {
+        bsm {
+            checkpoint 3
+        }
+    }
+}
+
+function main() ~> Nothing {
+    let n: mutable U32 = 5;
+    bsm {
+        checkpoint 0
+    }
+    check_value(n);
+    bsm {
+        checkpoint 2
+    }
+    n = 3;
+    check_value(n);
+    bsm {
+        checkpoint 4
+    }
+}

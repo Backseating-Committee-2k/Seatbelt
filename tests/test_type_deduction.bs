@@ -1,0 +1,24 @@
+import std.assert;
+
+function f(n: U32) ~> U32 {
+    return 2 * n;
+}
+
+function g(c: Char) { }
+
+function main() {
+    let a: mutable = 42;
+    a = 10;
+    let callable = f;
+    let pointer1 = callable@;
+    let pointer2 = pointer1@;
+    std::assert_equals(pointer2!!(a), 20);
+    let c = 'x';
+    g(c);
+    let predicate = true;
+    if predicate {
+        g(c);
+    } else {
+        f(a);
+    }
+}

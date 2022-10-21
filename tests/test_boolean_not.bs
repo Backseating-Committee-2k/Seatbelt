@@ -1,0 +1,15 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let a: Bool = false;
+    let b: Bool = false;
+    let c: Bool = true;
+    std::assert(not a);
+    std::assert(not not c);
+    std::assert_equals(not a and b, false);
+    std::assert(not a or c);
+    std::assert_equals(((not a) and b), false);
+    std::assert(not ((not a) and b));
+    std::assert((not a) and c);
+    std::assert(not a and c);
+}

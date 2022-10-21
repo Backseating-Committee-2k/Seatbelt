@@ -1,0 +1,7 @@
+// fails_with = "cannot initialize a variable of type", "->mutable U32", "with a value of type", "->const U32"
+
+function main() {
+    let n: U32 = 42;
+    let ptr: ->U32 = n@;
+    let ptr2: ->mutable U32 = n@;
+}

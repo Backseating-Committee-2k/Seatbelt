@@ -1,0 +1,19 @@
+function main() ~> Nothing {
+    bsm {
+        jump skip_text
+    text:
+        .string "}\\\"}"
+    skip_text:
+        copy text, r1
+        add r1, 0, r2
+        assert *r2, 4
+        add r1, 4, r2
+        assert *r2, 125
+        add r1, 8, r2
+        assert *r2, 92
+        add r1, 12, r2
+        assert *r2, 34
+        add r1, 16, r2
+        assert *r2, 125
+    }
+}

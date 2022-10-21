@@ -1,0 +1,11 @@
+function h(_: Function(->U32) ~> Nothing) ~> Nothing {}
+
+function g() ~> Function(Function(->U32) ~> Nothing) ~> Nothing {
+    return h;
+}
+
+function a(_: ->U32) ~> Nothing {}
+
+function main() ~> Nothing {
+    g()(a);
+}

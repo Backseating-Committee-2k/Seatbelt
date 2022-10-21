@@ -1,0 +1,11 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let a: U32 = 42;
+    let b: U32 = 27;
+    let c: U32 = a mod b;
+    std::assert_equals(c, 42 - 27);
+    std::assert_equals(100 mod 5, 0);
+    std::assert_equals(99 mod 10, 9);
+    std::assert_equals(2 + 3 mod 2, 3);
+}

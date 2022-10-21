@@ -1,0 +1,25 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let a: mutable U32 = 42;
+    let x: mutable U32 = 33;
+    let b: mutable U32 = a = (x = 10) + 5;
+    std::assert_equals(a, 15);
+    std::assert_equals(b, 15);
+    std::assert_equals(x, 10);
+
+    b = a = x = 20;
+    std::assert_equals(a, 20);
+    std::assert_equals(b, 20);
+    std::assert_equals(x, 20);
+
+    a = x = 10 + 5;
+    std::assert_equals(a, 15);
+    std::assert_equals(b, 20);
+    std::assert_equals(x, 15);
+
+    x = (a + x) + 5;
+    std::assert_equals(a, 15);
+    std::assert_equals(b, 20);
+    std::assert_equals(x, 35);
+}

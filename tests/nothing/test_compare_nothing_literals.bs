@@ -1,0 +1,9 @@
+import std.assert;
+
+function main() {
+    let is_equal = nothing == nothing;
+    std::assert(is_equal);
+
+    let is_not_equal = nothing != nothing;
+    std::assert(not is_not_equal);
+}

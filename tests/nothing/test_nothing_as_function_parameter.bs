@@ -1,0 +1,6 @@
+function f(a: Nothing) {}
+
+function main() {
+    let a: Nothing = nothing;
+    f(a);
+}

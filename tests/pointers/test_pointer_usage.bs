@@ -1,0 +1,55 @@
+import std.assert;
+
+function swap(lhs: ->mutable U32, rhs: ->mutable U32) {
+    let temp: U32 = lhs!;
+    lhs! = rhs!;
+    rhs! = temp;
+}
+
+function f() {
+    bsm {
+        checkpoint 1
+    }
+}
+
+function main() {
+    let n: mutable U32 = 42;
+    let ptr: ->mutable U32 = n@;
+    let m: U32 = ptr!;
+    std::assert(n@ != m@);
+    std::assert(n@ < m@);
+    std::assert(n@ <= m@);
+    std::assert(m@ > n@);
+    std::assert(m@ >= n@);
+
+    std::assert_equals(n, m);
+    ptr! = 43;
+    std::assert_equals(n, 43);
+
+    let a: mutable U32 = 1;
+    let b: mutable U32 = 2;
+    swap(a@, b@);
+    std::assert_equals(a, 2);
+    std::assert_equals(b, 1);
+
+    let x: U32 = 42;
+    let p: ->U32 = x@;
+    let q: ->->U32 = p@;
+    let y: U32 = q!!;
+    std::assert_equals(x, y);
+    std::assert_equals(q!!, 42);
+    std::assert(q! == p);
+    std::assert(x@ == p);
+    std::assert(x@ >= p);
+    std::assert(x@ <= p);
+
+    let function_ptr: Function() ~> Nothing = f;
+    let ptr_to_function_ptr: ->Function() ~> Nothing = function_ptr@;
+    bsm {
+        checkpoint 0
+    }
+    ptr_to_function_ptr!();
+    bsm {
+        checkpoint 2
+    }
+}

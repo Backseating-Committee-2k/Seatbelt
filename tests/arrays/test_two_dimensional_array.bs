@@ -1,0 +1,19 @@
+import std.assert;
+
+function main() {
+    let array: mutable = [[0; 10]; 10];
+    let num_rows = value_size(array) / value_size(array[0]);
+    let num_columns = value_size(array[0]) / value_size(array[0][0]);
+
+    for let row: mutable = 0; row < num_rows; row = row + 1 {
+        for let column: mutable = 0; column < num_columns; column = column + 1 {
+            array[row][column] = (row + 1) * (column + 1);
+        }
+    }
+
+     for let row: mutable = 0; row < num_rows; row = row + 1 {
+        for let column: mutable = 0; column < num_columns; column = column + 1 {
+            std::assert_equals(array[row][column], (row + 1) * (column + 1));
+        }
+    }
+}

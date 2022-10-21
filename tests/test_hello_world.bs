@@ -1,0 +1,18 @@
+import std.terminal;
+
+function main() ~> Nothing {
+    let a: U32 = 10;
+    std::put_char('H');
+    std::put_char('e');
+    std::put_char('l');
+    std::put_char('l');
+    std::put_char('o');
+    std::put_char(',');
+    std::put_char(' ');
+    std::put_char('w');
+    std::put_char('o');
+    std::put_char('r');
+    std::put_char('l');
+    std::put_char('d');
+    std::put_char('!');
+}

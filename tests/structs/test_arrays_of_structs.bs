@@ -1,0 +1,108 @@
+import std.assert;
+
+type T {
+    S {
+        b: Bool,
+        c: Char,
+        n: U32,
+    },
+}
+
+function get_array() ~> [Bool; 4] {
+    return [false, false, true, false];
+}
+
+function get_array_of_structs() ~> [S; 3] {
+    return [
+        S{
+            b: true,
+            c: 'A',
+            n: 42,
+        },
+        S{
+            b: false,
+            c: 'B',
+            n: 43,
+        },
+        S{
+            b: true,
+            c: 'C',
+            n: 44,
+        }
+    ];
+}
+
+function change_array_of_structs(pointer: ->mutable [S; 3]) {
+    pointer![0].b = false;
+    pointer![0].c = 'Q';
+    pointer![0].n = 5;
+
+    pointer![1].b = true;
+    pointer![1].c = 'R';
+    pointer![1].n = 6;
+
+    pointer![2].b = false;
+    pointer![2].c = 'S';
+    pointer![2].n = 7;
+}
+
+function main() {
+    let result = [1, 2, 3, 42, 4, 5][3];
+    std::assert_equals(result, 42);
+
+    let d = ['A', 'B', 'C', 'D', 'E', 'F'][3];
+    std::assert_equals(d, 'D');
+
+    std::assert(not get_array()[0]);
+    std::assert(not get_array()[1]);
+    std::assert(get_array()[2]);
+    std::assert(not get_array()[3]);
+
+    let array = get_array_of_structs();
+
+    std::assert(array[0].b);
+    std::assert_equals(array[0].c, 'A');
+    std::assert_equals(array[0].n, 42);
+
+    std::assert(not array[1].b);
+    std::assert_equals(array[1].c, 'B');
+    std::assert_equals(array[1].n, 43);
+
+    std::assert(array[2].b);
+    std::assert_equals(array[2].c, 'C');
+    std::assert_equals(array[2].n, 44);
+
+    let first_struct: mutable = array[0];
+
+    std::assert(first_struct.b);
+    std::assert_equals(first_struct.c, 'A');
+    std::assert_equals(first_struct.n, 42);
+
+    first_struct.b = false;
+    first_struct.c = 'X';
+    first_struct.n = 100;
+
+    std::assert(not first_struct.b);
+    std::assert_equals(first_struct.c, 'X');
+    std::assert_equals(first_struct.n, 100);
+
+    // the original struct must not have changed, since first_struct is only a copy
+    std::assert(array[0].b);
+    std::assert_equals(array[0].c, 'A');
+    std::assert_equals(array[0].n, 42);
+
+    let array_copy: mutable = array;
+    change_array_of_structs(array_copy@);
+
+    std::assert(not array_copy[0].b);
+    std::assert_equals(array_copy[0].c, 'Q');
+    std::assert_equals(array_copy[0].n, 5);
+
+    std::assert(array_copy[1].b);
+    std::assert_equals(array_copy[1].c, 'R');
+    std::assert_equals(array_copy[1].n, 6);
+
+    std::assert(not array_copy[2].b);
+    std::assert_equals(array_copy[2].c, 'S');
+    std::assert_equals(array_copy[2].n, 7);
+}

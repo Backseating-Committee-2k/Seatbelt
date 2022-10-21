@@ -1,0 +1,1 @@
+function from_import_test_file() ~> Nothing {}
