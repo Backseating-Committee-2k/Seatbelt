@@ -1257,8 +1257,9 @@ namespace Emitter {
             const auto start_iterator = std::find(assembly_block.cbegin(), assembly_block.cend(), '{');
             assert(start_iterator != assembly_block.cend());
             const auto inner = std::string_view{ start_iterator + 1, assembly_block.cend() - 1 };
-            const auto instructions =
-                    parse_bssembly(statement.token.location.source_code.filename, inner, statement.token.location);
+            const auto instructions = upholsterer2k::parse_bssembly(
+                    statement.token.location.source_code.filename, inner, statement.token.location
+            );
             bssembly.add(Comment{ "-- block of inline bssembly --" });
             for (const auto& instruction : instructions) {
                 bssembly.add(instruction);

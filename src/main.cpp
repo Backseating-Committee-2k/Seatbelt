@@ -9,6 +9,7 @@
 #include "stack_layout_generator.hpp"
 #include "type_checker.hpp"
 #include "type_container.hpp"
+#include "upholsterer.hpp"
 #include <algorithm>
 #include <arguably.hpp>
 #include <filesystem>
@@ -16,10 +17,12 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <ranges>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <upholsterer2k/upholsterer2k.h>
 #include <variant>
 
 #define VERSION "0.1.0"
@@ -380,12 +383,34 @@ int main(int, char** argv) {
         fmt::print(stderr, "optimizations were disabled\n");
     }
 
+    const auto bssembly_string = bssembly.to_string();
+    const auto bssembly_view = UP2K_string_view_from_string(bssembly_string.c_str());
+    const auto source_file =
+            UP2K_SourceFile{ .filename{ UP2K_string_view_from_string("filename") }, .source{ bssembly_view } };
+    UP2K_ByteVector machine_code;
+    char error_message_buffer[512];
+    const std::size_t error_message_buffer_size = std::size(error_message_buffer);
+    [[maybe_unused]] const auto result = UP2K_bssemble(
+            source_file, nullptr, &machine_code, nullptr, error_message_buffer, error_message_buffer_size
+    );
+    assert(result and "not implemented");
+
+    auto out_path = std::optional<std::filesystem::path>{};
     if (command_line_parser.was_provided<'o'>()) {
         auto out_filename = command_line_parser.get<'o'>();
-        write_to_file(bssembly.to_string(), std::move(out_filename));
+        // TODO: check command line flag whether we should only generate bssembly or machine code
+        //write_to_file(bssembly.to_string(), std::move(out_filename));
+        out_path = std::filesystem::path{ out_filename };
     } else {
-        fmt::print("{}", bssembly.to_string());
+        // no output filename was provided: output to stdout
+
+        //fmt::print("{}", bssembly.to_string());
     }
+    if (not upholsterer2k::write_machine_code_to_file(machine_code, out_path)) {
+        fmt::print(stderr, "unable to write machine code to file\n");
+    }
+
+    UP2K_byte_vector_free(&machine_code);
 
     if (command_line_parser.was_provided<'m'>()) {
         const auto out_filename = command_line_parser.get<'m'>();
