@@ -81,7 +81,7 @@ jobs:
         run: mv ./build/Seatbelt ../SeatbeltCompiler
 
       - name: Change back to root dir
-        run: cd ..
+        run: cd ../..
 
       - name: Install tree
         shell: bash
