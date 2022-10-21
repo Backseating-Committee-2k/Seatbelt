@@ -26,7 +26,7 @@ jobs:
           repository: Backseating-Committee-2k/BackseatSafeSystem2k
 
       - name: Do release build of the emulator
-        run: cargo build --no-default-features
+        run: cargo build --no-default-features --release
 
       - name: Move Backseater binary
         shell: bash
