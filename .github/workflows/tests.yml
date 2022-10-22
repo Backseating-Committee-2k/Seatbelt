@@ -58,7 +58,8 @@ jobs:
           sudo apt install gcc-12 g++-12
 
       - uses: actions/checkout@v3
-        path: './Seatbelt'
+        with:
+          path: './Seatbelt'
 
       - name: Move standard library to root directory
         shell: bash
