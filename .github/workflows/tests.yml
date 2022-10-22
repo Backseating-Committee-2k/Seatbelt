@@ -74,7 +74,7 @@ jobs:
           repository: Backseating-Committee-2k/test-runner
 
       - name: Run tests
-        run: cargo run --release -- --seatbelt-path ../SeatbeltCompiler --backseater-path ../backseat_safe_system_2k --lib-path ..
+        run: cargo run --release -- --seatbelt-path ../SeatbeltCompiler --backseater-path ../backseat_safe_system_2k --lib-path .. --tests-path ../tests
 
       #- name: Install tree
       #  shell: bash
