@@ -61,6 +61,9 @@ jobs:
         with:
           path: './Seatbelt'
 
+      - name: Change into Seatbelt directory
+        run: cd Seatbelt
+
       - name: Move standard library to root directory
         shell: bash
         run: mv std ..
