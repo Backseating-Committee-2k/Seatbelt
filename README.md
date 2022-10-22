@@ -11,8 +11,7 @@ the [Backseat-Safe System 2k](https://github.com/Backseating-Committee-2k/Backse
 
 ## Features
 
-- compiles Backseat code into Bssembler code which can be bssembled with
-  the [Upholsterer2k](https://github.com/Backseating-Committee-2k/Upholsterer2k/)
+- compiles Backseat code into native machine code for the Backseat-Safe System 2k
 - imperative
 - procedural
 
@@ -25,8 +24,8 @@ software like so:
 git clone https://github.com/Backseating-Committee-2k/Seatbelt.git
 cd Seatbelt
 cmake -B build
-make -C build
-./build/Seatbelt --output output_filename.bsm my_input_file.bs
+cmake --build build
+./build/Seatbelt --output output_filename.backseat my_input_file.bs
 ```
 
 ## FAQ
