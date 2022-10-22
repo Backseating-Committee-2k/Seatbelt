@@ -1,0 +1,14 @@
+import std.assert;
+
+function main() {
+    let result = f();
+    std::assert_equals(result[0], 1);
+    std::assert_equals(result[1], 2);
+    std::assert_equals(result[2], 3);
+    std::assert_equals(result[3], 4);
+}
+
+function f() ~> [U32; 4] {
+    let a = [1, 2, 3, 4];
+    return a;
+}

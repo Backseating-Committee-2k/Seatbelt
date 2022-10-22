@@ -1,0 +1,5 @@
+// fails_with = "integer literal out of bounds"
+
+function main() ~> Nothing {
+    let a: U32 = 0x1_0000_0000;
+}

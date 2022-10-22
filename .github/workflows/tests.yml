@@ -1,0 +1,69 @@
+name: Backseating-Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  BUILD_TYPE: Release
+  CXX: g++-12
+  CC: gcc-12
+
+jobs:
+  build:
+
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Install GCC12
+        shell: bash
+        run: |
+          sudo apt update
+          sudo apt install gcc-12 g++-12
+
+      - uses: actions/checkout@v3
+
+      - name: Move standard library to root directory
+        shell: bash
+        run: mv std ..
+
+      - name: Move tests to root directory
+        shell: bash
+        run: mv tests ..
+
+      - name: Configure CMake
+        # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+        # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+        run: cmake -B ./build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+      - name: Build
+        # Build your program with the given configuration
+        run: cmake --build ./build -j12 --config ${{env.BUILD_TYPE}}
+
+      - name: Move Seatbelt binary
+        shell: bash
+        run: mv ./build/Seatbelt ../SeatbeltCompiler # must be renamed since the workspace has the same name
+
+      - name: Checkout repository of Backseat-Safe-System-2k emulator
+        uses: actions/checkout@v3
+        with:
+          repository: Backseating-Committee-2k/BackseatSafeSystem2k
+
+      - name: Do release build of the emulator
+        run: cargo build --no-default-features --release
+
+      - name: Move Backseater binary
+        shell: bash
+        run: mv ./target/release/backseat_safe_system_2k ..
+
+      - name: Checkout repository of Test Runner
+        uses: actions/checkout@v3
+        with:
+          repository: Backseating-Committee-2k/test-runner
+
+      - name: Run tests
+        run: cargo run --release -- --seatbelt-path ../SeatbeltCompiler --backseater-path ../backseat_safe_system_2k --lib-path .. --tests-path ../tests

@@ -1,0 +1,16 @@
+import std.assert;
+
+function a() ~> U32 {
+    return 123;
+}
+
+function main() ~> Nothing {
+    let a: U32 = a();
+    let b: U32 = 42;
+    {
+        std::assert_equals(b, 42);
+        let b: U32 = b + 27;
+        std::assert_equals(b, 42 + 27);
+    }
+    std::assert_equals(b, 42);
+}

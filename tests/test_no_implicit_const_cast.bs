@@ -1,0 +1,12 @@
+// fails_with="no matching function overload found"
+function f() ~> ->U32 {
+    loop {}
+}
+
+function g(x: ->mutable U32) ~> Nothing {
+    loop {}
+}
+
+function main() ~> Nothing {
+    g(f());
+}

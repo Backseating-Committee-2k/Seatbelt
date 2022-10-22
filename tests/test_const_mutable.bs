@@ -1,0 +1,26 @@
+import std.assert;
+
+function f(n: mutable U32) ~> Bool {
+    return true;
+}
+
+function i(a: Function(->U32) ~> Nothing) ~> Nothing {}
+
+function h(a: Function(Function(->U32) ~> Nothing) ~> Nothing) ~> Nothing {}
+
+function g() ~> Function(Function(->U32) ~> Nothing) ~> Nothing {
+    return i;
+}
+
+function main() ~> Nothing {
+    let ptr: mutable Function(U32) ~> Bool = f;
+    let n: const U32 = 42;
+    let m: mutable U32 = n;
+    std::assert_equals(n, m);
+    m = n + 27;
+    std::assert_equals(m, 42 + 27);
+    let b: mutable Bool = ptr(n);
+    ptr = f;
+    std::assert(b);
+    h(g());
+}

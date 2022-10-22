@@ -1,0 +1,7 @@
+// fails_with = "operator", "-", "can not be applied to operands of type", "U32", "and", "->const U32"
+
+function main() {
+    let a: U32 = 42;
+    let ptr: mutable ->U32 = a@;
+    ptr = 1 - ptr;
+}

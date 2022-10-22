@@ -1,0 +1,43 @@
+import std.assert;
+
+type T {
+    S {
+        n: U32,
+        b: Bool,
+    },
+    U {
+        s1: S,
+        s2: S,
+    },
+    Empty {},
+}
+
+function main() {
+    std::assert_equals(type_size(S), 8);
+    std::assert_equals(value_size(S{
+        n: 42,
+        b: true,
+    }), 8);
+    std::assert_equals(type_size([S; 2]), 16);
+    std::assert_equals(type_size(U), 16);
+
+    let array = [
+        S { n: 1, b: true },
+        S { n: 2, b: false },
+        S { n: 3, b: true },
+    ];
+    let pointer: mutable = array[0]@;
+    std::assert_equals(pointer!.n, 1);
+    std::assert_equals(pointer!.b, true);
+
+    pointer = pointer + 1;
+    std::assert_equals(pointer!.n, 2);
+    std::assert_equals(pointer!.b, false);
+
+    pointer = pointer + 1;
+    std::assert_equals(pointer!.n, 3);
+    std::assert_equals(pointer!.b, true);
+
+    std::assert_equals(type_size(Empty), 0);
+    std::assert_equals(value_size(Empty{}), 0);
+}

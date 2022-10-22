@@ -1,0 +1,19 @@
+import std.assert;
+
+function main() {
+    bsm {
+        copy sp, r100
+    }
+    let a = [nothing; 2];
+    bsm {
+        assert sp, r100
+    }
+    let result = (a[0] == a[1]);
+    bsm {
+        assert sp, r100
+    }
+    std::assert(result);
+    bsm {
+        assert sp, r100
+    }
+}

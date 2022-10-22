@@ -1,0 +1,9 @@
+function f() {
+    loop {}
+}
+
+function main() {
+    if false {
+        let result: Nothing = f();
+    }
+}

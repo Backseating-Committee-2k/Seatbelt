@@ -1,0 +1,8 @@
+import import_test_file;
+import subfolder.file;
+
+function main() ~> Nothing {
+    from_import_test_file();
+    from_subfolder_file();
+    from_subfolder_relative_to_import();
+}

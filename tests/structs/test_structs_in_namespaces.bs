@@ -1,0 +1,56 @@
+import std.assert;
+import std.terminal;
+
+namespace a {
+    type T {
+        S {
+            n: U32,
+        },
+    }
+
+    export function get() ~> S {
+        return S{
+            n: 11,
+        };
+    }
+
+    export function get(n: U32) ~> S {
+        return S{
+            n: n,
+        };
+    }
+
+    namespace b {
+        type T {
+            S {
+                n: U32,
+            },
+        }
+
+        export function get() ~> S {
+            return S{
+                n: 10,
+            };
+        }
+
+        export function get(n: U32) ~> a::S {
+            return a::S{
+                n: n,
+            };
+        }
+    }
+}
+
+function main() {
+    let a = a::b::get();
+    std::assert_equals(a.n, 10);
+
+    let b = a::get();
+    std::assert_equals(b.n, 11);
+
+    let c = a::get(a::b::get().n);
+    std::assert_equals(c.n, 10);
+
+    let d = a::b::get(a::get().n);
+    std::assert_equals(d.n, 11);
+}

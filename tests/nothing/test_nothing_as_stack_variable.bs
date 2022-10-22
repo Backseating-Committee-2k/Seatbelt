@@ -1,0 +1,8 @@
+import std.assert;
+
+function main() {
+    let a: mutable Nothing = nothing;
+    let b: U32 = 42;
+    a = nothing;
+    std::assert_equals(b, 42);
+}

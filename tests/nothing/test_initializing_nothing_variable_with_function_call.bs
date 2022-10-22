@@ -1,0 +1,12 @@
+function f() {
+    bsm {
+        checkpoint 0
+    }
+}
+
+function main() {
+    let my_nothing = f();
+    bsm {
+        checkpoint 1
+    }
+}

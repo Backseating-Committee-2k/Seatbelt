@@ -1,0 +1,9 @@
+// fails_with = "use of undeclared identifier", "g", "maybe you're missing an export"
+
+namespace test {
+    function g() ~> Nothing { }
+}
+
+function main() ~> Nothing {
+    test::g();
+}

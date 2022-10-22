@@ -1,0 +1,3 @@
+// fails_with="no main function provided"
+
+function this_is_not_main() ~> Nothing { }

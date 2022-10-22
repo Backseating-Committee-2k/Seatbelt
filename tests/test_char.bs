@@ -1,0 +1,26 @@
+import std.assert;
+
+function u32_from_char(c: Char) ~> U32 {
+    let n: U32 = 42;
+    bsm {
+        add r0, 4, r1
+        copy *r0, r2
+        copy r2, *r1
+    }
+    return n;
+}
+
+function main() ~> Nothing {
+    let c: Char = 'a';
+    '\n';
+    ' ';
+    '\\';
+    '\'';
+    '~';
+    '"';
+    let nul: Char = '\0';
+    std::assert_equals(u32_from_char(nul), 0);
+    std::assert_equals(c, 'a');
+    std::assert(c != 'A');
+    std::assert_equals(' ', ' ');
+}

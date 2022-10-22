@@ -1,0 +1,11 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let a: U32 = 1;
+    let b: U32 = 2;
+    if a < b {
+        let q: U32 = 0;
+    }
+    let d: U32 = 5;
+    std::assert_equals(d, 5);
+}

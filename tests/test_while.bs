@@ -1,0 +1,25 @@
+import std.assert;
+
+function main() ~> Nothing {
+    while false {
+        break;
+        continue;
+    }
+
+    while true {
+        break;
+        continue;
+    }
+
+    let n: mutable U32 = 1;
+    let k: mutable U32 = 0;
+    while n < 100 {
+        let n_plus_k: U32 = n + k;
+        k = n;
+        n = n_plus_k;
+        continue;
+        n = 10000;
+    }
+    std::assert_equals(n, 144);
+    std::assert_equals(k, 89);
+}

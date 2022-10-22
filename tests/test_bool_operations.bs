@@ -1,0 +1,23 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let b: Bool = true;
+    let c: Bool = false;
+    b or true;
+    std::assert(b);
+    std::assert(b or true);
+    std::assert(true or false);
+    std::assert(true or true);
+    std::assert(b or c);
+    std::assert((c) or b);
+    std::assert((b or b));
+    std::assert(b and b);
+    std::assert(true and true or c);
+    std::assert(true and true and b);
+
+    std::assert(b != c);
+    std::assert_equals(b, true);
+    std::assert(c != true);
+    std::assert(false != b);
+    std::assert_equals(false != true, true);
+}

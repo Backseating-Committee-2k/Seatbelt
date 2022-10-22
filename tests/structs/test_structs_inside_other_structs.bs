@@ -1,0 +1,33 @@
+import std.assert;
+
+type Fizzler {
+    World {
+        game_objects: ->[GameObject; 2],
+    },
+    GameObject {
+        x: U32,
+        y: U32,
+    },
+}
+
+function main() {
+    let game_objects = [
+        GameObject {
+            x: 10,
+            y: 15,
+        },
+        GameObject {
+            x: 42,
+            y: 2,
+        },
+    ];
+
+    let world = World {
+        game_objects: game_objects@,
+    };
+    std::assert_equals(world.game_objects![0].x, 10);
+    std::assert_equals(world.game_objects![0].y, 15);
+
+    std::assert_equals(world.game_objects![1].x, 42);
+    std::assert_equals(world.game_objects![1].y, 2);
+}

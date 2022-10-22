@@ -1,0 +1,5 @@
+import relative_to_import;
+
+function from_subfolder_file() ~> Nothing {
+    from_subfolder_relative_to_import();
+}

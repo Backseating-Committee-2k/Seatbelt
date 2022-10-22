@@ -1,0 +1,20 @@
+import std.assert;
+
+function main() {
+    let array: mutable = ['A'; 50];
+    let count = value_size(array) / value_size(array[0]);
+
+    for let i: mutable = 0; i < count; i = i + 1 {
+        if i mod 2 == 0 {
+            array[i] = 'Z';
+        }
+    }
+
+    for let i: mutable = 0; i < count; i = i + 1 {
+        if i mod 2 == 0 {
+            std::assert_equals(array[i], 'Z');
+        } else {
+            std::assert_equals(array[i], 'A');
+        }
+    }
+}

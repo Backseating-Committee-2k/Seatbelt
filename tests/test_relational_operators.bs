@@ -1,0 +1,15 @@
+import std.assert;
+
+function main() ~> Nothing {
+    let a: U32 = 42;
+    let b: U32 = 27;
+
+    std::assert(a > b);
+    std::assert(a >= 42);
+    std::assert_equals(a >= 42, true);
+    std::assert(a >= 42 != false);
+    std::assert(b > 30 or a > 30);
+    std::assert(b < 30);
+    std::assert(a + b <= 69);
+    std::assert(27 <= b);
+}
