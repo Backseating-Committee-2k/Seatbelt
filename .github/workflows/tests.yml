@@ -46,7 +46,7 @@ jobs:
 
       - name: Move Test Runner binary
         shell: bash
-        run: mv ./target/release/test-runner ../runner
+        run: mv ./target/release/test-runner ../runner # needs to be renamed since directory has the same name
 
       - name: Change back to root dir
         run: cd ..
@@ -58,6 +58,7 @@ jobs:
           sudo apt install gcc-12 g++-12
 
       - uses: actions/checkout@v3
+        path: './Seatbelt'
 
       - name: Move standard library to root directory
         shell: bash
@@ -78,7 +79,7 @@ jobs:
 
       - name: Move Seatbelt binary
         shell: bash
-        run: mv ./build/Seatbelt ../SeatbeltCompiler
+        run: mv ./build/Seatbelt ../SeatbeltCompiler # needs to be renamed since directory has the same name
 
       - name: Change back to root dir
         run: cd ..
