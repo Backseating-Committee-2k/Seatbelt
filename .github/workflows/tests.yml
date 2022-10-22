@@ -46,7 +46,7 @@ jobs:
 
       - name: Move Test Runner binary
         shell: bash
-        run: mv ./target/release/test-runner ..
+        run: mv ./target/release/test-runner ../runner
 
       - name: Change back to root dir
         run: cd ..
@@ -70,18 +70,18 @@ jobs:
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        run: cmake -B ./build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
       - name: Build
         # Build your program with the given configuration
-        run: cmake --build ${{github.workspace}}/build -j12 --config ${{env.BUILD_TYPE}}
+        run: cmake --build ./build -j12 --config ${{env.BUILD_TYPE}}
 
       - name: Move Seatbelt binary
         shell: bash
         run: mv ./build/Seatbelt ../SeatbeltCompiler
 
       - name: Change back to root dir
-        run: cd ../..
+        run: cd ..
 
       - name: Install tree
         shell: bash
@@ -97,4 +97,4 @@ jobs:
 
       - name: Run Tests
         shell: bash
-        run: ./test-runner --seatbelt-path ./SeatbeltCompiler
+        run: ./runner --seatbelt-path ./SeatbeltCompiler
