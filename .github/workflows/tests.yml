@@ -46,12 +46,11 @@ jobs:
 
       - name: Move Seatbelt binary
         shell: bash
-        run: mv ./build/Seatbelt ../SeatbeltCompiler # needs to be renamed since directory has the same name
+        run: mv ./build/Seatbelt ..
 
       - name: Checkout repository of Backseat-Safe-System-2k emulator
         uses: actions/checkout@v3
         with:
-          # Repository name with owner. For example, actions/checkout
           repository: Backseating-Committee-2k/BackseatSafeSystem2k
 
       - name: Do release build of the emulator
@@ -64,8 +63,7 @@ jobs:
       - name: Checkout repository of Test Runner
         uses: actions/checkout@v3
         with:
-          # Repository name with owner. For example, actions/checkout
           repository: Backseating-Committee-2k/test-runner
 
       - name: Run tests
-        run: cargo run --release -- --seatbelt-path ../SeatbeltCompiler --backseater-path ../backseat_safe_system_2k --lib-path .. --tests-path ../tests
+        run: cargo run --release -- --seatbelt-path ../Seatbelt --backseater-path ../backseat_safe_system_2k --lib-path .. --tests-path ../tests
