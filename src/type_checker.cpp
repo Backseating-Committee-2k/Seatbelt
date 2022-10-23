@@ -1109,8 +1109,23 @@ namespace TypeChecker {
 
             // now check all attribute types of the struct and "follow the link" if they contain structs themselves
             for (const auto& attribute : struct_definition->attributes) {
-                if (attribute.type_definition->is_custom_type_placeholder()) {
-                    const auto placeholder_type = *(attribute.type_definition->as_custom_type_placeholder());
+                const auto placeholder_type = [&]() -> CustomTypePlaceholder* {
+                    if (attribute.type_definition->is_custom_type_placeholder()) {
+                        return *(attribute.type_definition->as_custom_type_placeholder());
+                    }
+                    auto current_type = attribute.type_definition.get();
+                    while (true) {
+                        if (current_type->is_custom_type_placeholder()) {
+                            return *(current_type->as_custom_type_placeholder());
+                        }
+                        if (current_type->is_array_type()) {
+                            current_type = (*(current_type->as_array_type()))->contained;
+                            continue;
+                        }
+                        return nullptr;
+                    }
+                }();
+                if (placeholder_type != nullptr) {
                     if (placeholder_type->struct_definition != nullptr) {
                         if (has_cyclic_dependency(placeholder_type->struct_definition, visited_struct_definitions)) {
                             return true;
