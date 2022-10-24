@@ -1231,7 +1231,7 @@ namespace TypeChecker {
             const auto namespace_qualifier =
                     get_absolute_namespace_qualifier(*(type_definition->surrounding_scope->surrounding_namespace));
 
-            auto struct_types = std::vector<const StructType*>{};
+            auto struct_types = std::vector<StructType*>{};
             struct_types.reserve(type_definition->struct_definitions.size());
 
             // first check for dependency cycles
@@ -1277,10 +1277,11 @@ namespace TypeChecker {
                 const auto struct_data_type = type_container->from_type_definition(std::make_unique<StructType>(
                         std::string{ struct_definition.name.location.view() }, namespace_qualifier,
                         std::move(member_types)
+                        // initialization of "owning_custom_type" is done later (see below)
                 ));
                 struct_definition.data_type = struct_data_type;
 
-                const auto struct_type = dynamic_cast<const StructType*>(struct_data_type);
+                const auto struct_type = dynamic_cast<StructType*>(struct_data_type);
                 assert(struct_type != nullptr);
                 struct_types.push_back(struct_type);
             }
@@ -1291,6 +1292,12 @@ namespace TypeChecker {
                         std::move(struct_types)
                 ));
                 type_definition->data_type = custom_data_type;
+
+                const auto custom_data_type_pointer = (*(custom_data_type->as_custom_type()));
+
+                for (auto& struct_type : custom_data_type_pointer->struct_types) {
+                    struct_type->owning_custom_type = custom_data_type_pointer;
+                }
             }
         }
 

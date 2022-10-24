@@ -262,24 +262,10 @@ struct StructType final : public DataType {
         return namespace_qualifier + name;
     }
 
-    [[nodiscard]] usize size() const override {
-        usize result = 0;
-        for (const auto& member : members) {
-            result = Utils::round_up(result, member.data_type->alignment());
-            result += member.data_type->size();
-        }
-        return Utils::round_up(result, alignment());
-    }
+    [[nodiscard]] usize size() const override;
 
     [[nodiscard]] usize alignment() const override {
-        if (members.empty()) {
-            return 1;
-        }
-        const auto max_alignment_iterator =
-                std::max_element(members.cbegin(), members.cend(), [](const auto& lhs, const auto& rhs) {
-                    return lhs.data_type->alignment() < rhs.data_type->alignment();
-                });
-        return max_alignment_iterator->data_type->alignment();
+        return WordSize;
     }
 
     [[nodiscard]] usize size_when_pushed() const override {
@@ -294,10 +280,11 @@ struct StructType final : public DataType {
     std::string name;
     std::string namespace_qualifier;
     std::vector<StructMember> members;
+    const CustomType* owning_custom_type{ nullptr };
 };
 
 struct CustomType final : public DataType {
-    CustomType(std::string name, std::string namespace_qualifier, std::vector<const StructType*> struct_types)
+    CustomType(std::string name, std::string namespace_qualifier, std::vector<StructType*> struct_types)
         : name{ std::move(name) },
           namespace_qualifier{ std::move(namespace_qualifier) },
           struct_types{ std::move(struct_types) } { }
@@ -336,13 +323,28 @@ struct CustomType final : public DataType {
         return namespace_qualifier + name;
     }
 
+    [[nodiscard]] bool is_anonymous() const {
+        return name.empty();
+    }
+
     [[nodiscard]] usize size() const override {
         assert(not struct_types.empty());
-        const auto max_alignment_iterator =
-                std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
-                    return lhs->size() < rhs->size();
-                });
-        return (*max_alignment_iterator)->size() + (is_tagged() ? WordSize : 0);
+
+        namespace ranges = std::ranges;
+
+        const auto calculate_struct_size = [&](const StructType* struct_type) {
+            const auto contains_tag = (is_anonymous() ? false : struct_types.size() > 1);
+            usize result = (contains_tag ? WordSize : 0);
+            for (const auto& member : struct_type->members) {
+                result = Utils::round_up(result, member.data_type->alignment());
+                result += member.data_type->size();
+            }
+            return Utils::round_up(result, alignment());
+        };
+
+        return ranges::max(struct_types | ranges::views::transform([&](const auto struct_type) {
+                               return calculate_struct_size(struct_type);
+                           }));
     }
 
     [[nodiscard]] usize alignment() const override {
@@ -371,9 +373,10 @@ struct CustomType final : public DataType {
         return (*max_alignment_iterator)->size_when_pushed();
     }
 
+public:
     std::string name;
     std::string namespace_qualifier;
-    std::vector<const StructType*> struct_types;
+    std::vector<StructType*> struct_types;
 };
 
 namespace Parser {

@@ -86,7 +86,8 @@ add_executable(Seatbelt
         src/upholsterer.cpp
         src/upholsterer.hpp
         src/magic_enum_wrapper.hpp
-        src/bssembly.cpp)
+        src/bssembly.cpp
+        src/data_type.cpp)
 
 target_link_libraries(Seatbelt fmt ctre Arguably magic_enum Upholsterer2kLib)
 
