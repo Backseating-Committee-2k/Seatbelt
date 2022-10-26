@@ -297,7 +297,7 @@ struct CustomType final : public DataType {
         return this;
     }
 
-    [[nodiscard]] bool is_tagged() const {
+    [[nodiscard]] bool contains_tag() const {
         assert(not struct_types.empty());
         return struct_types.size() != 1;
     }
@@ -354,7 +354,7 @@ struct CustomType final : public DataType {
             assert(type->alignment() <= WordSize);
         }
 
-        if (is_tagged()) {
+        if (contains_tag()) {
             return WordSize;
         }
         const auto max_alignment_iterator =
