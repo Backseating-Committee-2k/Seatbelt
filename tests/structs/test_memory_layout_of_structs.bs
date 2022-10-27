@@ -1,0 +1,49 @@
+import std.assert;
+
+type T {
+    A {
+        n: U32,
+        m: U32,
+    } = 10,
+    B {
+        n: U32,
+    } = 20,
+}
+
+struct S {
+    n: U32,
+}
+
+struct Empty {}
+
+function main() {
+    std::assert_equals(type_size(A), 12);
+    std::assert_equals(type_size(B), 12);
+    std::assert_equals(type_size(S), 4);
+    std::assert_equals(type_size(Empty), 0);
+
+    let a = A{
+        n: 1,
+        m: 2,
+    };
+
+    bsm {
+        offset_copy *R0, 0, R1
+        assert R1, 10
+        offset_copy *R0, 4, R1
+        assert R1, 1
+        offset_copy *R0, 8, R1
+        assert R1, 2
+    }
+
+    let b = B{
+        n: 3,
+    };
+
+    bsm {
+        offset_copy *R0, 12, R1
+        assert R1, 20
+        offset_copy *R0, 16, R1
+        assert R1, 3
+    }
+}
