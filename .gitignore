@@ -1,4 +1,5 @@
 *.bs
+!tests/**/*.bs
 .idea/*
 cmake-build-*/*
 !std/*
