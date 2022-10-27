@@ -6,12 +6,19 @@
 
 #include "lexer.hpp"
 #include "mutability.hpp"
+#include <map>
 #include <memory>
 #include <span>
 #include <vector>
 
 struct DataType;
 struct StructMember;
+struct StructType;
+struct CustomType;
+
+namespace Parser {
+    struct CustomTypeDefinition;
+}
 
 class TypeContainer {
 public:
@@ -24,8 +31,11 @@ public:
     [[nodiscard]] DataType* struct_of(
             std::string name,
             std::string namespace_qualifier,
-            std::vector<StructMember> attributes
+            std::vector<StructMember> attributes,
+            const Parser::CustomTypeDefinition* owning_custom_type_definition
     );
+    [[nodiscard]] DataType*
+    custom_type_of(std::string name, std::string namespace_qualifier, std::map<u32, StructType*> struct_types);
     [[nodiscard]] DataType* pointer_to(DataType* pointee_type, Mutability binding_mutability);
     [[nodiscard]] DataType* array_of(DataType* contained, usize num_elements);
 

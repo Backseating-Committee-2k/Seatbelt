@@ -14,6 +14,7 @@
 #include <cassert>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <map>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -31,6 +32,9 @@ struct CustomType;
 struct CustomTypePlaceholder;
 struct PointerType;
 struct FunctionPointerType;
+namespace Parser {
+    struct CustomTypeDefinition;
+}
 
 struct DataType {
 public:
@@ -110,6 +114,8 @@ public:
     [[nodiscard]] virtual std::optional<const FunctionPointerType*> as_function_pointer_type() const {
         return {};
     }
+
+    [[nodiscard]] virtual bool contains_placeholders() const = 0;
 };
 
 enum class BasicType {
@@ -181,6 +187,10 @@ struct PrimitiveType final : public DataType {
         return this;
     }
 
+    [[nodiscard]] bool contains_placeholders() const override {
+        return false;
+    }
+
     BasicType type;
 };
 
@@ -218,6 +228,10 @@ struct ArrayType final : public DataType {
         return this;
     }
 
+    [[nodiscard]] bool contains_placeholders() const override {
+        return contained->contains_placeholders();
+    }
+
     DataType* contained;
     usize num_elements;
 };
@@ -237,6 +251,17 @@ struct StructType final : public DataType {
         : name{ std::move(name) },
           namespace_qualifier{ std::move(namespace_qualifier) },
           members{ std::move(members) } { }
+
+    StructType(
+            std::string name,
+            std::string namespace_qualifier,
+            std::vector<StructMember> members,
+            const Parser::CustomTypeDefinition* owning_custom_type_definition
+    )
+        : name{ std::move(name) },
+          namespace_qualifier{ std::move(namespace_qualifier) },
+          members{ std::move(members) },
+          owning_custom_type_definition{ owning_custom_type_definition } { }
 
     [[nodiscard]] bool is_struct_type() const override {
         return true;
@@ -277,14 +302,20 @@ struct StructType final : public DataType {
         return result;
     }
 
+    [[nodiscard]] bool contains_tag() const;
+
+    [[nodiscard]] std::optional<u32> tag() const;
+
+    [[nodiscard]] bool contains_placeholders() const override;
+
     std::string name;
     std::string namespace_qualifier;
     std::vector<StructMember> members;
-    const CustomType* owning_custom_type{ nullptr };
+    const Parser::CustomTypeDefinition* owning_custom_type_definition{ nullptr };
 };
 
 struct CustomType final : public DataType {
-    CustomType(std::string name, std::string namespace_qualifier, std::vector<StructType*> struct_types)
+    CustomType(std::string name, std::string namespace_qualifier, std::map<u32, StructType*> struct_types)
         : name{ std::move(name) },
           namespace_qualifier{ std::move(namespace_qualifier) },
           struct_types{ std::move(struct_types) } { }
@@ -311,11 +342,15 @@ struct CustomType final : public DataType {
             or namespace_qualifier != other_pointer->namespace_qualifier) {
             return false;
         }
-        for (usize i = 0; i < struct_types.size(); ++i) {
-            if (not struct_types[i]->operator==(*(other_pointer->struct_types[i]))) {
+        for (auto left_iterator = struct_types.cbegin(), right_iterator = other_pointer->struct_types.cbegin();
+             left_iterator != struct_types.cend(); ++left_iterator, ++right_iterator) {
+            const auto& [left_tag, left_struct_type] = *left_iterator;
+            const auto& [right_tag, right_struct_type] = *right_iterator;
+            if (left_tag != right_tag or not left_struct_type->operator==(*right_struct_type)) {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -329,6 +364,7 @@ struct CustomType final : public DataType {
 
     [[nodiscard]] usize size() const override {
         assert(not struct_types.empty());
+        assert(not contains_placeholders());
 
         namespace ranges = std::ranges;
 
@@ -336,13 +372,15 @@ struct CustomType final : public DataType {
             const auto contains_tag = (is_anonymous() ? false : struct_types.size() > 1);
             usize result = (contains_tag ? WordSize : 0);
             for (const auto& member : struct_type->members) {
+                assert(not member.data_type->contains_placeholders());
                 result = Utils::round_up(result, member.data_type->alignment());
                 result += member.data_type->size();
             }
             return Utils::round_up(result, alignment());
         };
 
-        return ranges::max(struct_types | ranges::views::transform([&](const auto struct_type) {
+        return ranges::max(struct_types | ranges::views::transform([&](const auto& pair) {
+                               const auto& struct_type = pair.second;
                                return calculate_struct_size(struct_type);
                            }));
     }
@@ -350,8 +388,8 @@ struct CustomType final : public DataType {
     [[nodiscard]] usize alignment() const override {
         assert(not struct_types.empty());
         // this loop should get optimized away in release builds
-        for ([[maybe_unused]] const auto& type : struct_types) {
-            assert(type->alignment() <= WordSize);
+        for ([[maybe_unused]] const auto& [tag, struct_type] : struct_types) {
+            assert(struct_type->alignment() <= WordSize);
         }
 
         if (contains_tag()) {
@@ -359,24 +397,32 @@ struct CustomType final : public DataType {
         }
         const auto max_alignment_iterator =
                 std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
-                    return lhs->alignment() < rhs->alignment();
+                    return lhs.second->alignment() < rhs.second->alignment();
                 });
-        return (*max_alignment_iterator)->alignment();
+        return (*max_alignment_iterator).second->alignment();
     }
 
     [[nodiscard]] usize size_when_pushed() const override {
         assert(not struct_types.empty());
         const auto max_alignment_iterator =
                 std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
-                    return lhs->size_when_pushed() < rhs->size_when_pushed();
+                    return lhs.second->size_when_pushed() < rhs.second->size_when_pushed();
                 });
-        return (*max_alignment_iterator)->size_when_pushed();
+        return (*max_alignment_iterator).second->size_when_pushed();
     }
 
-public:
+    [[nodiscard]] bool contains_placeholders() const override {
+        for (const auto& [tag, struct_type] : struct_types) {
+            if (struct_type->contains_placeholders()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     std::string name;
     std::string namespace_qualifier;
-    std::vector<StructType*> struct_types;
+    std::map<u32, StructType*> struct_types;
 };
 
 namespace Parser {
@@ -459,6 +505,10 @@ struct CustomTypePlaceholder : public DataType {
         return this;
     }
 
+    [[nodiscard]] bool contains_placeholders() const override {
+        return true;
+    }
+
     std::span<const Lexer::Tokens::Token> type_definition_tokens;
     const Parser::StructDefinition* struct_definition{ nullptr };
     const Parser::CustomTypeDefinition* custom_type_definition{ nullptr };
@@ -500,6 +550,10 @@ struct PointerType final : public DataType {
 
     [[nodiscard]] std::optional<const PointerType*> as_pointer_type() const override {
         return this;
+    }
+
+    [[nodiscard]] bool contains_placeholders() const override {
+        return contained->contains_placeholders();
     }
 
     DataType* contained;
@@ -553,6 +607,15 @@ struct FunctionPointerType final : public DataType {
 
     [[nodiscard]] std::optional<const FunctionPointerType*> as_function_pointer_type() const override {
         return this;
+    }
+
+    [[nodiscard]] bool contains_placeholders() const override {
+        for (const auto& type : parameter_types) {
+            if (type->contains_placeholders()) {
+                return true;
+            }
+        }
+        return return_type->contains_placeholders();
     }
 
     std::vector<DataType*> parameter_types;

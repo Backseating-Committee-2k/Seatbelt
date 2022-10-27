@@ -230,6 +230,15 @@ namespace Emitter {
         }
 
         void visit(StructLiteral& expression) override {
+            assert(expression.data_type->is_struct_type());
+            const auto struct_type = *(expression.data_type->as_struct_type());
+            if (struct_type->contains_tag()) {
+                assert(struct_type->owning_custom_type_definition != nullptr
+                       and "if the struct type is tagged it must have an owning type");
+                const auto tag = struct_type->tag();
+                assert(tag.has_value());
+                bssembly.add(Instruction{ PUSH, { Immediate{ *tag } }, "push the tag of the struct onto the stack" });
+            }
             for (const auto& initializer : expression.values) {
                 initializer.field_value->accept(*this);
             }

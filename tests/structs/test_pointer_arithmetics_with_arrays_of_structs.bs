@@ -1,16 +1,16 @@
 import std.assert;
 
-type T {
-    S {
-        n: U32,
-        b: Bool,
-    },
-    U {
-        s1: S,
-        s2: S,
-    },
-    Empty {},
+struct S {
+    n: U32,
+    b: Bool,
 }
+
+struct U {
+    s1: S,
+    s2: S,
+}
+
+struct Empty {}
 
 function main() {
     std::assert_equals(type_size(S), 8);

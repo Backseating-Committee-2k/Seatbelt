@@ -5,6 +5,7 @@
 #include "type_container.hpp"
 #include "data_type.hpp"
 #include "error.hpp"
+#include "parser.hpp"
 #include <algorithm>
 #include <ranges>
 
@@ -78,10 +79,24 @@ bool TypeContainer::is_defined(DataType& data_type) const {
     return from_type_definition(std::make_unique<PointerType>(pointee_type, binding_mutability));
 }
 
-[[nodiscard]] DataType*
-TypeContainer::struct_of(std::string name, std::string namespace_qualifier, std::vector<StructMember> attributes) {
+[[nodiscard]] DataType* TypeContainer::struct_of(
+        std::string name,
+        std::string namespace_qualifier,
+        std::vector<StructMember> attributes,
+        const Parser::CustomTypeDefinition* owning_custom_type_definition
+) {
+    return from_type_definition(std::make_unique<StructType>(
+            std::move(name), std::move(namespace_qualifier), std::move(attributes), owning_custom_type_definition
+    ));
+}
+
+[[nodiscard]] DataType* TypeContainer::custom_type_of(
+        std::string name,
+        std::string namespace_qualifier,
+        std::map<u32, StructType*> struct_types
+) {
     return from_type_definition(
-            std::make_unique<StructType>(std::move(name), std::move(namespace_qualifier), std::move(attributes))
+            std::make_unique<CustomType>(std::move(name), std::move(namespace_qualifier), std::move(struct_types))
     );
 }
 

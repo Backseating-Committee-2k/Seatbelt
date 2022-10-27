@@ -3,11 +3,12 @@
 //
 
 #include "data_type.hpp"
+#include "parser.hpp"
 #include "utils.hpp"
 
 [[nodiscard]] usize StructType::size() const {
-    if (owning_custom_type != nullptr) {
-        return owning_custom_type->size();
+    if (owning_custom_type_definition != nullptr) {
+        return owning_custom_type_definition->data_type->size();
     }
     // this is a struct type that stems from an anonymous custom type => is has no tag
     usize result = 0;
@@ -19,4 +20,39 @@
     // alignment of 4 bytes (WordSize)
     result = Utils::round_up(result, WordSize);
     return result;
+}
+
+[[nodiscard]] bool StructType::contains_tag() const {
+    if (owning_custom_type_definition == nullptr) {
+        return false;
+    }
+    const auto owning_type = *(owning_custom_type_definition->data_type->as_custom_type());
+    return owning_type->contains_tag();
+}
+
+[[nodiscard]] std::optional<u32> StructType::tag() const {
+    if (not contains_tag()) {
+        return {};
+    }
+    assert(owning_custom_type_definition != nullptr);
+    const auto owning_type = *(owning_custom_type_definition->data_type->as_custom_type());
+    for (const auto& [tag, struct_type] : owning_type->struct_types) {
+        if (struct_type == this) {
+            return tag;
+        }
+    }
+    assert(false and "unreachable");
+    return {};
+}
+
+[[nodiscard]] bool StructType::contains_placeholders() const {
+    for (const auto& member : members) {
+        if (member.data_type->contains_placeholders()) {
+            return true;
+        }
+    }
+    if (owning_custom_type_definition == nullptr) {
+        return false;
+    }
+    return owning_custom_type_definition->data_type->is_custom_type_placeholder();
 }

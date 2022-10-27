@@ -124,7 +124,10 @@ namespace Bssembler {
 
             auto offsets = std::vector<usize>{};
             offsets.reserve(num_members);
-            usize current_offset = offset;
+
+            const auto contains_tag = struct_type->contains_tag();
+
+            usize current_offset = offset + (contains_tag ? WordSize : 0);
             for (const auto& member : struct_type->members) {
                 current_offset = Utils::round_up(current_offset, member.data_type->alignment());
                 offsets.push_back(current_offset);
@@ -136,6 +139,24 @@ namespace Bssembler {
                 pop_from_stack_into_pointer(
                         pointer, struct_type->members[index].data_type, origin_location, offsets[index]
                 );
+            }
+
+            if (contains_tag) {
+                add(Instruction{
+                        POP,
+                        { temp_register },
+                        "pop struct tag off the stack",
+                        origin_location,
+                });
+                const auto instruction = offset_copy_instruction_from_size(WordSize);
+                add(Instruction{
+                        instruction,
+                        {
+                          temp_register, Immediate{ offset },
+                          Pointer{ pointer },
+                          },
+                        origin_location,
+                });
             }
         } else {
             assert(false and "not implemented");
@@ -176,7 +197,19 @@ namespace Bssembler {
             }
         } else if (data_type->is_struct_type()) {
             const auto struct_type = *(data_type->as_struct_type());
-            usize current_offset = offset;
+            const auto contains_tag = struct_type->contains_tag();
+
+            if (contains_tag) {
+                add(Instruction{
+                        OFFSET_COPY,
+                        {Pointer{ source_pointer }, Immediate{ offset }, temp_register},
+                        "get the value of the tag",
+                        origin_location
+                });
+                add(Instruction{ PUSH, { temp_register }, "push the value of the tag", origin_location });
+            }
+
+            usize current_offset = offset + (contains_tag ? WordSize : 0);
             for (const auto& attribute : struct_type->members) {
                 current_offset = Utils::round_up(current_offset, attribute.data_type->alignment());
                 push_value_onto_stack(source_pointer, attribute.data_type, origin_location, current_offset);
@@ -225,7 +258,19 @@ namespace Bssembler {
             }
         } else if (data_type->is_struct_type()) {
             const auto struct_type = *(data_type->as_struct_type());
-            usize current_offset = offset;
+
+            const auto contains_tag = struct_type->contains_tag();
+            if (contains_tag) {
+                add(Instruction{
+                        OFFSET_COPY,
+                        {stack_pointer, Immediate{ offset }, temp_register},
+                        "get the value of the tag",
+                        origin_location
+                });
+                add(Instruction{ PUSH, { temp_register }, "push the value of the tag", origin_location });
+            }
+
+            usize current_offset = offset + (contains_tag ? WordSize : 0);
             for (const auto& attribute : struct_type->members) {
                 push_onto_stack_from_stack_pointer(stack_pointer, attribute.data_type, origin_location, current_offset);
                 current_offset += attribute.data_type->size_when_pushed();
