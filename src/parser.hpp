@@ -45,7 +45,24 @@ namespace Parser {
     struct NamespaceDefinition;
 
     namespace Expressions {
-        struct Expression;
+        struct ExpressionVisitor;
+
+        struct Expression {
+            virtual ~Expression() = default;
+            virtual void accept(ExpressionVisitor& visitor) = 0;
+
+            DataType* data_type{ nullptr };
+            const Scope* surrounding_scope{ nullptr };
+            ValueType value_type{ ValueType::Undetermined };
+
+            [[nodiscard]] bool is_lvalue() const {
+                return value_type == ValueType::ConstLValue or value_type == ValueType::MutableLValue;
+            }
+
+            [[nodiscard]] bool is_rvalue() const {
+                return not is_lvalue();
+            }
+        };
     }
 
     struct IndexOperator {
@@ -330,23 +347,6 @@ namespace Parser {
             virtual void visit(ValueSizeExpression& expression) = 0;
 
             virtual ~ExpressionVisitor() = default;
-        };
-
-        struct Expression {
-            virtual ~Expression() = default;
-            virtual void accept(ExpressionVisitor& visitor) = 0;
-
-            DataType* data_type{ nullptr };
-            const Scope* surrounding_scope{ nullptr };
-            ValueType value_type{ ValueType::Undetermined };
-
-            [[nodiscard]] bool is_lvalue() const {
-                return value_type == ValueType::ConstLValue or value_type == ValueType::MutableLValue;
-            }
-
-            [[nodiscard]] bool is_rvalue() const {
-                return not is_lvalue();
-            }
         };
 
         template<typename T>
