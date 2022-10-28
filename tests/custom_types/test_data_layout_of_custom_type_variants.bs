@@ -1,0 +1,90 @@
+import std.assert;
+
+namespace test {
+
+    export type T {
+        A {
+            n: U32,
+            m: U32,
+        },
+        B {
+            n: U32,
+        },
+    }
+
+}
+
+struct S {
+    test: U32,
+}
+
+type Type {
+    A {
+        n: U32,
+        m: U32,
+        s: S,
+    } = 37,
+    B {
+        n: U32,
+    } = 38,
+}
+
+type Quirk {
+    Nark {
+        flabb: U32,
+    }
+}
+
+function main() {
+    let v: Type = Type::A{
+        n: 1,
+        m: 2,
+        s: S{
+            test: 42,
+        },
+    };
+
+    let w = Type::B{
+        n: 100,
+    };
+
+    let x = 108;
+
+    let quirk = Quirk::Nark{
+        flabb: 12345,
+    };
+
+    let test = test::T::A {
+       n: 876,
+       m: 963,
+    };
+
+    bsm {
+        OFFSET_COPY *R0, 0, R1
+        ASSERT R1, 37
+        OFFSET_COPY *R0, 4, R1
+        ASSERT R1, 1
+        OFFSET_COPY *R0, 8, R1
+        ASSERT R1, 2
+        OFFSET_COPY *R0, 12, R1
+        ASSERT R1, 42
+
+        OFFSET_COPY *R0, 16, R1
+        ASSERT R1, 38
+        OFFSET_COPY *R0, 20, R1
+        ASSERT R1, 100
+
+        OFFSET_COPY *R0, 32, R1
+        ASSERT R1, 108
+
+        OFFSET_COPY *R0, 36, R1
+        ASSERT R1, 12345
+
+        OFFSET_COPY *R0, 40, R1
+        ASSERT R1, 0
+        OFFSET_COPY *R0, 44, R1
+        ASSERT R1, 876
+        OFFSET_COPY *R0, 48, R1
+        ASSERT R1, 963
+    }
+}
