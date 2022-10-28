@@ -648,7 +648,8 @@ namespace TypeChecker {
                             std::ranges::find_if(custom_type_definition->struct_definitions, [&](const auto& pair) {
                                 return pair.second.name.location.view() == struct_name;
                             });
-                    const auto found = (find_iterator != custom_type_definition->struct_definitions.cend());
+                    [[maybe_unused]] const auto found =
+                            (find_iterator != custom_type_definition->struct_definitions.cend());
                     assert(found and "the scope generator should have caught this");
                     return &find_iterator->second;
                 } else if constexpr (is_struct_literal) {
