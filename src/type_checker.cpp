@@ -625,7 +625,7 @@ namespace TypeChecker {
             static constexpr auto is_custom_type_literal =
                     std::same_as<std::remove_cvref_t<decltype(expression)>, Parser::Expressions::CustomTypeLiteral>;
 
-            static_assert(is_struct_literal or is_custom_type_literal);
+            static_assert(is_struct_literal != is_custom_type_literal);
 
             /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
              * check the types of the field initializers
