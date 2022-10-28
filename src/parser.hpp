@@ -322,6 +322,7 @@ namespace Parser {
         struct Bool;
         struct ArrayLiteral;
         struct StructLiteral;
+        struct CustomTypeLiteral;
         struct Name;
         struct UnaryOperator;
         struct BinaryOperator;
@@ -338,6 +339,7 @@ namespace Parser {
             virtual void visit(Name& expression) = 0;
             virtual void visit(ArrayLiteral& expression) = 0;
             virtual void visit(StructLiteral& expression) = 0;
+            virtual void visit(CustomTypeLiteral& expression) = 0;
             virtual void visit(UnaryOperator& expression) = 0;
             virtual void visit(BinaryOperator& expression) = 0;
             virtual void visit(FunctionCall& expression) = 0;
@@ -409,6 +411,16 @@ namespace Parser {
 
         struct StructLiteral : public ExpressionAcceptor<StructLiteral> {
             StructLiteral(Name type_name, std::vector<FieldInitializer> values)
+                : type_name{ std::move(type_name) },
+                  values{ std::move(values) } { }
+
+            Name type_name;
+            std::vector<FieldInitializer> values;
+            const StructDefinition* definition{ nullptr };
+        };
+
+        struct CustomTypeLiteral : public ExpressionAcceptor<CustomTypeLiteral> {
+            CustomTypeLiteral(Name type_name, std::vector<FieldInitializer> values)
                 : type_name{ std::move(type_name) },
                   values{ std::move(values) } { }
 

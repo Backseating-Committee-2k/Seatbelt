@@ -687,6 +687,10 @@ namespace TypeChecker {
             expression.value_type = ValueType::RValue;
         }
 
+        void visit(Parser::Expressions::CustomTypeLiteral&) override {
+            assert(false and "not implemented");
+        }
+
         void visit(Parser::Expressions::Name& expression) override {
             using Parser::Statements::VariableDefinition;
             const auto is_variable = expression.variable_symbol.has_value();

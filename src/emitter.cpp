@@ -244,6 +244,10 @@ namespace Emitter {
             }
         }
 
+        void visit(CustomTypeLiteral&) override {
+            assert(false and "not implemented");
+        }
+
         void visit(Name& expression) override {
             assert(expression.data_type && "data type must be known at this point");
             const auto is_function = expression.possible_overloads.has_value();

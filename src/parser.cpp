@@ -297,6 +297,34 @@ namespace Parser {
             }
         }
 
+        template<typename LiteralType>
+        [[nodiscard]] std::unique_ptr<LiteralType> parse_literal(const Expressions::Name& name) {
+            using Parser::Expressions::FieldInitializer;
+            consume<LeftCurlyBracket>();
+
+            if (maybe_consume<RightCurlyBracket>()) {
+                // empty literal
+                return std::make_unique<LiteralType>(name, std::vector<FieldInitializer>{});
+            }
+            // non-empty literal
+            auto initializers = std::vector<FieldInitializer>{};
+            while (true) {
+                const auto field_name = consume<Identifier>("expected field name");
+                consume<Colon>("expected \":\"");
+                auto field_value = expression();
+                initializers.push_back(FieldInitializer{ .field_name{ field_name },
+                                                         .field_value{ std::move(field_value) } });
+                if (not maybe_consume<Comma>()) {
+                    consume<RightCurlyBracket>("expected \"}\"");
+                    break;
+                }
+                if (maybe_consume<RightCurlyBracket>()) {
+                    break;
+                }
+            }
+            return std::make_unique<LiteralType>(name, std::move(initializers));
+        };
+
         [[nodiscard]] std::unique_ptr<Expression> primary() {
             using namespace Expressions;
 
@@ -343,32 +371,22 @@ namespace Parser {
                 }
                 const usize name_end = m_index;
                 const auto name = Name{
-                    std::span{std::cbegin(*m_tokens) + name_start, std::cbegin(*m_tokens) + name_end}
+                    std::span{std::cbegin(*m_tokens) + name_start, std::cbegin(*m_tokens) + name_end},
                 };
-                if (is_type_name(std::get<Identifier>(name.name_tokens.back())) and maybe_consume<LeftCurlyBracket>()) {
-                    // struct literal
-                    if (maybe_consume<RightCurlyBracket>()) {
-                        // empty struct literal
-                        return std::make_unique<StructLiteral>(name, std::vector<FieldInitializer>{});
-                    } else {
-                        // non-empty struct literal
-                        auto initializers = std::vector<FieldInitializer>{};
-                        while (true) {
-                            const auto field_name = consume<Identifier>("expected field name");
-                            consume<Colon>("expected \":\"");
-                            auto field_value = expression();
-                            initializers.push_back(FieldInitializer{ .field_name{ field_name },
-                                                                     .field_value{ std::move(field_value) } });
-                            if (not maybe_consume<Comma>()) {
-                                consume<RightCurlyBracket>("expected \"}\"");
-                                break;
-                            }
-                            if (maybe_consume<RightCurlyBracket>()) {
-                                break;
-                            }
-                        }
-                        return std::make_unique<StructLiteral>(name, std::move(initializers));
-                    }
+
+                const auto is_custom_type_literal =
+                        (name.name_tokens.size() >= 3 and is_type_name(std::get<Identifier>(name.name_tokens.back()))
+                         and is_type_name(std::get<Identifier>(*(name.name_tokens.end() - 3)))
+                         and current_is<LeftCurlyBracket>());
+                if (is_custom_type_literal) {
+                    return parse_literal<CustomTypeLiteral>(name);
+                }
+
+                const auto is_struct_literal =
+                        (not is_custom_type_literal and is_type_name(std::get<Identifier>(name.name_tokens.back()))
+                         and current_is<LeftCurlyBracket>());
+                if (is_struct_literal) {
+                    return parse_literal<StructLiteral>(name);
                 }
                 return std::make_unique<Name>(name);
             }

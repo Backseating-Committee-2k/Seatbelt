@@ -88,6 +88,10 @@ struct GetFirstTokenVisitor : public Parser::Statements::StatementVisitor,
         token = expression.type_name.name_tokens.front();
     }
 
+    void visit(Parser::Expressions::CustomTypeLiteral& expression) override {
+        token = expression.type_name.name_tokens.front();
+    }
+
     void visit(Parser::Expressions::Name& expression) override {
         assert(not expression.name_tokens.empty() and "a name cannot consist of zero tokens");
         token = expression.name_tokens.front();
