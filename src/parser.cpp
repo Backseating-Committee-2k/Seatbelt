@@ -120,7 +120,11 @@ namespace Parser {
             }
             m_namespaces_stack.emplace_back(identifier.location.view());
             while (maybe_consume<DoubleColon>()) {
-                m_namespaces_stack.emplace_back(consume<Identifier>("expected identifier").location.view());
+                const auto next_identifier = consume<Identifier>("expected identifier");
+                if (is_type_name(next_identifier)) {
+                    Error::error(next_identifier, "namespace name must not start with an uppercase character");
+                }
+                m_namespaces_stack.emplace_back(next_identifier.location.view());
                 ++count;
             }
             consume<LeftCurlyBracket>("expected \"{\"");
