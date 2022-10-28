@@ -497,7 +497,7 @@ namespace ScopeGenerator {
                 Error::error(
                         expression.type_name,
                         fmt::format(
-                                "use of undeclared custom type \"{}\"",
+                                "use of undeclared struct type \"{}\"",
                                 fmt::join(
                                         expression.type_name.name_tokens | transform([](const auto& token) {
                                             return Error::token_location(token).view();
@@ -516,8 +516,64 @@ namespace ScopeGenerator {
             }
         }
 
-        void visit(Parser::Expressions::CustomTypeLiteral&) override {
-            assert(false and "not implemented");
+        void visit(Parser::Expressions::CustomTypeLiteral& expression) override {
+            using std::ranges::views::transform;
+
+            expression.surrounding_scope = scope;
+
+            // lookup for the type name of the custom type literal
+
+            assert(expression.type_name.name_tokens.size() >= 3);
+            /* For the name lookup we only have to consider the name of the custom type, but not (yet) the name
+             * of the struct variant inside the custom type. Therefore, we strip away the struct name. */
+            const auto type_name_without_struct = Parser::Expressions::Name{
+                std::span<const Lexer::Tokens::Token>{expression.type_name.name_tokens.begin(),
+                                                      expression.type_name.name_tokens.end() - 2}
+            };
+
+            const auto struct_identifier = std::get<Lexer::Tokens::Identifier>(expression.type_name.name_tokens.back());
+
+            const auto type_definition =
+                    lookup<const Parser::CustomTypeDefinition*>(expression.surrounding_scope, type_name_without_struct);
+
+            if (type_definition == nullptr) {
+                Error::error(
+                        expression.type_name,
+                        fmt::format(
+                                "use of undeclared custom type \"{}\"",
+                                fmt::join(
+                                        expression.type_name.name_tokens | transform([](const auto& token) {
+                                            return Error::token_location(token).view();
+                                        }),
+                                        "::"
+                                )
+                        )
+                );
+            }
+
+            /* We found the symbol of the custom type. Now we have to check if it contains the struct variant we
+             * are looking for. */
+            const auto find_iterator = std::ranges::find_if(type_definition->struct_definitions, [&](const auto& pair) {
+                return pair.second.name.location.view() == struct_identifier.location.view();
+            });
+            const auto found = (find_iterator != type_definition->struct_definitions.cend());
+            if (not found) {
+                Error::error(
+                        expression.type_name,
+                        fmt::format(
+                                "custom type \"{}\" does not have a struct variant called \"{}\"",
+                                Error::token_location(type_name_without_struct.name_tokens.back()).view(),
+                                struct_identifier.location.view()
+                        )
+                );
+            }
+
+            expression.definition = type_definition;
+
+            // visit expressions for field values recursively
+            for (auto& field : expression.values) {
+                field.field_value->accept(*this);
+            }
         }
 
         void visit(Parser::Expressions::Name& expression) override {

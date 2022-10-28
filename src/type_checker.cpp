@@ -17,6 +17,7 @@
 #include <map>
 #include <ranges>
 #include <string_view>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -106,6 +107,15 @@ namespace TypeChecker {
         using namespace Lexer::Tokens;
         assert(lhs != nullptr);
         assert(rhs != nullptr);
+
+        const auto first_custom_type = dynamic_cast<CustomType*>(lhs);  // maybe nullptr
+        const auto second_custom_type = dynamic_cast<CustomType*>(rhs); // maybe nullptr
+        if (first_custom_type != nullptr and second_custom_type != nullptr) {
+            if (not std::holds_alternative<Equals>(token)) {
+                return nullptr;
+            }
+            return (first_custom_type->operator==(*second_custom_type) ? first_custom_type : nullptr);
+        }
 
         const auto first_struct_type = dynamic_cast<StructType*>(lhs);  // maybe nullptr
         const auto second_struct_type = dynamic_cast<StructType*>(rhs); // maybe nullptr
@@ -330,7 +340,7 @@ namespace TypeChecker {
             if (is_struct_type) {
                 return placeholder_type->struct_definition->data_type;
             } else if (is_custom_type) {
-                assert(false and "not implemented");
+                return placeholder_type->custom_type_definition->data_type;
             } else {
                 assert(false and "unreachable");
             }
@@ -607,8 +617,15 @@ namespace TypeChecker {
             expression.value_type = ValueType::RValue;
         }
 
-        void visit(Parser::Expressions::StructLiteral& expression) override {
+        void visit_struct_or_custom_type_literal(auto& expression) {
             using std::ranges::find_if;
+
+            static constexpr auto is_struct_literal =
+                    std::same_as<std::remove_cvref_t<decltype(expression)>, Parser::Expressions::StructLiteral>;
+            static constexpr auto is_custom_type_literal =
+                    std::same_as<std::remove_cvref_t<decltype(expression)>, Parser::Expressions::CustomTypeLiteral>;
+
+            static_assert(is_struct_literal or is_custom_type_literal);
 
             /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
              * check the types of the field initializers
@@ -622,7 +639,25 @@ namespace TypeChecker {
             /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
              * check if the struct literal matches the type it refers to
              * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-            const auto struct_definition = expression.definition;
+
+            const auto struct_definition = [&]() {
+                if constexpr (is_custom_type_literal) {
+                    const auto custom_type_definition = expression.definition;
+                    const auto struct_name = Error::token_location(expression.type_name.name_tokens.back()).view();
+                    const auto find_iterator =
+                            std::ranges::find_if(custom_type_definition->struct_definitions, [&](const auto& pair) {
+                                return pair.second.name.location.view() == struct_name;
+                            });
+                    const auto found = (find_iterator != custom_type_definition->struct_definitions.cend());
+                    assert(found and "the scope generator should have caught this");
+                    return &find_iterator->second;
+                } else if constexpr (is_struct_literal) {
+                    return expression.definition;
+                } else {
+                    throw;
+                }
+            }();
+
             for (usize i = 0; i < std::min(expression.values.size(), struct_definition->attributes.size()); ++i) {
                 const auto& literal_member = expression.values[i];
                 const auto& struct_member = struct_definition->attributes[i];
@@ -687,8 +722,12 @@ namespace TypeChecker {
             expression.value_type = ValueType::RValue;
         }
 
-        void visit(Parser::Expressions::CustomTypeLiteral&) override {
-            assert(false and "not implemented");
+        void visit(Parser::Expressions::StructLiteral& expression) override {
+            visit_struct_or_custom_type_literal(expression);
+        }
+
+        void visit(Parser::Expressions::CustomTypeLiteral& expression) override {
+            visit_struct_or_custom_type_literal(expression);
         }
 
         void visit(Parser::Expressions::Name& expression) override {
