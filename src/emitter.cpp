@@ -229,9 +229,14 @@ namespace Emitter {
             );
         }
 
-        void visit(StructLiteral& expression) override {
-            assert(expression.data_type->is_struct_type());
-            const auto struct_type = *(expression.data_type->as_struct_type());
+        void visit_struct_or_custom_type_literal(auto& expression, const StructType* struct_type) {
+            static constexpr auto is_custom_type_literal =
+                    std::same_as<std::remove_cvref_t<decltype(expression)>, CustomTypeLiteral>;
+            static constexpr auto is_struct_literal =
+                    std::same_as<std::remove_cvref_t<decltype(expression)>, StructLiteral>;
+
+            static_assert(is_custom_type_literal != is_struct_literal);
+
             if (struct_type->contains_tag()) {
                 assert(struct_type->owning_custom_type_definition != nullptr
                        and "if the struct type is tagged it must have an owning type");
@@ -239,13 +244,35 @@ namespace Emitter {
                 assert(tag.has_value());
                 bssembly.add(Instruction{ PUSH, { Immediate{ *tag } }, "push the tag of the struct onto the stack" });
             }
+            usize bytes_pushed = (struct_type->contains_tag() ? WordSize : 0);
             for (const auto& initializer : expression.values) {
                 initializer.field_value->accept(*this);
+                bytes_pushed += initializer.field_value->data_type->size_when_pushed();
+            }
+
+            const auto total_bytes_to_push = expression.data_type->size_when_pushed();
+            while (bytes_pushed < total_bytes_to_push) {
+                bssembly.add(Instruction{ PUSH, { Immediate{ 255 } }, "additional struct padding" });
+                bytes_pushed += WordSize;
             }
         }
 
-        void visit(CustomTypeLiteral&) override {
-            assert(false and "not implemented");
+        void visit(StructLiteral& expression) override {
+            assert(expression.data_type->is_struct_type());
+            const auto struct_type = *(expression.data_type->as_struct_type());
+            visit_struct_or_custom_type_literal(expression, struct_type);
+        }
+
+        void visit(CustomTypeLiteral& expression) override {
+            const auto tag = expression.definition->tag_by_struct_name(
+                    Error::token_location(expression.type_name.name_tokens.back()).view()
+            );
+            assert(tag.has_value() and "the scope generator should've caught this before");
+            assert(expression.definition->data_type->is_custom_type());
+            const auto custom_type = *(expression.definition->data_type->as_custom_type());
+            assert(custom_type->struct_types.contains(*tag));
+            const auto struct_type = custom_type->struct_types.at(*tag);
+            visit_struct_or_custom_type_literal(expression, struct_type);
         }
 
         void visit(Name& expression) override {
@@ -879,7 +906,9 @@ namespace Emitter {
                         "calculate target address",
                         expression.left_parenthesis.location,
                 });
-                bssembly.pop_from_stack_into_pointer(R2, argument->data_type, expression.left_parenthesis.location);
+                bssembly.pop_from_stack_into_pointer(
+                        R2, argument->data_type, expression.left_parenthesis.location, *label_generator
+                );
 
                 current_offset += argument->data_type->size();
             }
@@ -1260,7 +1289,7 @@ namespace Emitter {
                 });
                 assert(statement.initial_value->data_type->alignment() <= WordSize and "unreachable");
                 bssembly.pop_from_stack_into_pointer(
-                        R1, statement.initial_value->data_type, statement.let_token.location
+                        R1, statement.initial_value->data_type, statement.let_token.location, *label_generator
                 );
             }
         }

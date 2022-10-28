@@ -293,11 +293,14 @@ struct StructType final : public DataType {
         return WordSize;
     }
 
-    [[nodiscard]] usize size_when_pushed() const override {
-        const auto result =
-                std::accumulate(members.cbegin(), members.cend(), usize{ 0 }, [](const usize sum, const auto& member) {
-                    return sum + member.data_type->size_when_pushed();
-                });
+    [[nodiscard]] usize size_when_pushed() const override;
+
+    [[nodiscard]] usize size_when_pushed_without_padding() const {
+        const auto starting_value = (contains_tag() ? WordSize : 0);
+        const auto result = std::accumulate(
+                members.cbegin(), members.cend(), starting_value,
+                [](const usize sum, const auto& member) { return sum + member.data_type->size_when_pushed(); }
+        );
         assert(result % WordSize == 0);
         return result;
     }
@@ -404,11 +407,17 @@ struct CustomType final : public DataType {
 
     [[nodiscard]] usize size_when_pushed() const override {
         assert(not struct_types.empty());
-        const auto max_alignment_iterator =
-                std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
-                    return lhs.second->size_when_pushed() < rhs.second->size_when_pushed();
-                });
-        return (*max_alignment_iterator).second->size_when_pushed();
+        usize max_size = 0;
+        for (const auto& pair : struct_types) {
+            usize sum = (contains_tag() ? WordSize : 0);
+            for (const auto& member : pair.second->members) {
+                sum += member.data_type->size_when_pushed();
+            }
+            if (sum > max_size) {
+                max_size = sum;
+            }
+        }
+        return max_size;
     }
 
     [[nodiscard]] bool contains_placeholders() const override {

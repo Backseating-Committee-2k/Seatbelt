@@ -3,7 +3,8 @@
 //
 
 #include "bssembly.hpp"
-
+#include "emitter.hpp"
+#include <limits>
 
 namespace Bssembler {
 
@@ -81,31 +82,51 @@ namespace Bssembler {
         }
     }
 
+    template<std::size_t count>
+    [[nodiscard]] std::array<Register, count> get_temp_registers(Register reserved) {
+        using enum Register;
+        auto result = std::array<Register, count>{};
+        usize next_to_set = 0;
+        Register current = R1; // R0 is reserved for the stack frame base pointer
+        while (true) {
+            if (next_to_set >= count) {
+                break;
+            }
+            if (current != reserved) {
+                result[next_to_set] = current;
+                ++next_to_set;
+            }
+            current = static_cast<Register>(static_cast<int>(current) + 1);
+        }
+        return result;
+    }
+
     void Bssembly::pop_from_stack_into_pointer(
             const Register pointer,
             const DataType* data_type,
             const Location origin_location,
+            Emitter::LabelGenerator& label_generator,
             const usize offset
     ) {
         using enum Register;
         using enum Mnemonic;
 
-        Register temp_register = (pointer == R1 ? R2 : R1);
-        assert(temp_register != pointer);
+        const auto temp_registers = get_temp_registers<3>(pointer);
 
         if (data_type->is_primitive_type() or data_type->is_pointer_type() or data_type->is_function_pointer_type()) {
             assert(data_type->size() <= WordSize);
             if (data_type->size() > 0) {
                 add(Instruction{
                         POP,
-                        { temp_register },
+                        { temp_registers[0] },
                         origin_location,
                 });
                 const auto instruction = offset_copy_instruction_from_size(data_type->size());
                 add(Instruction{
                         instruction,
                         {
-                          temp_register, Immediate{ offset },
+                          temp_registers[0],
+                          Immediate{ offset },
                           Pointer{ pointer },
                           },
                         origin_location,
@@ -116,47 +137,78 @@ namespace Bssembler {
             for (usize i = 0; i < array_type->num_elements; ++i) {
                 const usize index = array_type->num_elements - i - 1;
                 const auto new_offset = offset + index * array_type->contained->size();
-                pop_from_stack_into_pointer(pointer, array_type->contained, origin_location, new_offset);
+                pop_from_stack_into_pointer(
+                        pointer, array_type->contained, origin_location, label_generator, new_offset
+                );
             }
         } else if (data_type->is_struct_type()) {
             const auto struct_type = *(data_type->as_struct_type());
-            const auto num_members = struct_type->members.size();
-
-            auto offsets = std::vector<usize>{};
-            offsets.reserve(num_members);
-
-            const auto contains_tag = struct_type->contains_tag();
-
-            usize current_offset = offset + (contains_tag ? WordSize : 0);
-            for (const auto& member : struct_type->members) {
-                current_offset = Utils::round_up(current_offset, member.data_type->alignment());
-                offsets.push_back(current_offset);
-                current_offset += member.data_type->size();
-            }
-
-            for (usize i = 0; i < num_members; ++i) {
-                const usize index = num_members - i - 1;
-                pop_from_stack_into_pointer(
-                        pointer, struct_type->members[index].data_type, origin_location, offsets[index]
+            pop_struct_from_stack_into_pointer(
+                    pointer, struct_type, temp_registers[0], origin_location, label_generator, offset
+            );
+        } else if (data_type->is_custom_type()) {
+            const auto custom_type = *(data_type->as_custom_type());
+            /* If the custom type has no tag, it only has one struct variant, and we can treat it as if it was the
+             * actual struct.
+             * Otherwise, we have to branch at runtime depending on the actual tag. */
+            if (not custom_type->contains_tag()) {
+                assert(custom_type->struct_types.size() == 1);
+                const auto struct_type = custom_type->struct_types.begin()->second;
+                pop_struct_from_stack_into_pointer(
+                        pointer, struct_type, temp_registers[0], origin_location, label_generator, offset
                 );
-            }
+            } else {
+                // we have to inspect the current set tag
 
-            if (contains_tag) {
+                // for every variant we need a label pointing to the code to execute
+                auto labels = std::vector<std::string>{};
+                labels.reserve(custom_type->struct_types.size());
+                for (const auto& pair : custom_type->struct_types) {
+                    labels.push_back(label_generator.next_label(fmt::format("custom_type_tag_{}", pair.first)));
+                }
+
+                const auto end_label = label_generator.next_label("custom_type_end");
+
+                // first we calculate the offset of the tag relative to the stack pointer (intentional wrap-around)
+                const auto tag_offset = static_cast<u32>(-static_cast<i64>(custom_type->size_when_pushed()));
                 add(Instruction{
-                        POP,
-                        { temp_register },
-                        "pop struct tag off the stack",
-                        origin_location,
+                        OFFSET_COPY,
+                        {Pointer{ SP }, Immediate{ tag_offset }, temp_registers[0]},
+                        "get the actual value of the type tag"
                 });
-                const auto instruction = offset_copy_instruction_from_size(WordSize);
-                add(Instruction{
-                        instruction,
-                        {
-                          temp_register, Immediate{ offset },
-                          Pointer{ pointer },
-                          },
-                        origin_location,
-                });
+
+                for (usize i = 0; const auto& [tag, struct_type] : custom_type->struct_types) {
+                    add(Instruction{
+                            COPY,
+                            {Immediate{ tag }, temp_registers[1]},
+                            fmt::format("load tag value for \"{}\"", struct_type->name)
+                    });
+                    add(Instruction{
+                            COMP_EQ,
+                            {temp_registers[0], temp_registers[1], temp_registers[2]},
+                            "compare with actual tag value"
+                    });
+                    add(Instruction{
+                            JUMP_GT,
+                            {temp_registers[2], LabelArgument{ labels[i] }},
+                            "jump to the label if the values compare equal"
+                    });
+                    ++i;
+                }
+
+                add(Instruction{ DEBUG_BREAK, {}, "no variant could be matched" });
+
+                assert(labels.size() == custom_type->struct_types.size());
+                for (usize i = 0; const auto& pair : custom_type->struct_types) {
+                    add(Label{ labels[i] });
+                    pop_struct_from_stack_into_pointer(
+                            pointer, pair.second, temp_registers[0], origin_location, label_generator, offset
+                    );
+                    add(Instruction{ JUMP, { LabelArgument{ end_label } } });
+                    ++i;
+                }
+
+                add(Label{ end_label });
             }
         } else {
             assert(false and "not implemented");
@@ -292,6 +344,63 @@ namespace Bssembler {
             default:
                 assert(false and "unreachable");
                 return OFFSET_COPY;
+        }
+    }
+
+    void Bssembly::pop_struct_from_stack_into_pointer(
+            const Register pointer,
+            const StructType* struct_type,
+            const Register temp_register,
+            const Location origin_location,
+            Emitter::LabelGenerator& label_generator,
+            const usize offset
+    ) {
+        using enum Register;
+        using enum Mnemonic;
+
+        const auto num_members = struct_type->members.size();
+
+        auto offsets = std::vector<usize>{};
+        offsets.reserve(num_members);
+
+        const auto padding_bytes = struct_type->size_when_pushed() - struct_type->size_when_pushed_without_padding();
+        assert(padding_bytes % WordSize == 0);
+        for (usize i = 0; i < padding_bytes; i += 4) {
+            add(Instruction{ POP, {}, "discard struct padding" });
+        }
+
+        const auto contains_tag = struct_type->contains_tag();
+
+        usize current_offset = offset + (contains_tag ? WordSize : 0);
+        for (const auto& member : struct_type->members) {
+            current_offset = Utils::round_up(current_offset, member.data_type->alignment());
+            offsets.push_back(current_offset);
+            current_offset += member.data_type->size();
+        }
+
+        for (usize i = 0; i < num_members; ++i) {
+            const usize index = num_members - i - 1;
+            pop_from_stack_into_pointer(
+                    pointer, struct_type->members[index].data_type, origin_location, label_generator, offsets[index]
+            );
+        }
+
+        if (contains_tag) {
+            add(Instruction{
+                    POP,
+                    { temp_register },
+                    "pop struct tag off the stack",
+                    origin_location,
+            });
+            const auto instruction = offset_copy_instruction_from_size(WordSize);
+            add(Instruction{
+                    instruction,
+                    {
+                      temp_register, Immediate{ offset },
+                      Pointer{ pointer },
+                      },
+                    origin_location,
+            });
         }
     }
 

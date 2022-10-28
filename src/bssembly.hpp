@@ -22,6 +22,10 @@
 #include <variant>
 #include <vector>
 
+namespace Emitter {
+    struct LabelGenerator;
+}
+
 namespace Bssembler {
 
     // clang-format off
@@ -538,6 +542,7 @@ namespace Bssembler {
                 Register pointer,
                 const DataType* data_type,
                 Location origin_location,
+                Emitter::LabelGenerator& label_generator,
                 usize offset = 0
         );
 
@@ -645,6 +650,15 @@ namespace Bssembler {
 
     private:
         explicit Bssembly(InstructionVector instruction) : m_instructions{ std::move(instruction) } { }
+
+        void pop_struct_from_stack_into_pointer(
+                Register pointer,
+                const StructType* struct_type,
+                Register temp_register,
+                Location origin_location,
+                Emitter::LabelGenerator& label_generator,
+                usize offset
+        );
 
     private:
         InstructionVector m_instructions;

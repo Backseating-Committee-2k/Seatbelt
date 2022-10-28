@@ -596,6 +596,25 @@ namespace Parser {
         [[nodiscard]] bool is_anonymous() const {
             return not name.has_value();
         }
+
+        [[nodiscard]] std::optional<std::pair<u32, const StructDefinition&>> struct_definition_by_name(
+                const std::string_view struct_name
+        ) const {
+            const auto find_iterator = std::ranges::find_if(struct_definitions, [&](const auto& pair) {
+                return pair.second.name.location.view() == struct_name;
+            });
+            const auto found = (find_iterator != struct_definitions.cend());
+            if (not found) {
+                return {};
+            }
+            return *find_iterator;
+        }
+
+        [[nodiscard]] std::optional<u32> tag_by_struct_name(const std::string_view struct_name) const {
+            return struct_definition_by_name(struct_name).and_then([](const auto& pair) {
+                return std::optional<u32>{ pair.first };
+            });
+        }
     };
 
     struct FunctionDefinition {

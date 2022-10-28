@@ -22,6 +22,13 @@
     return result;
 }
 
+[[nodiscard]] usize StructType::size_when_pushed() const {
+    if (owning_custom_type_definition != nullptr) {
+        return owning_custom_type_definition->data_type->size_when_pushed();
+    }
+    return size_when_pushed_without_padding();
+}
+
 [[nodiscard]] bool StructType::contains_tag() const {
     if (owning_custom_type_definition == nullptr) {
         return false;
