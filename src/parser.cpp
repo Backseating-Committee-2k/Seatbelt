@@ -323,7 +323,7 @@ namespace Parser {
                 }
             }
             return std::make_unique<LiteralType>(name, std::move(initializers));
-        };
+        }
 
         [[nodiscard]] std::unique_ptr<Expression> primary() {
             using namespace Expressions;
