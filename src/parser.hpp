@@ -63,7 +63,7 @@ namespace Parser {
                 return not is_lvalue();
             }
         };
-    }
+    } // namespace Expressions
 
     struct IndexOperator {
         IndexOperator(LeftSquareBracket left_square_bracket_token, RightSquareBracket right_square_bracket_token)
@@ -426,7 +426,7 @@ namespace Parser {
 
             Name type_name;
             std::vector<FieldInitializer> values;
-            const StructDefinition* definition{ nullptr };
+            const CustomTypeDefinition* definition{ nullptr };
         };
 
         struct UnaryOperator : public ExpressionAcceptor<UnaryOperator> {
@@ -583,7 +583,7 @@ namespace Parser {
         std::string namespace_name{};
         const Scope* surrounding_scope{ nullptr };
         std::unique_ptr<Scope> inner_scope{};
-        const DataType* data_type{ nullptr };
+        DataType* data_type{ nullptr };
 
         [[nodiscard]] bool is_restricted() const {
             return restricted_token.has_value();
