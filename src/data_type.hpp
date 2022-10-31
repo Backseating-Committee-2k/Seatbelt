@@ -289,9 +289,7 @@ struct StructType final : public DataType {
 
     [[nodiscard]] usize size() const override;
 
-    [[nodiscard]] usize alignment() const override {
-        return WordSize;
-    }
+    [[nodiscard]] usize alignment() const override;
 
     [[nodiscard]] usize size_when_pushed() const override;
 
@@ -402,7 +400,8 @@ struct CustomType final : public DataType {
                 std::max_element(struct_types.cbegin(), struct_types.cend(), [](const auto& lhs, const auto& rhs) {
                     return lhs.second->alignment() < rhs.second->alignment();
                 });
-        return (*max_alignment_iterator).second->alignment();
+        const auto result = (*max_alignment_iterator).second->alignment();
+        return result;
     }
 
     [[nodiscard]] usize size_when_pushed() const override {

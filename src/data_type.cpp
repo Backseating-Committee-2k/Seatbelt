@@ -16,10 +16,8 @@
         result = Utils::round_up(result, member.data_type->alignment());
         result += member.data_type->size();
     }
-    // all structs have to have a size that's a multiple of their alignment and all structs must have an
-    // alignment of 4 bytes (WordSize)
-    result = Utils::round_up(result, WordSize);
-    return result;
+    // all structs have to have a size that's a multiple of their alignment
+    return Utils::round_up(result, alignment());
 }
 
 [[nodiscard]] usize StructType::size_when_pushed() const {
@@ -62,4 +60,20 @@
         return false;
     }
     return owning_custom_type_definition->data_type->is_custom_type_placeholder();
+}
+
+[[nodiscard]] usize StructType::alignment() const {
+    if (contains_tag()) {
+        return WordSize;
+    }
+    const auto max_alignment_iterator =
+            std::max_element(members.cbegin(), members.cend(), [](const auto& lhs, const auto& rhs) {
+                return lhs.data_type->alignment() < rhs.data_type->alignment();
+            });
+    const auto found = (max_alignment_iterator != members.cend());
+    if (not found) {
+        return 1;
+    }
+    const auto result = (*max_alignment_iterator).data_type->alignment();
+    return result;
 }
