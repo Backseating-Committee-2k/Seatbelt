@@ -123,7 +123,11 @@ namespace ScopeGenerator {
     }
 
     template<typename T>
-    [[nodiscard]] T lookup(const Scope* surrounding_scope, const Parser::Expressions::Name& name_expression) {
+    [[nodiscard]] T lookup(
+            const Scope* surrounding_scope,
+            const Parser::Expressions::Name& name_expression,
+            const bool error_when_not_found
+    ) {
         using std::ranges::find_if;
 
         static constexpr auto is_function_lookup = std::same_as<T, std::vector<const FunctionOverload*>>;
@@ -206,7 +210,14 @@ namespace ScopeGenerator {
                         // TODO: better error message for custom types
                     }
                 }
-                Error::error(name, error_message);
+
+                // nothing found
+                if (error_when_not_found) {
+                    Error::error(name_expression, error_message);
+                } else {
+                    // => return nullptr or empty overloads-vector respectively
+                    return T{};
+                }
             }
             return result;
         } else {
@@ -293,14 +304,15 @@ namespace ScopeGenerator {
         // we know we have a custom type placeholder at hand
         const auto placeholder_type = *(type_definition->as_custom_type_placeholder());
         const auto name_expression = Parser::Expressions::Name{ placeholder_type->type_definition_tokens };
-        const auto struct_definition = lookup<const Parser::StructDefinition*>(surrounding_scope, name_expression);
+        const auto struct_definition =
+                lookup<const Parser::StructDefinition*>(surrounding_scope, name_expression, false);
         const auto struct_type_found = (struct_definition != nullptr);
         if (struct_type_found) {
             placeholder_type->struct_definition = struct_definition;
             return true;
         }
         const auto custom_type_definition =
-                lookup<const Parser::CustomTypeDefinition*>(surrounding_scope, name_expression);
+                lookup<const Parser::CustomTypeDefinition*>(surrounding_scope, name_expression, false);
         const auto custom_type_definition_found = (custom_type_definition != nullptr);
         if (custom_type_definition_found) {
             placeholder_type->custom_type_definition = custom_type_definition;
@@ -492,7 +504,7 @@ namespace ScopeGenerator {
 
             // lookup for the type name of the struct literal
             const auto type_definition =
-                    lookup<const Parser::StructDefinition*>(expression.surrounding_scope, expression.type_name);
+                    lookup<const Parser::StructDefinition*>(expression.surrounding_scope, expression.type_name, true);
             if (type_definition == nullptr) {
                 Error::error(
                         expression.type_name,
@@ -533,8 +545,9 @@ namespace ScopeGenerator {
 
             const auto struct_identifier = std::get<Lexer::Tokens::Identifier>(expression.type_name.name_tokens.back());
 
-            const auto type_definition =
-                    lookup<const Parser::CustomTypeDefinition*>(expression.surrounding_scope, type_name_without_struct);
+            const auto type_definition = lookup<const Parser::CustomTypeDefinition*>(
+                    expression.surrounding_scope, type_name_without_struct, true
+            );
 
             if (type_definition == nullptr) {
                 Error::error(
@@ -591,7 +604,8 @@ namespace ScopeGenerator {
                 }
             }
             if (not found) {
-                auto overloads = lookup<std::vector<const FunctionOverload*>>(expression.surrounding_scope, expression);
+                auto overloads =
+                        lookup<std::vector<const FunctionOverload*>>(expression.surrounding_scope, expression, true);
                 if (not overloads.empty()) {
                     expression.possible_overloads = std::move(overloads);
                     found = true;
