@@ -10,8 +10,7 @@
     export function assert_equals(lhs: U32, rhs: U32) {
         bsm {
             copy *R0, R2
-            add R0, 4, R1
-            copy *R1, R1
+            offset_copy *R0, 4, R1
             assert R1, R2
         }
     }
@@ -19,8 +18,7 @@
     export function assert_equals(lhs: Char, rhs: Char) {
         bsm {
             copy_byte *R0, R2
-            add R0, 1, R1
-            copy_byte *R1, R1
+            offset_copy_byte *R0, 1, R1
             assert R1, R2
         }
     }
@@ -28,8 +26,7 @@
     export function assert_equals(lhs: Bool, rhs: Bool) {
         bsm {
             copy_byte *R0, R2
-            add R0, 1, R1
-            copy_byte *R1, R1
+            offset_copy_byte *R0, 1, R1
             assert R1, R2
         }
     }
