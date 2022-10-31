@@ -13,7 +13,10 @@
 namespace Lexer::Tokens {
 
     template<typename T>
-    [[nodiscard]] T token_prototype();
+    [[nodiscard]] constexpr T token_prototype();
+
+    template<typename T>
+    [[nodiscard]] constexpr T token_prototype(std::string_view);
 
 }
 
@@ -24,7 +27,7 @@ namespace Lexer::Tokens {
     };                                                                                  \
                                                                                         \
     template<>                                                                          \
-    [[nodiscard]] inline name token_prototype() {                                       \
+    [[nodiscard]] constexpr inline name token_prototype() {                             \
         return name{                                                                    \
             .location{.source_code{ .filename{ "<prototype file>" }, .text{ #name } }, \
                       .offset_start_inclusive{ 0 },                                    \
@@ -108,6 +111,16 @@ namespace Lexer {
 #define x(TokenType) DEFINE_TOKEN(TokenType)
         TOKEN_LIST
 #undef x
+
+        template<>
+        [[nodiscard]] constexpr inline Identifier token_prototype(const std::string_view identifier) {
+            return Identifier{
+                .location{.source_code{ .filename{ "<prototype file>" }, .text{ identifier } },
+                          .offset_start_inclusive{ 0 },
+                          .offset_end_exclusive{ identifier.length() }}
+            };
+        }
+
 
         template<typename Head, typename... Tail>
         std::variant<Tail...> cut_head_off_(std::variant<Head, Tail...>);
