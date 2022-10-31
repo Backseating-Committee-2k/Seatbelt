@@ -1,0 +1,45 @@
+import std.assert;
+
+type T {
+    A {
+        n: U32,
+        m: U32,
+    } = 12,
+    B {
+        p: Bool,
+    } = 13,
+}
+
+struct S {
+    t: T,
+}
+
+function main() {
+    let s = S {
+        t: T::A {
+            n: 1,
+            m: 2,
+        },
+    };
+    bsm {
+        offset_copy *R0, 0, R1
+        assert R1, 12
+        offset_copy *R0, 4, R1
+        assert R1, 1
+        offset_copy *R0, 8, R1
+        assert R1, 2
+    }
+
+    let s2 = S {
+        t: T::B {
+            p: true,
+        },
+    };
+    bsm {
+        offset_copy *R0, 12, R1
+        assert R1, 13
+
+        offset_copy_byte *R0, 16, R1
+        assert R1, 1
+    }
+}
