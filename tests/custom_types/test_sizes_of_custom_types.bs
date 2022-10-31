@@ -60,15 +60,56 @@ struct D {
 function main() {
     std::assert_equals(type_size(T), 16);
     std::assert_equals(type_size(A), 16);
+    std::assert_equals(value_size(T::A{
+        n: 10,
+    }), 16);
     std::assert_equals(type_size(B), 16);
+    std::assert_equals(value_size(T::B{
+        n: 10,
+        m: 10,
+        c: 'X',
+    }), 16);
     std::assert_equals(type_size(U), 1);
+    std::assert_equals(value_size(U::A {
+        p: true,
+    }), 1);
 
     std::assert_equals(type_size(ns::T), 44);
+    std::assert_equals(type_size(ns::T), 44);
     std::assert_equals(type_size(ns::A), 44);
+    std::assert_equals(value_size(ns::T::A{
+        array: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    }), 44);
     std::assert_equals(type_size(ns::B), 44);
+    std::assert_equals(value_size(ns::T::B{
+        n: 10,
+        m: 10,
+        c: 'X',
+    }), 44);
     std::assert_equals(type_size(ns::U), 1);
+    std::assert_equals(value_size(ns::U::A {
+        p: true,
+    }), 1);
 
     std::assert_equals(type_size(S), 5);
+    std::assert_equals(value_size(S{
+        array: [true, true, true, false, true],
+    }), 5);
     std::assert_equals(type_size(C), 5);
+    std::assert_equals(value_size(C{
+        b1: true,
+        b2: true,
+        b3: false,
+        b4: true,
+        b5: true,
+    }), 5);
     std::assert_equals(type_size(D), 10);
+    std::assert_equals(value_size(D{
+        array: [true, true, true, false, true],
+        b1: true,
+        b2: true,
+        b3: false,
+        b4: true,
+        b5: true,
+    }), 10);
 }
