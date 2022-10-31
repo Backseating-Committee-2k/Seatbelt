@@ -1210,7 +1210,12 @@ namespace TypeChecker {
                             return true;
                         }
                     } else if (placeholder_type->custom_type_definition != nullptr) {
-                        assert(false and "not implemented");
+                        for (const auto& pair : placeholder_type->custom_type_definition->struct_definitions) {
+                            const auto& current_struct_definition = pair.second;
+                            if (has_cyclic_dependency(&current_struct_definition, visited_struct_definitions)) {
+                                return true;
+                            }
+                        }
                     } else {
                         assert(false and "unreachable");
                     }
