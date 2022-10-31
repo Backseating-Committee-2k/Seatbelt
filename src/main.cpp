@@ -12,6 +12,7 @@
 #include "upholsterer.hpp"
 #include <algorithm>
 #include <arguably.hpp>
+#include <array>
 #include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
@@ -213,6 +214,18 @@ collect_imports(const Parser::Program& program, const std::filesystem::path& bas
         }));
         auto&& [current_program, namespaces] =
                 Parser::parse(current_token_list, type_container, std::move(known_namespaces));
+
+        static constexpr auto prelude_include_tokens = std::array<Lexer::Tokens::Token, 3>{
+            Lexer::Tokens::token_prototype<Lexer::Tokens::Identifier>("std"),
+            Lexer::Tokens::token_prototype<Lexer::Tokens::Dot>(),
+            Lexer::Tokens::token_prototype<Lexer::Tokens::Identifier>("prelude"),
+        };
+        if (is_main_file) {
+            current_program.push_back(std::make_unique<Parser::ImportStatement>(Parser::ImportStatement{
+                    .import_token{ Lexer::Tokens::token_prototype<Lexer::Tokens::Import>() },
+                    .import_path_tokens{ std::span{ prelude_include_tokens.begin(), prelude_include_tokens.end() } },
+            }));
+        }
 
         known_namespaces = std::move(namespaces);
 
