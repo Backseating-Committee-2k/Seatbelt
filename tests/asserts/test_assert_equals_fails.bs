@@ -1,5 +1,4 @@
 // fails_with = "assertion failed", "left: `3`", "right: `4`"
-import std.assert;
 
 function main() ~> Nothing {
     std::assert_equals(3, 4);

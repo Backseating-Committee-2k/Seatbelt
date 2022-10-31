@@ -1,5 +1,3 @@
-import std.assert;
-
 function a() ~> Nothing {
     return nothing;
 }

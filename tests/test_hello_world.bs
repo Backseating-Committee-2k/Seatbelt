@@ -1,5 +1,3 @@
-import std.terminal;
-
 function main() ~> Nothing {
     let a: U32 = 10;
     std::put_char('H');

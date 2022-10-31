@@ -1,5 +1,3 @@
-import std.assert;
-
 function main() ~> Nothing {
     let a: mutable U32 = 42;
     let x: mutable U32 = 33;

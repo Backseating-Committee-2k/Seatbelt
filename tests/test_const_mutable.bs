@@ -1,5 +1,3 @@
-import std.assert;
-
 function f(n: mutable U32) ~> Bool {
     return true;
 }

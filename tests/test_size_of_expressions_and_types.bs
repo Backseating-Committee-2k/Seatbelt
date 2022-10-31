@@ -1,5 +1,3 @@
-import std.assert;
-
 function f() ~> U32 {
     bsm {
         checkpoint 1 // this fails if f is executed

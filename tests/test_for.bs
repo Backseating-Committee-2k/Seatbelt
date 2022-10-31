@@ -1,5 +1,3 @@
-import std.assert;
-
 function main() ~> Nothing {
     for ;; {
         break;

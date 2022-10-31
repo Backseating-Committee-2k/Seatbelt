@@ -1,5 +1,3 @@
-import std.assert;
-
 function main() ~> Nothing {
     let i: mutable U32 = 1_000_000;
     i = 0xABCD_EF12;

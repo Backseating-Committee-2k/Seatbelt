@@ -1,5 +1,4 @@
 // fails_with="assertion failed"
-import std.assert;
 
 function main() ~> Nothing {
     std::assert(false);

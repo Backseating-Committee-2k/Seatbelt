@@ -1,5 +1,3 @@
-import std.assert;
-
 function b(x: U32) ~> Nothing {
     std::assert(false);
 }

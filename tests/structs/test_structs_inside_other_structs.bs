@@ -1,5 +1,3 @@
-import std.assert;
-
 type Fizzler {
     World {
         game_objects: ->[GameObject; 2],

@@ -1,6 +1,3 @@
-import std.assert;
-import std.terminal;
-
 namespace a {
     type T {
         S {

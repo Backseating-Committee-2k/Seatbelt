@@ -1,5 +1,3 @@
-import std.assert;
-
 struct S {
     n: U32,
     b: Bool,

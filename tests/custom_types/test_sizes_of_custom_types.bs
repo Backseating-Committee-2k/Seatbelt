@@ -1,5 +1,3 @@
-import std.assert;
-
 type T {
     A {
         n: U32,

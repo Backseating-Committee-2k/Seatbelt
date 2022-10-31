@@ -1,5 +1,3 @@
-import std.assert;
-
 function main() ~> Nothing {
     let b: Bool = true;
     let c: Bool = false;
