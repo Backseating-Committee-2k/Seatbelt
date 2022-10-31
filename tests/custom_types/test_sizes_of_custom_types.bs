@@ -1,0 +1,74 @@
+import std.assert;
+
+type T {
+    A {
+        n: U32,
+    },
+    B {
+        n: U32,
+        m: U32,
+        c: Char,
+    }
+}
+
+type U restricted {
+    A {
+        p: Bool,
+    }
+}
+
+namespace ns {
+    export type T {
+        A {
+            array: [U32; 10],
+        },
+        B {
+            n: U32,
+            m: U32,
+            c: Char,
+        }
+    }
+
+    export type U restricted {
+        A {
+            p: Bool,
+        }
+    }
+}
+
+struct S {
+    array: [Bool; 5],
+}
+
+struct C {
+    b1: Bool,
+    b2: Bool,
+    b3: Bool,
+    b4: Bool,
+    b5: Bool,
+}
+
+struct D {
+    array: [Bool; 5],
+    b1: Bool,
+    b2: Bool,
+    b3: Bool,
+    b4: Bool,
+    b5: Bool,
+}
+
+function main() {
+    std::assert_equals(type_size(T), 16);
+    std::assert_equals(type_size(A), 16);
+    std::assert_equals(type_size(B), 16);
+    std::assert_equals(type_size(U), 1);
+
+    std::assert_equals(type_size(ns::T), 44);
+    std::assert_equals(type_size(ns::A), 44);
+    std::assert_equals(type_size(ns::B), 44);
+    std::assert_equals(type_size(ns::U), 1);
+
+    std::assert_equals(type_size(S), 5);
+    std::assert_equals(type_size(C), 5);
+    std::assert_equals(type_size(D), 10);
+}
